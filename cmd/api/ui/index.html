@@ -1,0 +1,2135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LIRA — Llana IT Reporting & Alerts</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script>try{if(localStorage.getItem('lira_theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --blue:        #185FA5;
+  --blue-hover:  #0f4a82;
+  --blue-light:  #E6F1FB;
+  --blue-mid:    #B5D4F4;
+  --teal:        #1D9E75;
+  --teal-light:  #E1F5EE;
+  --teal-mid:    #9FE1CB;
+  --amber:       #BA7517;
+  --amber-light: #FAEEDA;
+  --green:       #3B6D11;
+  --green-light: #EAF3DE;
+  --red:         #A32D2D;
+  --red-light:   #FCEBEB;
+  --red-mid:     #F7C1C1;
+  --gray-50:     #F8F8F6;
+  --gray-100:    #F1EFE8;
+  --gray-200:    #E2E0D8;
+  --gray-300:    #C8C6BE;
+  --gray-400:    #888780;
+  --gray-600:    #5F5E5A;
+  --gray-900:    #1C1C1A;
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --shadow-md:   0 4px 20px rgba(0,0,0,0.10);
+  --shadow-lg:   0 8px 40px rgba(0,0,0,0.14);
+}
+
+html.dark {
+  --blue:        #378ADD;
+  --blue-hover:  #85B7EB;
+  --blue-light:  #0C447C;
+  --blue-mid:    #185FA5;
+  --teal:        #5DCAA5;
+  --teal-light:  #085041;
+  --teal-mid:    #0F6E56;
+  --amber:       #EF9F27;
+  --amber-light: #633806;
+  --green:       #97C459;
+  --green-light: #27500A;
+  --red:         #F09595;
+  --red-light:   #501313;
+  --red-mid:     #791F1F;
+  --gray-50:     #1a1a18;
+  --gray-100:    #222220;
+  --gray-200:    #333330;
+  --gray-300:    #4a4a47;
+  --gray-400:    #888780;
+  --gray-600:    #b4b2a9;
+  --gray-900:    #F1EFE8;
+  --shadow-md:   0 4px 20px rgba(0,0,0,0.40);
+  --shadow-lg:   0 8px 40px rgba(0,0,0,0.55);
+}
+
+/* ── theme toggle ── */
+.theme-btn {
+  width: 36px; height: 36px; border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200); background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.15s; flex-shrink: 0; position: relative; overflow: hidden;
+}
+html.dark .theme-btn { background: var(--gray-100); border-color: var(--gray-300); }
+.theme-btn:hover { background: var(--gray-100); border-color: var(--gray-300); }
+html.dark .theme-btn:hover { background: var(--gray-200); }
+.theme-btn svg { width: 16px; height: 16px; transition: transform 0.3s, opacity 0.2s; }
+.theme-icon-sun  { color: #BA7517; }
+.theme-icon-moon { color: #185FA5; }
+html, body, #root { height: 100%; }
+body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: var(--gray-900); font-size: 14px; line-height: 1.5; transition: background 0.2s, color 0.2s; }
+
+/* ── Auth ── */
+.auth-screen { min-height: 100vh; display: flex; }
+.auth-left {
+  width: 400px; min-width: 400px; background: var(--blue);
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 48px 44px; position: relative; overflow: hidden;
+}
+.auth-left::before {
+  content: ''; position: absolute; top: -80px; right: -80px;
+  width: 280px; height: 280px; border-radius: 50%; background: rgba(255,255,255,0.07);
+}
+.auth-left::after {
+  content: ''; position: absolute; bottom: -60px; left: -60px;
+  width: 200px; height: 200px; border-radius: 50%; background: rgba(255,255,255,0.05);
+}
+.auth-brand { position: relative; z-index: 1; }
+.auth-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 48px; }
+.auth-logo-mark {
+  width: 38px; height: 38px; border-radius: 10px;
+  background: rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center;
+}
+.auth-logo-mark svg { width: 20px; height: 20px; }
+.auth-logo-name { font-size: 18px; font-weight: 600; color: #fff; }
+.auth-headline { font-size: 26px; font-weight: 600; color: #fff; line-height: 1.35; margin-bottom: 14px; }
+.auth-sub { font-size: 13.5px; color: rgba(255,255,255,0.65); line-height: 1.65; }
+.auth-features { position: relative; z-index: 1; }
+.auth-feature {
+  display: flex; align-items: center; gap: 10px; padding: 10px 0;
+  border-top: 1px solid rgba(255,255,255,0.1); font-size: 13px; color: rgba(255,255,255,0.78);
+}
+.auth-feature-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.5); flex-shrink: 0; }
+.auth-right { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; }
+.auth-card {
+  background: #fff; border-radius: var(--radius-xl); border: 1px solid var(--gray-200);
+  padding: 40px; width: 100%; max-width: 400px; box-shadow: var(--shadow-md);
+  animation: fadeUp 0.22s ease;
+}
+@keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+.auth-card-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+.auth-card-sub { font-size: 13px; color: var(--gray-400); margin-bottom: 28px; }
+.auth-form { display: flex; flex-direction: column; gap: 14px; }
+.auth-toggle { text-align: center; font-size: 13px; color: var(--gray-400); margin-top: 20px; }
+.auth-toggle button {
+  background: none; border: none; color: var(--blue); font-weight: 500;
+  cursor: pointer; font-size: 13px; font-family: 'DM Sans', sans-serif;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.auth-error {
+  background: var(--red-light); color: var(--red);
+  border: 1px solid var(--red-mid); border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px;
+}
+.role-select { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.role-option {
+  border: 1.5px solid var(--gray-200); border-radius: var(--radius-md);
+  padding: 10px 12px; cursor: pointer; transition: all 0.12s; background: #fff;
+}
+.role-option:hover { border-color: var(--blue-mid); }
+.role-option.selected { border-color: var(--blue); background: var(--blue-light); }
+.role-option-title { font-size: 13px; font-weight: 600; }
+.role-option-sub { font-size: 11px; color: var(--gray-400); margin-top: 1px; }
+.role-option.selected .role-option-title { color: var(--blue); }
+.demo-box {
+  margin-top: 16px; padding: 12px 14px;
+  background: var(--gray-50); border-radius: var(--radius-md); border: 1px solid var(--gray-200);
+}
+.demo-box-label { font-size: 10px; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 7px; }
+.demo-row { font-size: 12px; color: var(--gray-600); padding: 2px 0; }
+.demo-sep { color: var(--gray-300); margin: 0 6px; }
+
+/* ── App layout ── */
+.app { display: flex; height: 100vh; overflow: hidden; }
+.sidebar {
+  width: 230px; min-width: 230px; background: #fff;
+  border-right: 1px solid var(--gray-200); display: flex; flex-direction: column; overflow-y: auto;
+}
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar {
+  background: #fff; border-bottom: 1px solid var(--gray-200); padding: 14px 28px;
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+}
+.content { flex: 1; overflow-y: auto; padding: 24px 28px; }
+
+/* ── Sidebar ── */
+.sidebar-logo {
+  padding: 20px 18px 18px; display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--gray-200);
+}
+.logo-mark {
+  width: 32px; height: 32px; border-radius: 8px; background: var(--blue);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.logo-mark svg { width: 16px; height: 16px; }
+.logo-text { font-size: 15px; font-weight: 600; }
+.logo-sub { font-size: 11px; color: var(--gray-400); margin-top: 1px; }
+.sidebar-section { padding: 16px 10px 6px; }
+.sidebar-section-label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--gray-400); padding: 0 8px; margin-bottom: 4px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: var(--radius-md);
+  font-size: 13.5px; color: var(--gray-600); cursor: pointer; transition: all 0.12s;
+  border: none; background: none; width: 100%; text-align: left; user-select: none;
+}
+.nav-item:hover { background: var(--gray-100); color: var(--gray-900); }
+.nav-item.active { background: var(--blue-light); color: var(--blue); font-weight: 500; }
+.nav-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+.sidebar-footer { margin-top: auto; padding: 10px 10px 12px; border-top: 1px solid var(--gray-200); }
+.sidebar-user { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 2px; }
+.sidebar-user-name { font-size: 13px; font-weight: 500; }
+.sidebar-user-role { font-size: 11px; color: var(--gray-400); text-transform: capitalize; }
+.logout-btn {
+  width: 100%; padding: 8px 10px; border-radius: var(--radius-md);
+  border: none; background: none; color: var(--gray-600);
+  font-size: 13.5px; font-weight: 400; cursor: pointer; font-family: 'DM Sans', sans-serif;
+  display: flex; align-items: center; gap: 9px; transition: all 0.12s; text-align: left;
+}
+.logout-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+.logout-btn:hover { background: var(--red-light); color: var(--red); }
+
+/* ── Avatar ── */
+.avatar-circle {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600; flex-shrink: 0;
+}
+.av-0 { background: var(--blue-light); color: var(--blue); }
+.av-1 { background: var(--teal-light); color: var(--teal); }
+.av-2 { background: #EEF2FF; color: #3730A3; }
+.av-3 { background: var(--amber-light); color: var(--amber); }
+.av-4 { background: #FDF2F8; color: #9D174D; }
+
+/* ── Topbar ── */
+.topbar-left h1 { font-size: 16px; font-weight: 600; }
+.topbar-left p { font-size: 12px; color: var(--gray-400); margin-top: 1px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius-md);
+  font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid transparent;
+  transition: all 0.12s; font-family: 'DM Sans', sans-serif;
+}
+.btn-primary { background: var(--blue); color: #fff; }
+.btn-primary:hover { background: var(--blue-hover); }
+.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-ghost { background: #fff; color: var(--gray-600); border-color: var(--gray-200); }
+.btn-ghost:hover { background: var(--gray-100); color: var(--gray-900); }
+.btn-full { width: 100%; justify-content: center; padding: 10px 14px; font-size: 14px; }
+.btn svg { width: 14px; height: 14px; }
+
+/* ── Stats ── */
+.stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 22px; }
+.stat-card { background: #fff; border-radius: var(--radius-lg); border: 1px solid var(--gray-200); padding: 16px 18px; }
+.stat-label { font-size: 11.5px; color: var(--gray-400); font-weight: 500; margin-bottom: 6px; }
+.stat-value { font-size: 26px; font-weight: 600; line-height: 1; }
+.stat-sub { font-size: 11.5px; color: var(--gray-400); margin-top: 5px; display: flex; align-items: center; gap: 5px; }
+.stat-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+/* ── Table ── */
+.table-card { background: #fff; border-radius: var(--radius-lg); border: 1px solid var(--gray-200); margin-bottom: 20px; overflow: hidden; }
+.table-header {
+  padding: 14px 18px; border-bottom: 1px solid var(--gray-200);
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+}
+.table-title { font-size: 13.5px; font-weight: 600; }
+.table-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.filter-chips { display: flex; gap: 6px; }
+.chip {
+  padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  cursor: pointer; border: 1px solid var(--gray-200); background: #fff; color: var(--gray-600);
+  transition: all 0.12s; font-family: 'DM Sans', sans-serif;
+}
+.chip:hover { border-color: var(--blue-mid); color: var(--blue); }
+.chip.active { background: var(--blue-light); color: var(--blue); border-color: var(--blue-mid); }
+.search-wrap {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--gray-100); border: 1px solid var(--gray-200); border-radius: var(--radius-md); padding: 5px 11px;
+}
+.search-wrap svg { width: 13px; height: 13px; color: var(--gray-400); flex-shrink: 0; }
+.search-wrap input {
+  border: none; background: none; outline: none;
+  font-size: 13px; color: var(--gray-900); font-family: 'DM Sans', sans-serif; width: 130px;
+}
+.search-wrap input::placeholder { color: var(--gray-400); }
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  padding: 9px 18px; text-align: left; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--gray-400);
+  border-bottom: 1px solid var(--gray-200); background: var(--gray-50); white-space: nowrap;
+}
+tbody td { padding: 11px 18px; border-bottom: 1px solid var(--gray-100); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--gray-50); }
+
+/* ── Badges ── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: 20px; font-size: 11.5px; font-weight: 500; white-space: nowrap;
+}
+.badge-ok { background: var(--green-light); color: var(--green); }
+.badge-pending { background: var(--amber-light); color: var(--amber); }
+.badge-door { background: #EEF2FF; color: #3730A3; border: 1px solid #C7D2FE; }
+.badge-internet { background: var(--teal-light); color: var(--teal); border: 1px solid var(--teal-mid); }
+.badge-hardware { background: var(--amber-light); color: var(--amber); border: 1px solid #FAC775; }
+.badge-type { background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200); }
+
+/* ── Icon btn ── */
+.icon-btn {
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; border: none; background: none; color: var(--gray-400); transition: all 0.12s;
+}
+.icon-btn:hover { background: var(--gray-100); color: var(--gray-900); }
+.icon-btn.danger:hover { background: var(--red-light); color: var(--red); }
+.icon-btn svg { width: 14px; height: 14px; }
+.action-cell { display: flex; gap: 2px; }
+
+/* ── Bottom grid ── */
+.bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.mini-card { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: 18px 20px; }
+.mini-card-title { font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+.bar-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--gray-100); }
+.bar-row:last-child { border-bottom: none; }
+.bar-label { font-size: 13px; display: flex; align-items: center; gap: 7px; min-width: 90px; }
+.bar-track { flex: 1; height: 6px; background: var(--gray-100); border-radius: 4px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+.bar-count { font-size: 13px; font-weight: 600; min-width: 20px; text-align: right; }
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(28,28,26,0.45);
+  display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+  animation: fadeIn 0.15s ease;
+}
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+.modal {
+  background: #fff; border-radius: var(--radius-lg); width: 100%; max-width: 520px;
+  max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-lg); animation: slideUp 0.18s ease;
+}
+@keyframes slideUp { from { transform:translateY(12px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+.modal-header {
+  padding: 20px 24px 16px; border-bottom: 1px solid var(--gray-200);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-header h2 { font-size: 15px; font-weight: 600; }
+.modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+.modal-footer { padding: 14px 24px 20px; border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-group label { font-size: 11px; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.07em; }
+.form-control {
+  padding: 8px 11px; border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+  font-size: 13.5px; color: var(--gray-900); background: #fff;
+  font-family: 'DM Sans', sans-serif; outline: none; transition: border-color 0.12s;
+}
+.form-control:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(24,95,165,0.1); }
+.form-control::placeholder { color: var(--gray-400); }
+select.form-control { cursor: pointer; }
+
+/* ── Empty ── */
+.empty-state { padding: 48px; text-align: center; color: var(--gray-400); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.empty-state svg { width: 36px; height: 36px; opacity: 0.25; }
+.empty-state p { font-size: 13.5px; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; background: var(--gray-900); color: #fff;
+  padding: 10px 18px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500;
+  z-index: 200; animation: toastIn 0.2s ease; display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow-md);
+}
+@keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+.toast-dot { width: 8px; height: 8px; border-radius: 50%; background: #63C48A; flex-shrink: 0; }
+
+/* ── lang toggle ── */
+.lang-toggle {
+  display: inline-flex; align-items: center; border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200); background: #fff; overflow: hidden; flex-shrink: 0;
+}
+.lang-btn {
+  padding: 6px 11px; font-size: 12px; font-weight: 500; cursor: pointer;
+  border: none; background: none; color: var(--gray-500);
+  font-family: 'DM Sans', sans-serif; transition: all 0.12s; line-height: 1;
+  display: flex; align-items: center; gap: 5px;
+}
+.lang-btn:first-child { border-right: 1px solid var(--gray-200); }
+.lang-btn.active { background: var(--blue-light); color: var(--blue); }
+.lang-btn:hover:not(.active) { background: var(--gray-100); color: var(--gray-900); }
+.lang-flag { font-size: 14px; line-height: 1; }
+
+/* ── pw toggle ── */
+.pw-wrap { position: relative; }
+.pw-wrap .form-control { width: 100%; padding-right: 36px; }
+.pw-toggle {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; color: var(--gray-400);
+  display: flex; padding: 0;
+}
+
+/* ── dark mode surface overrides ── */
+html.dark .sidebar,
+html.dark .topbar,
+html.dark .stat-card,
+html.dark .table-card,
+html.dark .mini-card,
+html.dark .modal,
+html.dark .auth-card,
+html.dark .btn-ghost,
+html.dark .lang-toggle,
+html.dark .form-control { background: var(--gray-100) !important; }
+
+html.dark .sidebar { border-color: var(--gray-200) !important; }
+html.dark .topbar  { border-color: var(--gray-200) !important; }
+html.dark .stat-card,
+html.dark .table-card,
+html.dark .mini-card { border-color: var(--gray-200) !important; }
+
+html.dark thead th { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
+html.dark tbody td { border-color: var(--gray-200) !important; }
+html.dark tbody tr:hover td { background: var(--gray-200) !important; }
+
+html.dark .form-control {
+  border-color: var(--gray-300) !important;
+  color: var(--gray-900) !important;
+}
+html.dark .btn-ghost {
+  color: var(--gray-600) !important;
+  border-color: var(--gray-300) !important;
+}
+html.dark .btn-ghost:hover { background: var(--gray-200) !important; color: var(--gray-900) !important; }
+
+html.dark .nav-item.active { background: var(--blue-light) !important; color: var(--blue) !important; }
+html.dark .nav-item:hover  { background: var(--gray-200) !important; }
+
+html.dark .chip        { background: var(--gray-100) !important; border-color: var(--gray-300) !important; color: var(--gray-600) !important; }
+html.dark .chip.active { background: var(--blue-light) !important; color: var(--blue) !important; border-color: var(--blue-mid) !important; }
+
+html.dark .lang-toggle  { border-color: var(--gray-300) !important; }
+html.dark .lang-btn.active { background: var(--blue-light) !important; color: var(--blue) !important; }
+html.dark .lang-btn:first-child { border-color: var(--gray-300) !important; }
+
+html.dark .search-wrap {
+  background: var(--gray-200) !important;
+  border-color: var(--gray-300) !important;
+}
+html.dark .search-wrap input { color: var(--gray-900) !important; }
+
+html.dark .modal-overlay { background: rgba(0,0,0,0.65) !important; }
+html.dark .bar-track { background: var(--gray-200) !important; }
+html.dark .badge-type { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
+html.dark .role-option { background: var(--gray-100) !important; border-color: var(--gray-200) !important; }
+html.dark .role-option.selected { background: var(--blue-light) !important; border-color: var(--blue-mid) !important; }
+html.dark .demo-box { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
+html.dark .auth-screen { background: var(--gray-50) !important; }
+html.dark .auth-right  { background: var(--gray-50) !important; }
+
+@media (max-width: 900px) {
+  .stats-grid { grid-template-columns: repeat(2,1fr); }
+  .bottom-grid { grid-template-columns: 1fr; }
+  .auth-left { display: none; }
+}
+@media (max-width: 640px) {
+  .auth-right { padding: 20px; }
+  .auth-card { padding: 28px 22px; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useEffect, useCallback, useRef } = React;
+
+/* ── API config ── */
+const API = '/v1';
+
+/* ── API client ── */
+async function apiFetch(path, { method='GET', body, token } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(API + path, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const msg = data.error
+      ? (typeof data.error === 'object' ? Object.values(data.error).join(', ') : data.error)
+      : 'Something went wrong';
+    throw new Error(msg);
+  }
+  return data;
+}
+
+/* ── helpers ── */
+function today(lang) {
+  return new Date().toLocaleDateString(lang==='pt' ? 'pt-PT' : 'en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+}
+function initials(name) {
+  return name.trim().split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase();
+}
+function loadLS(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+}
+function saveLS(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
+
+/* ── Map API issue → frontend shape ── */
+function mapIssue(i) {
+  return {
+    id:            i.id,
+    apt:           i.mode === 'apt'  ? i.location : undefined,
+    dept:          i.mode === 'dept' ? i.location : undefined,
+    mode:          i.mode,
+    type:          i.type,
+    problem:       i.problem,
+    resolution:    i.resolution,
+    time:          i.time_minutes,
+    status:        i.status,
+    loggedBy:      i.logged_by,
+    loggedByName:  i.logged_by_name,
+    loggedByIdx:   i.logged_by_idx,
+    createdAt:     i.created_at?.slice(0,10),
+    version:       i.version,
+  };
+}
+
+/* ── translations ── */
+const T = {
+  en: {
+    appSub: 'Llana IT Reporting & Alerts',
+    menu: 'Menu',
+    dashboard: 'Dashboard',
+    aptIssues: 'Apt. Issues',
+    deptIssues: 'Dept. Issues',
+    history: 'History',
+    team: 'Team',
+    signOut: 'Sign out',
+    deptIssueBtn: 'Dept. issue',
+    aptIssueBtn: 'Apt. issue',
+    totalToday: 'Total issues today',
+    aptsAndDepts: 'Apts + Departments',
+    resolved: 'Resolved',
+    resolutionRate: '% resolution rate',
+    avgTime: 'Avg. resolution time',
+    acrossAll: 'Across all issues',
+    activeTechs: 'Active technicians',
+    workload: 'Workload by technician',
+    noTechs: 'No technicians yet.',
+    byType: 'Issues by type',
+    noIssues: 'No issues yet.',
+    aptIssuesTitle: 'Apartment issues',
+    deptIssuesTitle: 'Department issues',
+    all: 'All',
+    searchApt: 'Search apt…',
+    searchDept: 'Search dept…',
+    noMatch: 'No issues match your filters.',
+    apt: 'Apt.',
+    dept: 'Dept.',
+    type: 'Type',
+    problem: 'Problem',
+    resolution: 'Resolution',
+    time: 'Time',
+    status: 'Status',
+    loggedBy: 'Logged by',
+    you: 'you',
+    issues: 'Issues',
+    avg: 'Avg',
+    logAptIssue: 'Log apartment issue',
+    logDeptIssue: 'Log department issue',
+    editIssue: 'Edit issue',
+    aptNum: 'Apartment #',
+    department: 'Department',
+    selectDept: 'Select…',
+    issueType: 'Issue type',
+    problemDesc: 'Problem description',
+    descPlaceholder: 'Describe the issue…',
+    resolutionLabel: 'Resolution',
+    resolutionPlaceholder: 'What was done to fix it?',
+    timeMins: 'Time (minutes)',
+    statusLabel: 'Status',
+    statusOk: 'Ok — Resolved',
+    statusPending: 'Pending',
+    loggedUnder: 'Logged under your account:',
+    cancel: 'Cancel',
+    saveChanges: 'Save changes',
+    logIssue: 'Log issue',
+    welcomeBack: 'Welcome back',
+    signIn: 'Sign in to your LIRA account.',
+    createAccount: 'Create your account',
+    joinTeam: 'Join your team on LIRA.',
+    fullName: 'Full name',
+    fullNamePlaceholder: 'e.g. Eder Silva',
+    email: 'Email address',
+    emailPlaceholder: 'you@llana.com',
+    password: 'Password',
+    passwordPlaceholder: 'Min. 6 characters',
+    role: 'Role',
+    techRole: 'Technician',
+    techRoleSub: 'Log & manage own issues',
+    managerRole: 'Manager',
+    managerRoleSub: 'Full access & team view',
+    signInBtn: 'Sign in',
+    createBtn: 'Create account',
+    noAccount: "Don't have an account?",
+    signUp: 'Sign up',
+    haveAccount: 'Already have an account?',
+    authFeatures: ['Log issues in seconds','Stats update automatically','Managers see the full team','No paper, no Excel sheets'],
+    authHeadline: 'Every issue logged,\nevery fix counted.',
+    authSub: 'LIRA keeps Llana\'s IT team on top of every technical issue — across apartments and departments.',
+    errWrongCreds: 'Incorrect email or password.',
+    errName: 'Please enter your full name.',
+    errEmail: 'Enter a valid email address.',
+    errPassword: 'Password must be at least 6 characters.',
+    errEmailExists: 'An account with this email already exists.',
+    toastLogged: 'Issue logged successfully',
+    toastUpdated: 'Issue updated',
+    toastDeleted: 'Issue deleted',
+    managerLabel: 'Manager',
+    adminView: 'Admin view',
+    language: 'Language',
+  },
+  pt: {
+    appSub: 'Sistema de Relatórios IT Llana',
+    menu: 'Menu',
+    dashboard: 'Painel',
+    aptIssues: 'Avarias Apt.',
+    deptIssues: 'Avarias Dept.',
+    history: 'Histórico',
+    team: 'Equipa',
+    signOut: 'Sair',
+    deptIssueBtn: 'Avaria Dept.',
+    aptIssueBtn: 'Avaria Apt.',
+    totalToday: 'Total de avarias hoje',
+    aptsAndDepts: 'Apts + Departamentos',
+    resolved: 'Resolvidas',
+    resolutionRate: '% taxa de resolução',
+    avgTime: 'Tempo médio de resolução',
+    acrossAll: 'Todas as avarias',
+    activeTechs: 'Técnicos activos',
+    workload: 'Carga por técnico',
+    noTechs: 'Sem técnicos ainda.',
+    byType: 'Avarias por tipo',
+    noIssues: 'Sem avarias ainda.',
+    aptIssuesTitle: 'Avarias de apartamentos',
+    deptIssuesTitle: 'Avarias de departamentos',
+    all: 'Todas',
+    searchApt: 'Pesquisar apt…',
+    searchDept: 'Pesquisar dept…',
+    noMatch: 'Nenhuma avaria corresponde aos filtros.',
+    apt: 'Apt.',
+    dept: 'Dept.',
+    type: 'Tipo',
+    problem: 'Problema',
+    resolution: 'Resolução',
+    time: 'Tempo',
+    status: 'Estado',
+    loggedBy: 'Registado por',
+    you: 'tu',
+    issues: 'Avarias',
+    avg: 'Méd.',
+    logAptIssue: 'Registar avaria de apartamento',
+    logDeptIssue: 'Registar avaria de departamento',
+    editIssue: 'Editar avaria',
+    aptNum: 'Apartamento nº',
+    department: 'Departamento',
+    selectDept: 'Seleccionar…',
+    issueType: 'Tipo de avaria',
+    problemDesc: 'Descrição do problema',
+    descPlaceholder: 'Descreva a avaria…',
+    resolutionLabel: 'Resolução',
+    resolutionPlaceholder: 'O que foi feito para resolver?',
+    timeMins: 'Tempo (minutos)',
+    statusLabel: 'Estado',
+    statusOk: 'Ok — Resolvida',
+    statusPending: 'Pendente',
+    loggedUnder: 'Registado na conta de:',
+    cancel: 'Cancelar',
+    saveChanges: 'Guardar alterações',
+    logIssue: 'Registar avaria',
+    welcomeBack: 'Bem-vindo de volta',
+    signIn: 'Inicie sessão na sua conta LIRA.',
+    createAccount: 'Criar a sua conta',
+    joinTeam: 'Junte-se à sua equipa no LIRA.',
+    fullName: 'Nome completo',
+    fullNamePlaceholder: 'ex. Eder Silva',
+    email: 'Endereço de email',
+    emailPlaceholder: 'voce@llana.com',
+    password: 'Palavra-passe',
+    passwordPlaceholder: 'Mín. 6 caracteres',
+    role: 'Função',
+    techRole: 'Técnico',
+    techRoleSub: 'Registar e gerir as suas avarias',
+    managerRole: 'Gestor',
+    managerRoleSub: 'Acesso completo e visão da equipa',
+    signInBtn: 'Iniciar sessão',
+    createBtn: 'Criar conta',
+    demoAccounts: 'Contas de demonstração',
+    noAccount: 'Não tem conta?',
+    signUp: 'Registar',
+    haveAccount: 'Já tem conta?',
+    authFeatures: ['Registe avarias em segundos','As suas estatísticas actualizam automaticamente','Gestores vêem toda a equipa','Sem papel, sem folhas Excel'],
+    authHeadline: 'Cada avaria registada,\ncada reparação contada.',
+    authSub: 'O LIRA mantém a equipa de IT do Hotel Llana a par de cada avaria técnica — em apartamentos e departamentos.',
+    errWrongCreds: 'Email ou palavra-passe incorrectos.',
+    errName: 'Por favor insira o seu nome completo.',
+    errEmail: 'Insira um endereço de email válido.',
+    errPassword: 'A palavra-passe deve ter pelo menos 6 caracteres.',
+    errEmailExists: 'Já existe uma conta com este email.',
+    toastLogged: 'Avaria registada com sucesso',
+    toastUpdated: 'Avaria actualizada',
+    toastDeleted: 'Avaria eliminada',
+    managerLabel: 'Gestor',
+    adminView: 'Vista de administrador',
+    language: 'Idioma',
+  }
+};
+
+/* ── Lang context ── */
+const LangCtx = React.createContext('en');
+
+const ISSUE_TYPES = ['Door','Internet','Hardware','TV','AC','Phone','Other'];
+const DEPARTMENTS = ['Guest','Reception','Restaurant','Gym','Spa','Kitchen','Conference','Back Office'];
+const TYPE_COLORS = { Door:'#185FA5', Internet:'#1D9E75', Hardware:'#BA7517', TV:'#9D174D', AC:'#3730A3', Phone:'#854F0B', Other:'#5F5E5A' };
+
+/* ── icons ── */
+const Ic = {
+  logo:   <svg viewBox="0 0 20 20" fill="white"><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5" opacity=".6"/><rect x="2" y="11" width="7" height="7" rx="1.5" opacity=".6"/><rect x="11" y="11" width="7" height="7" rx="1.5" opacity=".3"/></svg>,
+  grid:   <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>,
+  list:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 4h12M2 8h12M2 12h8"/></svg>,
+  clock:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>,
+  users:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.8 2.2-5 5-5"/><circle cx="12" cy="7" r="2"/><path d="M10 13c0-2 1.3-3.5 3-4"/></svg>,
+  plus:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 2v12M2 8h12"/></svg>,
+  search: <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4"><circle cx="6" cy="6" r="4"/><path d="M10 10l2.5 2.5" strokeLinecap="round"/></svg>,
+  x:      <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>,
+  trash:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 4h12M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1M6 7v5M10 7v5M3 4l1 9h8l1-9"/></svg>,
+  edit:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M11 2l3 3-8 8H3v-3l8-8z"/></svg>,
+  check:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 8l3.5 3.5L13 4"/></svg>,
+  logout: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6"/></svg>,
+  shield: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2l5 2v4c0 3-2.5 5.5-5 6C5.5 13.5 3 11 3 8V4l5-2z"/></svg>,
+  tool:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.5 2a3.5 3.5 0 00-3.3 4.6L2 11.8 4.2 14l5.2-5.2A3.5 3.5 0 1010.5 2z"/></svg>,
+  eye:    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>,
+  eyeoff: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 2l12 12M6.5 6.6A2 2 0 0010 9.5M4 4.3C2.4 5.5 1 8 1 8s2.5 5 7 5a7 7 0 003-.7M7 3.1A7 7 0 0115 8s-.8 1.7-2 3"/></svg>,
+  info:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v.5"/></svg>,
+  person: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>,
+  upload: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 10V3M5 6l3-3 3 3"/><path d="M2 13h12"/></svg>,
+  camera: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 5a1 1 0 011-1h1.5l1-2h5l1 2H13a1 1 0 011 1v7a1 1 0 01-1 1H2a1 1 0 01-1-1z"/><circle cx="8" cy="8.5" r="2.5"/></svg>,
+  report: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="1" width="12" height="14" rx="1"/><path d="M5 5h6M5 8h6M5 11h4"/></svg>,
+  download: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 13h12"/></svg>,
+  calendar: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="3" width="14" height="12" rx="1"/><path d="M1 7h14M5 1v4M11 1v4"/></svg>,
+};
+
+/* ── Avatar ── */
+function Avatar({ name, idx, size='md' }) {
+  const dims = size==='sm' ? {width:24,height:24,fontSize:9} : size==='lg' ? {width:40,height:40,fontSize:15} : {};
+  return <div className={`avatar-circle av-${(idx??0)%5}`} style={dims}>{initials(name)}</div>;
+}
+
+/* ── TypeBadge ── */
+function TypeBadge({ type }) {
+  const cls = {Door:'badge-door',Internet:'badge-internet',Hardware:'badge-hardware'}[type]||'badge-type';
+  return <span className={`badge ${cls}`}>{type}</span>;
+}
+
+/* ── Toast ── */
+function Toast({ msg, onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 2800); return ()=>clearTimeout(t); }, []);
+  return <div className="toast"><span className="toast-dot"></span>{msg}</div>;
+}
+
+/* ── LangToggle ── */
+function LangToggle({ lang, onChange }) {
+  return (
+    <div className="lang-toggle" title="Language / Idioma">
+      <button className={`lang-btn ${lang==='en'?'active':''}`} onClick={()=>onChange('en')}>
+        <span className="lang-flag">🇬🇧</span> EN
+      </button>
+      <button className={`lang-btn ${lang==='pt'?'active':''}`} onClick={()=>onChange('pt')}>
+        <span className="lang-flag">🇵🇹</span> PT
+      </button>
+    </div>
+  );
+}
+
+/* ── ThemeToggle ── */
+function ThemeToggle({ theme, onChange }) {
+  const isDark = theme === 'dark';
+  return (
+    <button
+      className="theme-btn"
+      onClick={() => onChange(isDark ? 'light' : 'dark')}
+      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      {isDark ? (
+        <svg className="theme-icon-sun" viewBox="0 0 20 20" fill="currentColor">
+          <circle cx="10" cy="10" r="4"/>
+          <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+        </svg>
+      ) : (
+        <svg className="theme-icon-moon" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+        </svg>
+      )}
+    </button>
+  );
+}
+
+/* ════════════════ AUTH SCREEN ════════════════ */
+function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
+  const t = T[lang];
+  const [mode, setMode]       = useState('login');
+  const [email, setEmail]     = useState('');
+  const [pw, setPw]           = useState('');
+  const [name, setName]       = useState('');
+  const [role, setRole]       = useState('technician');
+  const [showPw, setShowPw]   = useState(false);
+  const [err, setErr]         = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function doLogin(e) {
+    e.preventDefault(); setErr(''); setLoading(true);
+    try {
+      const data = await apiFetch('/tokens/authentication', {
+        method:'POST', body:{ email, password:pw }
+      });
+      onLogin(data.user, data.token);
+    } catch(ex) {
+      setErr(ex.message==='invalid authentication credentials' ? t.errWrongCreds : ex.message);
+    } finally { setLoading(false); }
+  }
+
+  async function doRegister(e) {
+    e.preventDefault(); setErr(''); setLoading(true);
+    try {
+      const data = await apiFetch('/users', {
+        method:'POST', body:{ name, email, password:pw, role }
+      });
+      onLogin(data.user, data.token);
+    } catch(ex) {
+      setErr(ex.message);
+    } finally { setLoading(false); }
+  }
+
+  function switchMode(m) { setMode(m); setErr(''); setEmail(''); setPw(''); setName(''); }
+
+  return (
+    <div className="auth-screen">
+      <div className="auth-left">
+        <div className="auth-brand">
+          <div className="auth-logo">
+            <div className="auth-logo-mark">{Ic.logo}</div>
+            <span className="auth-logo-name">LIRA</span>
+          </div>
+          <div className="auth-headline">{t.authHeadline.split('\n').map((l,i)=><span key={i}>{l}{i===0&&<br/>}</span>)}</div>
+          <div className="auth-sub">{t.authSub}</div>
+        </div>
+        <div className="auth-features">
+          {t.authFeatures.map(f=>(
+            <div className="auth-feature" key={f}><span className="auth-feature-dot"></span>{f}</div>
+          ))}
+        </div>
+      </div>
+
+      <div className="auth-right">
+        <div className="auth-card">
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16,gap:8}}>
+            <ThemeToggle theme={theme} onChange={onThemeChange}/>
+            <LangToggle lang={lang} onChange={onLangChange}/>
+          </div>
+          <div className="auth-card-title">{mode==='login' ? t.welcomeBack : t.createAccount}</div>
+          <div className="auth-card-sub">{mode==='login' ? t.signIn : t.joinTeam}</div>
+
+          <form className="auth-form" onSubmit={mode==='login' ? doLogin : doRegister}>
+            {err && <div className="auth-error">{err}</div>}
+
+            {mode==='register' && (
+              <div className="form-group">
+                <label>{t.fullName}</label>
+                <input className="form-control" placeholder={t.fullNamePlaceholder} value={name} onChange={e=>setName(e.target.value)} required />
+              </div>
+            )}
+            <div className="form-group">
+              <label>{t.email}</label>
+              <input className="form-control" type="email" placeholder={t.emailPlaceholder} value={email} onChange={e=>setEmail(e.target.value)} required />
+            </div>
+            <div className="form-group">
+              <label>{t.password}</label>
+              <div className="pw-wrap">
+                <input
+                  className="form-control" type={showPw?'text':'password'}
+                  placeholder={mode==='register'?t.passwordPlaceholder:'••••••••'}
+                  value={pw} onChange={e=>setPw(e.target.value)} required
+                />
+                <button type="button" className="pw-toggle" onClick={()=>setShowPw(s=>!s)}>
+                  {showPw ? Ic.eyeoff : Ic.eye}
+                </button>
+              </div>
+            </div>
+
+            {mode==='register' && (
+              <div className="form-group">
+                <label>{t.role}</label>
+                <div className="role-select">
+                  {[{v:'technician',label:t.techRole,sub:t.techRoleSub},{v:'manager',label:t.managerRole,sub:t.managerRoleSub}].map(r=>(
+                    <div key={r.v} className={`role-option ${role===r.v?'selected':''}`} onClick={()=>setRole(r.v)}>
+                      <div className="role-option-title">{r.label}</div>
+                      <div className="role-option-sub">{r.sub}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button type="submit" className="btn btn-primary btn-full" style={{marginTop:4}} disabled={loading}>
+              {loading ? '…' : (mode==='login' ? t.signInBtn : t.createBtn)}
+            </button>
+          </form>
+
+          <div className="auth-toggle">
+            {mode==='login'
+              ? <>{t.noAccount} <button onClick={()=>switchMode('register')}>{t.signUp}</button></>
+              : <>{t.haveAccount} <button onClick={()=>switchMode('login')}>{t.signInBtn}</button></>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════ ISSUE MODAL ════════════════ */
+function IssueModal({ issueMode, editIssue, currentUser, onClose, onSave }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const isEdit = !!editIssue;
+  const defaults = issueMode==='apt'
+    ? {apt:'', type:'Door',     problem:'', resolution:'', time:'', status:'Ok'}
+    : {dept:'',type:'Hardware', problem:'', resolution:'', time:'', status:'Ok'};
+  const [form, setForm] = useState(isEdit ? {
+    apt:        editIssue.apt||'',
+    dept:       editIssue.dept||'',
+    type:       editIssue.type,
+    problem:    editIssue.problem,
+    resolution: editIssue.resolution,
+    time:       String(editIssue.time),
+    status:     editIssue.status,
+  } : defaults);
+
+  function set(k,v) { setForm(f=>({...f,[k]:v})); }
+  const valid = issueMode==='apt'
+    ? form.apt && form.type && form.problem && form.resolution && form.time
+    : form.dept && form.type && form.problem && form.resolution && form.time;
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div className="modal-header">
+          <h2>{isEdit ? t.editIssue : (issueMode==='apt' ? t.logAptIssue : t.logDeptIssue)}</h2>
+          <button className="icon-btn" onClick={onClose}>{Ic.x}</button>
+        </div>
+        <div className="modal-body">
+          <div className="form-row">
+            {issueMode==='apt' ? (
+              <div className="form-group">
+                <label>{t.aptNum}</label>
+                <input className="form-control" placeholder="e.g. 1234" value={form.apt} onChange={e=>set('apt',e.target.value)} />
+              </div>
+            ) : (
+              <div className="form-group">
+                <label>{t.department}</label>
+                <select className="form-control" value={form.dept} onChange={e=>set('dept',e.target.value)}>
+                  <option value="">{t.selectDept}</option>
+                  {DEPARTMENTS.map(d=><option key={d}>{d}</option>)}
+                </select>
+              </div>
+            )}
+            <div className="form-group">
+              <label>{t.issueType}</label>
+              <select className="form-control" value={form.type} onChange={e=>set('type',e.target.value)}>
+                {ISSUE_TYPES.map(t2=><option key={t2}>{t2}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-group">
+            <label>{t.problemDesc}</label>
+            <input className="form-control" placeholder={t.descPlaceholder} value={form.problem} onChange={e=>set('problem',e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>{t.resolutionLabel}</label>
+            <input className="form-control" placeholder={t.resolutionPlaceholder} value={form.resolution} onChange={e=>set('resolution',e.target.value)} />
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>{t.timeMins}</label>
+              <input className="form-control" type="number" min="1" placeholder="e.g. 5" value={form.time} onChange={e=>set('time',e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>{t.statusLabel}</label>
+              <select className="form-control" value={form.status} onChange={e=>set('status',e.target.value)}>
+                <option value="Ok">{t.statusOk}</option>
+                <option value="Pending">{t.statusPending}</option>
+              </select>
+            </div>
+          </div>
+          {!isEdit && (
+            <div style={{background:'var(--blue-light)',borderRadius:'var(--radius-md)',padding:'10px 14px',fontSize:13,color:'var(--blue)',display:'flex',alignItems:'center',gap:8}}>
+              {Ic.info} {t.loggedUnder} <strong>{currentUser.name}</strong>
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose}>{t.cancel}</button>
+          <button className="btn btn-primary" disabled={!valid} onClick={()=>{onSave({...form,time:Number(form.time)});onClose();}}>
+            {Ic.check} {isEdit ? t.saveChanges : t.logIssue}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════ DASHBOARD ════════════════ */
+function Dashboard({ apt, dept, users, stats }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+
+  // Fall back to local computation while stats load
+  const all = [...apt,...dept];
+  const totalIssues  = stats ? stats.total_issues  : all.length;
+  const resolved     = stats ? stats.resolved       : all.filter(i=>i.status==='Ok').length;
+  const avgTime      = stats ? stats.avg_minutes.toFixed(1) : (all.length ? (all.reduce((s,i)=>s+Number(i.time),0)/all.length).toFixed(1) : '—');
+  const byType       = stats ? stats.by_type        : (() => { const m={}; all.forEach(i=>{m[i.type]=(m[i.type]||0)+1;}); return m; })();
+  const byTech       = stats ? stats.by_technician  : [];
+  const maxWork      = Math.max(...(byTech.map(t=>t.count)), 1);
+  const maxType      = Math.max(...Object.values(byType), 1);
+  const activeTechs  = users.filter(u=>u.role==='technician');
+
+  return (
+    <div>
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-label">{t.totalToday}</div>
+          <div className="stat-value">{totalIssues}</div>
+          <div className="stat-sub"><span className="stat-dot" style={{background:'#185FA5'}}></span>{t.aptsAndDepts}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">{t.resolved}</div>
+          <div className="stat-value" style={{color:'#3B6D11'}}>{resolved}</div>
+          <div className="stat-sub"><span className="stat-dot" style={{background:'#639922'}}></span>{totalIssues ? Math.round(resolved/totalIssues*100) : 0}{t.resolutionRate}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">{t.avgTime}</div>
+          <div className="stat-value">{avgTime}<span style={{fontSize:14,fontWeight:400,color:'var(--gray-400)'}}>m</span></div>
+          <div className="stat-sub"><span className="stat-dot" style={{background:'#EF9F27'}}></span>{t.acrossAll}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">{t.activeTechs}</div>
+          <div className="stat-value">{activeTechs.length}</div>
+          <div className="stat-sub"><span className="stat-dot" style={{background:'#9FE1CB'}}></span>{activeTechs.map(u=>u.name).join(' · ')||'—'}</div>
+        </div>
+      </div>
+      <div className="bottom-grid">
+        <div className="mini-card">
+          <div className="mini-card-title">{t.workload}</div>
+          {byTech.length===0 && <p style={{color:'var(--gray-400)',fontSize:13}}>{t.noTechs}</p>}
+          {byTech.map(ts=>(
+            <div className="bar-row" key={ts.user_id}>
+              <div className="bar-label"><Avatar name={ts.name} idx={ts.avatar_idx} size="sm"/>{ts.name}</div>
+              <div className="bar-track"><div className="bar-fill" style={{width:`${(ts.count/maxWork)*100}%`,background:'#185FA5'}}></div></div>
+              <div className="bar-count">{ts.count}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mini-card">
+          <div className="mini-card-title">{t.byType}</div>
+          {Object.keys(byType).length===0 && <p style={{color:'var(--gray-400)',fontSize:13}}>{t.noIssues}</p>}
+          {Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([type,count])=>(
+            <div className="bar-row" key={type}>
+              <div className="bar-label">
+                <span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:TYPE_COLORS[type]||'#888',flexShrink:0}}></span>
+                {type}
+              </div>
+              <div className="bar-track"><div className="bar-fill" style={{width:`${(count/maxType)*100}%`,background:TYPE_COLORS[type]||'#888'}}></div></div>
+              <div className="bar-count">{count}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════ ISSUES TABLE ════════════════ */
+function IssuesTable({ issues, tableMode, currentUser, onDelete, onEdit }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const [filter, setFilter] = useState('All');
+  const [search, setSearch] = useState('');
+  const types    = [t.all,...Array.from(new Set(issues.map(i=>i.type)))];
+  const filtered = useMemo(()=>issues.filter(i=>{
+    const ok1 = filter===t.all||i.type===filter;
+    const q   = search.toLowerCase();
+    const ok2 = !q||(i.apt||i.dept||'').toLowerCase().includes(q)||i.problem.toLowerCase().includes(q)||i.loggedByName.toLowerCase().includes(q)||i.type.toLowerCase().includes(q);
+    return ok1&&ok2;
+  }),[issues,filter,search,t.all]);
+
+  const canAct = issue => currentUser.role==='manager' || issue.loggedBy===currentUser.id;
+
+  return (
+    <div className="table-card">
+      <div className="table-header">
+        <span className="table-title">{tableMode==='apt' ? t.aptIssuesTitle : t.deptIssuesTitle}</span>
+        <div className="table-actions">
+          <div className="filter-chips">
+            {types.map(tp=><button key={tp} className={`chip ${filter===tp?'active':''}`} onClick={()=>setFilter(tp)}>{tp}</button>)}
+          </div>
+          <div className="search-wrap">
+            {Ic.search}
+            <input placeholder={tableMode==='apt' ? t.searchApt : t.searchDept} value={search} onChange={e=>setSearch(e.target.value)}/>
+          </div>
+        </div>
+      </div>
+      {filtered.length===0 ? (
+        <div className="empty-state">{Ic.list}<p>{t.noMatch}</p></div>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>{tableMode==='apt' ? t.apt : t.dept}</th>
+              <th>{t.type}</th><th>{t.problem}</th><th>{t.resolution}</th><th>{t.time}</th><th>{t.status}</th><th>{t.loggedBy}</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(issue=>(
+              <tr key={issue.id}>
+                <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.apt||issue.dept}</strong></td>
+                <td><TypeBadge type={issue.type}/></td>
+                <td style={{maxWidth:150}}>{issue.problem}</td>
+                <td style={{maxWidth:190,color:'var(--gray-600)',fontSize:13}}>{issue.resolution}</td>
+                <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.time}m</td>
+                <td><span className={`badge ${issue.status==='Ok'?'badge-ok':'badge-pending'}`}>{issue.status}</span></td>
+                <td>
+                  <div style={{display:'flex',alignItems:'center',gap:7}}>
+                    <Avatar name={issue.loggedByName} idx={issue.loggedByIdx??0} size="sm"/>
+                    <span style={{fontSize:13,color:'var(--gray-600)'}}>{issue.loggedByName}</span>
+                    {issue.loggedBy===currentUser.id && (
+                      <span className="badge" style={{background:'var(--blue-light)',color:'var(--blue)',fontSize:10,padding:'1px 6px'}}>{t.you}</span>
+                    )}
+                  </div>
+                </td>
+                <td>
+                  <div className="action-cell">
+                    {canAct(issue) ? (
+                      <>
+                        <button className="icon-btn" title={t.saveChanges} onClick={()=>onEdit(issue,tableMode)}>{Ic.edit}</button>
+                        <button className="icon-btn danger" title={t.toastDeleted} onClick={()=>onDelete(issue.id,tableMode)}>{Ic.trash}</button>
+                      </>
+                    ) : (
+                      <span style={{fontSize:11,color:'var(--gray-300)',padding:'0 8px',userSelect:'none'}} title="Only the owner or a manager can edit this">—</span>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+/* ════════════════ TEAM PAGE ════════════════ */
+function TeamPage({ users, apt, dept, currentUser }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const all = [...apt,...dept];
+  return (
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:16}}>
+      {users.map(u=>{
+        const mine    = all.filter(i=>i.loggedBy===u.id);
+        const resolved = mine.filter(i=>i.status==='Ok').length;
+        const avgT    = mine.length ? (mine.reduce((s,i)=>s+Number(i.time),0)/mine.length).toFixed(1) : '—';
+        return (
+          <div className="mini-card" key={u.id}>
+            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
+              <Avatar name={u.name} idx={u.avatarIdx} size="lg"/>
+              <div>
+                <div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:7}}>
+                  {u.name}
+                  {u.id===currentUser.id && <span className="badge" style={{background:'var(--blue-light)',color:'var(--blue)',fontSize:10,padding:'2px 7px'}}>{t.you}</span>}
+                </div>
+                <div style={{fontSize:12,color:'var(--gray-400)',marginTop:2,display:'flex',alignItems:'center',gap:5,textTransform:'capitalize'}}>
+                  {u.role==='manager'?Ic.shield:Ic.tool} {u.role==='manager' ? t.managerRole : t.techRole}
+                </div>
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+              {[[t.issues,mine.length],[t.resolved,resolved],[t.avg,avgT+'m']].map(([l,v])=>(
+                <div key={l} style={{background:'var(--gray-50)',borderRadius:8,padding:'10px 12px',border:'1px solid var(--gray-200)'}}>
+                  <div style={{fontSize:11,color:'var(--gray-400)',marginBottom:3}}>{l}</div>
+                  <div style={{fontSize:18,fontWeight:600}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ════════════════ REPORTS PAGE ════════════════ */
+function ReportsPage({ token }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const [date,    setDate]    = useState(new Date().toISOString().slice(0,10));
+  const [report,  setReport]  = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState('');
+
+  async function fetchReport() {
+    setLoading(true); setError(''); setReport(null);
+    try {
+      const res = await apiFetch(`/reports/daily?date=${date}`, {token});
+      setReport(res.report);
+    } catch(ex) { setError(ex.message); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { fetchReport(); }, [date]);
+
+  function downloadPDF() {
+    if (!report) return;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const W = doc.internal.pageSize.getWidth();
+    const blue = [24, 95, 165];
+    const gray = [95, 94, 90];
+    const lightGray = [241, 239, 232];
+    const green = [59, 109, 17];
+    const amber = [186, 117, 23];
+
+    let y = 0;
+
+    // ── Header banner ──
+    doc.setFillColor(...blue);
+    doc.rect(0, 0, W, 28, 'F');
+
+    // Logo block
+    doc.setFillColor(255,255,255, 0.2);
+    doc.setFillColor(255,255,255);
+    doc.roundedRect(10, 7, 14, 14, 2, 2, 'F');
+    doc.setFontSize(9); doc.setTextColor(...blue); doc.setFont('helvetica','bold');
+    doc.text('LIRA', 17, 16.5, {align:'center'});
+
+    // Title
+    doc.setFontSize(16); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
+    doc.text('Daily Report', 30, 13);
+    doc.setFontSize(9); doc.setFont('helvetica','normal');
+    doc.text('Llana IT Reporting & Alerts', 30, 19);
+
+    // Date top right
+    doc.setFontSize(9); doc.setFont('helvetica','bold');
+    doc.text(report.date, W - 10, 13, {align:'right'});
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    doc.text(`Generated: ${new Date(report.generated_at).toLocaleString()}`, W - 10, 19, {align:'right'});
+
+    y = 36;
+
+    // ── Summary cards ──
+    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(28,28,26);
+    doc.text('Summary', 10, y); y += 5;
+
+    const cards = [
+      {label:'Total Issues',    value: String(report.summary.total_issues),  color: blue},
+      {label:'Resolved',        value: `${report.summary.resolved} (${report.summary.resolution_rate.toFixed(0)}%)`, color: green},
+      {label:'Pending',         value: String(report.summary.pending),       color: amber},
+      {label:'Avg. Time',       value: `${report.summary.avg_minutes.toFixed(1)} min`, color: gray},
+      {label:'Total Time',      value: `${report.summary.total_minutes} min`, color: gray},
+      {label:'Fastest Fix',     value: `${report.summary.fastest_minutes} min`, color: green},
+      {label:'Slowest Fix',     value: `${report.summary.slowest_minutes} min`, color: amber},
+      {label:'Apt. Issues',     value: String(report.summary.apt_issues),    color: blue},
+      {label:'Dept. Issues',    value: String(report.summary.dept_issues),   color: blue},
+    ];
+
+    const cw = (W - 20) / 3;
+    cards.forEach((c, i) => {
+      const cx = 10 + (i % 3) * cw;
+      const cy = y + Math.floor(i / 3) * 18;
+      doc.setFillColor(...lightGray);
+      doc.roundedRect(cx, cy, cw - 3, 15, 1.5, 1.5, 'F');
+      doc.setFontSize(7.5); doc.setTextColor(...gray); doc.setFont('helvetica','normal');
+      doc.text(c.label, cx + 4, cy + 5.5);
+      doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(...c.color);
+      doc.text(c.value, cx + 4, cy + 12);
+    });
+    y += Math.ceil(cards.length / 3) * 18 + 6;
+
+    // ── Breakdowns ──
+    const halfW = (W - 24) / 2;
+
+    // By type
+    doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(28,28,26);
+    doc.text('Issues by Type', 10, y); y += 4;
+    const typeData = Object.entries(report.by_type).sort((a,b)=>b[1]-a[1])
+      .map(([type, count]) => [type, String(count)]);
+    doc.autoTable({
+      startY: y,
+      tableWidth: halfW,
+      margin: {left: 10},
+      head: [['Type', 'Count']],
+      body: typeData.length ? typeData : [['No data', '']],
+      styles: {fontSize: 8, cellPadding: 2},
+      headStyles: {fillColor: blue, textColor: 255, fontStyle:'bold'},
+      alternateRowStyles: {fillColor: [248,248,246]},
+      theme: 'grid',
+    });
+
+    // By technician
+    doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(28,28,26);
+    doc.text('By Technician', 14 + halfW, y);
+    const techData = (report.by_technician || []).map(ts => [ts.name, String(ts.count)]);
+    doc.autoTable({
+      startY: y + 4,
+      tableWidth: halfW,
+      margin: {left: 14 + halfW},
+      head: [['Technician', 'Issues']],
+      body: techData.length ? techData : [['No data', '']],
+      styles: {fontSize: 8, cellPadding: 2},
+      headStyles: {fillColor: blue, textColor: 255, fontStyle:'bold'},
+      alternateRowStyles: {fillColor: [248,248,246]},
+      theme: 'grid',
+    });
+
+    y = Math.max(doc.lastAutoTable.finalY, y + 30) + 8;
+
+    // ── Apartment Issues ──
+    if (report.apt_issues?.length > 0) {
+      if (y > 230) { doc.addPage(); y = 15; }
+      doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(28,28,26);
+      doc.text(`Apartment Issues (${report.apt_issues.length})`, 10, y); y += 4;
+      doc.autoTable({
+        startY: y,
+        margin: {left: 10, right: 10},
+        head: [['Apt.', 'Type', 'Problem', 'Resolution', 'Time', 'Status', 'Technician']],
+        body: report.apt_issues.map(i => [
+          i.location, i.type, i.problem,
+          i.resolution || '—',
+          `${i.time_minutes}m`, i.status, i.logged_by_name,
+        ]),
+        styles: {fontSize: 7.5, cellPadding: 2, overflow: 'linebreak'},
+        headStyles: {fillColor: blue, textColor: 255, fontStyle:'bold'},
+        columnStyles: {
+          0: {cellWidth: 14}, 1: {cellWidth: 18}, 2: {cellWidth: 38},
+          3: {cellWidth: 44}, 4: {cellWidth: 12}, 5: {cellWidth: 16}, 6: {cellWidth: 22},
+        },
+        alternateRowStyles: {fillColor: [248,248,246]},
+        theme: 'grid',
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 5) {
+            data.cell.styles.textColor = data.cell.raw === 'Ok' ? green : amber;
+            data.cell.styles.fontStyle = 'bold';
+          }
+        },
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    }
+
+    // ── Department Issues ──
+    if (report.dept_issues?.length > 0) {
+      if (y > 230) { doc.addPage(); y = 15; }
+      doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(28,28,26);
+      doc.text(`Department Issues (${report.dept_issues.length})`, 10, y); y += 4;
+      doc.autoTable({
+        startY: y,
+        margin: {left: 10, right: 10},
+        head: [['Dept.', 'Type', 'Problem', 'Resolution', 'Time', 'Status', 'Technician']],
+        body: report.dept_issues.map(i => [
+          i.location, i.type, i.problem,
+          i.resolution || '—',
+          `${i.time_minutes}m`, i.status, i.logged_by_name,
+        ]),
+        styles: {fontSize: 7.5, cellPadding: 2, overflow: 'linebreak'},
+        headStyles: {fillColor: [29, 158, 117], textColor: 255, fontStyle:'bold'},
+        columnStyles: {
+          0: {cellWidth: 20}, 1: {cellWidth: 18}, 2: {cellWidth: 38},
+          3: {cellWidth: 44}, 4: {cellWidth: 12}, 5: {cellWidth: 16}, 6: {cellWidth: 16},
+        },
+        alternateRowStyles: {fillColor: [248,248,246]},
+        theme: 'grid',
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 5) {
+            data.cell.styles.textColor = data.cell.raw === 'Ok' ? green : amber;
+            data.cell.styles.fontStyle = 'bold';
+          }
+        },
+      });
+    }
+
+    // ── Footer on every page ──
+    const pages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pages; i++) {
+      doc.setPage(i);
+      doc.setFillColor(...lightGray);
+      doc.rect(0, doc.internal.pageSize.getHeight() - 10, W, 10, 'F');
+      doc.setFontSize(7); doc.setTextColor(...gray); doc.setFont('helvetica','normal');
+      doc.text('LIRA — Llana IT Reporting & Alerts', 10, doc.internal.pageSize.getHeight() - 4);
+      doc.text(`Page ${i} of ${pages}`, W - 10, doc.internal.pageSize.getHeight() - 4, {align:'right'});
+    }
+
+    doc.save(`LIRA-Daily-Report-${report.date}.pdf`);
+  }
+
+  const TYPE_COLORS_HEX = {
+    Door:'#185FA5', Internet:'#1D9E75', Hardware:'#BA7517',
+    TV:'#9D174D', AC:'#3730A3', Phone:'#854F0B', Other:'#5F5E5A',
+  };
+
+  const summaryCards = report ? [
+    {label:'Total issues',     value: report.summary.total_issues,  sub:'Apts + Departments',             color:'#185FA5'},
+    {label:'Resolved',         value: report.summary.resolved,      sub:`${report.summary.resolution_rate.toFixed(0)}% rate`, color:'#3B6D11'},
+    {label:'Pending',          value: report.summary.pending,       sub:'Still open',                     color:'#BA7517'},
+    {label:'Avg. time',        value: report.summary.avg_minutes.toFixed(1)+'m', sub:'Per issue',         color:'#1D9E75'},
+    {label:'Total time spent', value: report.summary.total_minutes+'m', sub:'All issues combined',        color:'#185FA5'},
+    {label:'Fastest fix',      value: report.summary.fastest_minutes+'m', sub:'Quickest resolution',     color:'#3B6D11'},
+    {label:'Slowest fix',      value: report.summary.slowest_minutes+'m', sub:'Longest resolution',      color:'#BA7517'},
+    {label:'Apt. issues',      value: report.summary.apt_issues,    sub:'Apartment',                     color:'#185FA5'},
+    {label:'Dept. issues',     value: report.summary.dept_issues,   sub:'Department',                    color:'#1D9E75'},
+  ] : [];
+
+  const maxType = report ? Math.max(...Object.values(report.by_type), 1) : 1;
+  const maxTech = report ? Math.max(...(report.by_technician||[]).map(t=>t.count), 1) : 1;
+
+  return (
+    <div>
+      {/* Toolbar */}
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:22,flexWrap:'wrap'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
+          {Ic.calendar}
+          <input
+            type="date" value={date} onChange={e=>setDate(e.target.value)}
+            style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}
+          />
+        </div>
+        <button className="btn btn-ghost" onClick={fetchReport} disabled={loading}>
+          {loading ? '…' : 'Refresh'}
+        </button>
+        <button className="btn btn-primary" onClick={downloadPDF} disabled={!report || loading}
+          style={{marginLeft:'auto'}}>
+          {Ic.download} Download PDF
+        </button>
+      </div>
+
+      {error && (
+        <div style={{background:'var(--red-light)',color:'var(--red)',borderRadius:'var(--radius-md)',padding:'10px 16px',fontSize:13,marginBottom:16}}>
+          {error}
+        </div>
+      )}
+
+      {loading && (
+        <div style={{textAlign:'center',padding:'60px 0',color:'var(--gray-400)',fontSize:14}}>
+          Loading report…
+        </div>
+      )}
+
+      {report && !loading && (
+        <>
+          {/* Summary cards */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,marginBottom:22}}>
+            {summaryCards.map(c=>(
+              <div className="stat-card" key={c.label}>
+                <div className="stat-label">{c.label}</div>
+                <div className="stat-value" style={{color:c.color}}>{c.value}</div>
+                <div className="stat-sub"><span className="stat-dot" style={{background:c.color}}></span>{c.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Breakdowns */}
+          <div className="bottom-grid" style={{marginBottom:22}}>
+            <div className="mini-card">
+              <div className="mini-card-title">Issues by type</div>
+              {Object.keys(report.by_type).length === 0
+                ? <p style={{color:'var(--gray-400)',fontSize:13}}>No issues logged.</p>
+                : Object.entries(report.by_type).sort((a,b)=>b[1]-a[1]).map(([type,count])=>(
+                    <div className="bar-row" key={type}>
+                      <div className="bar-label">
+                        <span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:TYPE_COLORS[type]||'#888',flexShrink:0}}></span>
+                        {type}
+                      </div>
+                      <div className="bar-track"><div className="bar-fill" style={{width:`${(count/maxType)*100}%`,background:TYPE_COLORS[type]||'#888'}}></div></div>
+                      <div className="bar-count">{count}</div>
+                    </div>
+                  ))
+              }
+            </div>
+            <div className="mini-card">
+              <div className="mini-card-title">By technician</div>
+              {(report.by_technician||[]).length === 0
+                ? <p style={{color:'var(--gray-400)',fontSize:13}}>No technicians.</p>
+                : report.by_technician.map(ts=>(
+                    <div className="bar-row" key={ts.user_id}>
+                      <div className="bar-label"><Avatar name={ts.name} idx={ts.avatar_idx} size="sm"/>{ts.name}</div>
+                      <div className="bar-track"><div className="bar-fill" style={{width:`${(ts.count/maxTech)*100}%`,background:'#185FA5'}}></div></div>
+                      <div className="bar-count">{ts.count}</div>
+                    </div>
+                  ))
+              }
+            </div>
+          </div>
+
+          {/* Apt issues table */}
+          {(report.apt_issues||[]).length > 0 && (
+            <div className="table-card" style={{marginBottom:20}}>
+              <div className="table-header">
+                <span className="table-title">Apartment issues <span style={{fontSize:12,color:'var(--gray-400)',fontWeight:400}}>({report.apt_issues.length})</span></span>
+              </div>
+              <table>
+                <thead>
+                  <tr><th>Apt.</th><th>Type</th><th>Problem</th><th>Resolution</th><th>Time</th><th>Status</th><th>Technician</th></tr>
+                </thead>
+                <tbody>
+                  {report.apt_issues.map(i=>(
+                    <tr key={i.id}>
+                      <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.location}</strong></td>
+                      <td><TypeBadge type={i.type}/></td>
+                      <td style={{maxWidth:140,fontSize:13}}>{i.problem}</td>
+                      <td style={{maxWidth:180,fontSize:13,color:'var(--gray-600)'}}>{i.resolution||'—'}</td>
+                      <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.time_minutes}m</td>
+                      <td><span className={`badge ${i.status==='Ok'?'badge-ok':'badge-pending'}`}>{i.status}</span></td>
+                      <td>
+                        <div style={{display:'flex',alignItems:'center',gap:7}}>
+                          <Avatar name={i.logged_by_name} idx={i.logged_by_idx||0} size="sm"/>
+                          <span style={{fontSize:13,color:'var(--gray-600)'}}>{i.logged_by_name}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Dept issues table */}
+          {(report.dept_issues||[]).length > 0 && (
+            <div className="table-card">
+              <div className="table-header">
+                <span className="table-title">Department issues <span style={{fontSize:12,color:'var(--gray-400)',fontWeight:400}}>({report.dept_issues.length})</span></span>
+              </div>
+              <table>
+                <thead>
+                  <tr><th>Dept.</th><th>Type</th><th>Problem</th><th>Resolution</th><th>Time</th><th>Status</th><th>Technician</th></tr>
+                </thead>
+                <tbody>
+                  {report.dept_issues.map(i=>(
+                    <tr key={i.id}>
+                      <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.location}</strong></td>
+                      <td><TypeBadge type={i.type}/></td>
+                      <td style={{maxWidth:140,fontSize:13}}>{i.problem}</td>
+                      <td style={{maxWidth:180,fontSize:13,color:'var(--gray-600)'}}>{i.resolution||'—'}</td>
+                      <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.time_minutes}m</td>
+                      <td><span className={`badge ${i.status==='Ok'?'badge-ok':'badge-pending'}`}>{i.status}</span></td>
+                      <td>
+                        <div style={{display:'flex',alignItems:'center',gap:7}}>
+                          <Avatar name={i.logged_by_name} idx={i.logged_by_idx||0} size="sm"/>
+                          <span style={{fontSize:13,color:'var(--gray-600)'}}>{i.logged_by_name}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {report.summary.total_issues === 0 && (
+            <div className="table-card">
+              <div className="empty-state">
+                {Ic.report}
+                <p>No issues logged on {report.date}.</p>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ════════════════ PROFILE PAGE ════════════════ */
+function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate, setToast, lang, onLangChange }) {
+  const t = T[lang];
+  const [myStats,  setMyStats]  = useState(null);
+  const [myIssues, setMyIssues] = useState([]);
+  const [section,  setSection]  = useState('identity');
+  const [saving,   setSaving]   = useState(false);
+
+  // identity form
+  const [name,     setName]     = useState(currentUser.name);
+  const [email,    setEmail]    = useState(currentUser.email);
+  const [pw,       setPw]       = useState('');
+  const [pwConf,   setPwConf]   = useState('');
+  const [pwErr,    setPwErr]    = useState('');
+  const [idErr,    setIdErr]    = useState('');
+
+  // avatar
+  const [avatarData, setAvatarData] = useState(currentUser.avatar_data || '');
+  const fileRef = useRef();
+
+  useEffect(() => {
+    Promise.all([
+      apiFetch('/profile/stats',  {token}),
+      apiFetch('/profile/issues?limit=10', {token}),
+    ]).then(([sRes, iRes]) => {
+      setMyStats(sRes.stats);
+      setMyIssues((iRes.issues || []).map(mapIssue));
+    }).catch(() => {});
+  }, [token]);
+
+  async function saveIdentity() {
+    setIdErr(''); setSaving(true);
+    if (pw && pw !== pwConf) { setPwErr('Passwords do not match.'); setSaving(false); return; }
+    try {
+      const body = { name, email };
+      if (pw) body.password = pw;
+      const res = await apiFetch('/profile', {method:'PATCH', body, token});
+      onSessionUpdate(res.user);
+      setPw(''); setPwConf(''); setPwErr('');
+      setToast('Profile updated');
+    } catch(ex) { setIdErr(ex.message); }
+    finally { setSaving(false); }
+  }
+
+  async function saveAvatar(data) {
+    try {
+      const res = await apiFetch('/profile', {method:'PATCH', body:{avatar_data: data}, token});
+      setAvatarData(data);
+      onSessionUpdate(res.user);
+      setToast('Avatar updated');
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  function handleFileChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      // Resize using canvas
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const size = 160;
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const min = Math.min(img.width, img.height);
+        const sx = (img.width  - min) / 2;
+        const sy = (img.height - min) / 2;
+        ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+        saveAvatar(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function saveLang(l) {
+    onLangChange(l);
+    try {
+      await apiFetch('/profile', {method:'PATCH', body:{language: l}, token});
+    } catch(ex) {}
+  }
+
+  async function changeRole(userId, newRole) {
+    try {
+      const res = await apiFetch(`/users/${userId}/role`, {method:'PATCH', body:{role: newRole}, token});
+      onUsersUpdate(prev => prev.map(u => u.id === userId ? {...u, role: res.user.role} : u));
+      setToast('Role updated');
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  async function toggleActive(userId, active) {
+    try {
+      const res = await apiFetch(`/users/${userId}/deactivate`, {method:'PATCH', body:{active}, token});
+      onUsersUpdate(prev => prev.map(u => u.id === userId ? {...u, active: res.user.active} : u));
+      setToast(active ? 'Account reactivated' : 'Account deactivated');
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  const sections = [
+    {id:'identity',    label:'Identity'},
+    {id:'avatar',      label:'Avatar'},
+    {id:'preferences', label:'Preferences'},
+    {id:'activity',    label:'My Activity'},
+    ...(currentUser.role === 'manager' ? [{id:'team', label:'Team Management'}] : []),
+  ];
+
+  const statCards = myStats ? [
+    {label:'Total issues',  value: myStats.total_issues, color:'#185FA5'},
+    {label:'Resolved',      value: myStats.resolved,     color:'#3B6D11'},
+    {label:'This week',     value: myStats.this_week,    color:'#BA7517'},
+    {label:'Avg. time',     value: myStats.avg_minutes.toFixed(1)+'m', color:'#1D9E75'},
+  ] : [];
+
+  return (
+    <div style={{maxWidth:720,margin:'0 auto'}}>
+
+      {/* Profile header */}
+      <div className="mini-card" style={{display:'flex',alignItems:'center',gap:20,marginBottom:20,padding:'20px 24px'}}>
+        <div style={{position:'relative',flexShrink:0}}>
+          {avatarData
+            ? <img src={avatarData} style={{width:64,height:64,borderRadius:'50%',objectFit:'cover',border:'2px solid var(--gray-200)'}}/>
+            : <Avatar name={currentUser.name} idx={currentUser.avatar_idx} size="lg" style={{width:64,height:64,fontSize:22}}/>
+          }
+          <button onClick={()=>fileRef.current.click()}
+            style={{position:'absolute',bottom:0,right:0,width:22,height:22,borderRadius:'50%',
+              background:'var(--blue)',border:'2px solid #fff',cursor:'pointer',
+              display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="2"><path d="M11 2l3 3-8 8H3v-3l8-8z"/></svg>
+          </button>
+          <input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleFileChange}/>
+        </div>
+        <div>
+          <div style={{fontSize:18,fontWeight:600}}>{currentUser.name}</div>
+          <div style={{fontSize:13,color:'var(--gray-400)',marginTop:2,display:'flex',alignItems:'center',gap:6}}>
+            {currentUser.role==='manager' ? Ic.shield : Ic.tool}
+            {currentUser.role==='manager' ? t.managerRole : t.techRole}
+          </div>
+          <div style={{fontSize:12,color:'var(--gray-400)',marginTop:2}}>{currentUser.email}</div>
+        </div>
+      </div>
+
+      {/* Sub-nav */}
+      <div style={{display:'flex',gap:4,marginBottom:20,borderBottom:'1px solid var(--gray-200)',paddingBottom:0}}>
+        {sections.map(s=>(
+          <button key={s.id} onClick={()=>setSection(s.id)}
+            style={{padding:'8px 14px',border:'none',background:'none',cursor:'pointer',
+              fontSize:13,fontWeight:500,fontFamily:'DM Sans,sans-serif',
+              color: section===s.id ? 'var(--blue)' : 'var(--gray-600)',
+              borderBottom: section===s.id ? '2px solid var(--blue)' : '2px solid transparent',
+              marginBottom:-1}}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Identity ── */}
+      {section==='identity' && (
+        <div className="mini-card">
+          <div className="mini-card-title" style={{marginBottom:18}}>Personal information</div>
+          {idErr && <div className="auth-error" style={{marginBottom:14}}>{idErr}</div>}
+          <div style={{display:'flex',flexDirection:'column',gap:14}}>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Full name</label>
+                <input className="form-control" value={name} onChange={e=>setName(e.target.value)}/>
+              </div>
+              <div className="form-group">
+                <label>Email address</label>
+                <input className="form-control" type="email" value={email} onChange={e=>setEmail(e.target.value)}/>
+              </div>
+            </div>
+            <div style={{borderTop:'1px solid var(--gray-200)',paddingTop:14}}>
+              <div style={{fontSize:13,fontWeight:600,color:'var(--gray-600)',marginBottom:12}}>Change password</div>
+              {pwErr && <div style={{color:'var(--red)',fontSize:12,marginBottom:8}}>{pwErr}</div>}
+              <div className="form-row">
+                <div className="form-group">
+                  <label>New password</label>
+                  <input className="form-control" type="password" placeholder="Min. 6 characters" value={pw} onChange={e=>{setPw(e.target.value);setPwErr('');}}/>
+                </div>
+                <div className="form-group">
+                  <label>Confirm password</label>
+                  <input className="form-control" type="password" placeholder="Repeat new password" value={pwConf} onChange={e=>{setPwConf(e.target.value);setPwErr('');}}/>
+                </div>
+              </div>
+            </div>
+            <div style={{display:'flex',justifyContent:'flex-end'}}>
+              <button className="btn btn-primary" onClick={saveIdentity} disabled={saving}>
+                {Ic.check} {saving ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Avatar ── */}
+      {section==='avatar' && (
+        <div className="mini-card">
+          <div className="mini-card-title" style={{marginBottom:18}}>Profile picture</div>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:20,padding:'20px 0'}}>
+            {avatarData
+              ? <img src={avatarData} style={{width:120,height:120,borderRadius:'50%',objectFit:'cover',border:'3px solid var(--gray-200)'}}/>
+              : <div style={{width:120,height:120,borderRadius:'50%',background:'var(--blue-light)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:40,fontWeight:600,color:'var(--blue)'}}>
+                  {initials(currentUser.name)}
+                </div>
+            }
+            <div style={{display:'flex',gap:10}}>
+              <button className="btn btn-primary" onClick={()=>fileRef.current.click()}>
+                {Ic.upload} Upload photo
+              </button>
+              {avatarData && (
+                <button className="btn btn-ghost" onClick={()=>saveAvatar('')}>
+                  Remove photo
+                </button>
+              )}
+            </div>
+            <div style={{fontSize:12,color:'var(--gray-400)',textAlign:'center'}}>
+              JPG, PNG or GIF. Max 2MB. Will be cropped to a square.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Preferences ── */}
+      {section==='preferences' && (
+        <div className="mini-card">
+          <div className="mini-card-title" style={{marginBottom:18}}>Preferences</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 0',borderBottom:'1px solid var(--gray-200)'}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:500}}>Language</div>
+              <div style={{fontSize:12,color:'var(--gray-400)',marginTop:2}}>Choose your preferred display language</div>
+            </div>
+            <LangToggle lang={lang} onChange={saveLang}/>
+          </div>
+        </div>
+      )}
+
+      {/* ── Activity ── */}
+      {section==='activity' && (
+        <div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
+            {statCards.map(c=>(
+              <div className="stat-card" key={c.label}>
+                <div className="stat-label">{c.label}</div>
+                <div className="stat-value" style={{color:c.color}}>{c.value}</div>
+              </div>
+            ))}
+          </div>
+          <div className="table-card">
+            <div className="table-header">
+              <span className="table-title">Recent issues</span>
+            </div>
+            {myIssues.length === 0
+              ? <div className="empty-state">{Ic.list}<p>No issues logged yet.</p></div>
+              : <table>
+                  <thead>
+                    <tr>
+                      <th>{currentUser.role==='apt' ? 'Apt.' : 'Location'}</th>
+                      <th>Type</th><th>Problem</th><th>Status</th><th>Time</th><th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {myIssues.map(i=>(
+                      <tr key={i.id}>
+                        <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.apt||i.dept}</strong></td>
+                        <td><TypeBadge type={i.type}/></td>
+                        <td style={{maxWidth:160,fontSize:13}}>{i.problem}</td>
+                        <td><span className={`badge ${i.status==='Ok'?'badge-ok':'badge-pending'}`}>{i.status}</span></td>
+                        <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.time}m</td>
+                        <td style={{fontSize:12,color:'var(--gray-400)'}}>{i.createdAt}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+            }
+          </div>
+        </div>
+      )}
+
+      {/* ── Team Management (manager only) ── */}
+      {section==='team' && currentUser.role==='manager' && (
+        <div className="table-card">
+          <div className="table-header">
+            <span className="table-title">Team members</span>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              {users.map(u=>(
+                <tr key={u.id}>
+                  <td>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      {u.avatar_data
+                        ? <img src={u.avatar_data} style={{width:28,height:28,borderRadius:'50%',objectFit:'cover'}}/>
+                        : <Avatar name={u.name} idx={u.avatar_idx} size="sm"/>
+                      }
+                      <span style={{fontWeight:500}}>{u.name}</span>
+                      {u.id===currentUser.id && <span className="badge" style={{background:'var(--blue-light)',color:'var(--blue)',fontSize:10,padding:'1px 6px'}}>you</span>}
+                    </div>
+                  </td>
+                  <td style={{fontSize:13,color:'var(--gray-600)'}}>{u.email}</td>
+                  <td>
+                    <span className={`badge ${u.role==='manager'?'badge-internet':'badge-type'}`}>{u.role}</span>
+                  </td>
+                  <td>
+                    <span className={`badge ${u.active?'badge-ok':'badge-pending'}`}>
+                      {u.active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td>
+                    {u.id !== currentUser.id ? (
+                      <div style={{display:'flex',gap:6}}>
+                        <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12}}
+                          onClick={()=>changeRole(u.id, u.role==='manager'?'technician':'manager')}>
+                          {u.role==='manager' ? 'Make technician' : 'Make manager'}
+                        </button>
+                        <button className={`btn ${u.active?'btn-ghost':'btn-primary'}`} style={{padding:'4px 10px',fontSize:12}}
+                          onClick={()=>toggleActive(u.id, !u.active)}>
+                          {u.active ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                      </div>
+                    ) : <span style={{fontSize:12,color:'var(--gray-300)'}}>—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ════════════════ ROOT APP ════════════════ */
+function App() {
+  const [lang,    setLang]    = useState(()=>loadLS('lira_lang','en'));
+  const [theme,   setTheme]   = useState(()=>loadLS('lira_theme','light'));
+  const [session, setSession] = useState(()=>loadLS('lira_session', null)); // {user, token}
+  const [apt,     setApt]     = useState([]);
+  const [dept,    setDept]    = useState([]);
+  const [users,   setUsers]   = useState([]);
+  const [stats,   setStats]   = useState(null);
+  const [page,    setPage]    = useState('dashboard');
+  const [modal,   setModal]   = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [toast,   setToast]   = useState(null);
+  const [apiErr,  setApiErr]  = useState('');
+
+  const t     = T[lang];
+  const token = session?.token;
+  const me    = session?.user;
+
+  useEffect(()=>{ saveLS('lira_lang', lang); }, [lang]);
+  useEffect(()=>{
+    saveLS('lira_theme', theme);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
+  useEffect(()=>{ saveLS('lira_session', session); }, [session]);
+
+  // Load all data when logged in
+  useEffect(() => {
+    if (!token) return;
+    const todayStr = new Date().toISOString().slice(0,10);
+    Promise.all([
+      apiFetch('/issues?mode=apt', {token}),
+      apiFetch('/issues?mode=dept', {token}),
+      apiFetch('/users', {token}),
+      apiFetch(`/stats?date=${todayStr}`, {token}),
+    ]).then(([aptRes, deptRes, usersRes, statsRes]) => {
+      setApt((aptRes.issues || []).map(mapIssue));
+      setDept((deptRes.issues || []).map(mapIssue));
+      setUsers(usersRes.users || []);
+      setStats(statsRes.stats);
+    }).catch(ex => {
+      if (ex.message.includes('401') || ex.message.toLowerCase().includes('token')) {
+        setSession(null); // token expired
+      } else {
+        setApiErr(ex.message);
+      }
+    });
+  }, [token]);
+
+  function login(user, token) {
+    setSession({user, token});
+    setPage('dashboard');
+  }
+
+  function logout() {
+    setSession(null);
+    setApt([]); setDept([]); setUsers([]); setStats(null);
+  }
+
+  // Called when profile updates come back from API
+  function onSessionUpdate(updatedUser) {
+    setSession(s => ({...s, user: updatedUser}));
+    saveLS('lira_session', {...session, user: updatedUser});
+  }
+
+  async function addIssue(form, mode) {
+    try {
+      const body = {
+        mode,
+        location: mode==='apt' ? form.apt : form.dept,
+        type:         form.type,
+        problem:      form.problem,
+        resolution:   form.resolution,
+        time_minutes: Number(form.time),
+        status:       form.status,
+      };
+      const res = await apiFetch('/issues', {method:'POST', body, token});
+      const issue = mapIssue(res.issue);
+      if (mode==='apt') setApt(p=>[issue,...p]);
+      else              setDept(p=>[issue,...p]);
+      // Refresh stats
+      const todayStr = new Date().toISOString().slice(0,10);
+      apiFetch(`/stats?date=${todayStr}`, {token}).then(r=>setStats(r.stats)).catch(()=>{});
+      setToast(t.toastLogged);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  async function saveEdit(form, mode, id) {
+    try {
+      const body = {
+        mode,
+        location:     mode==='apt' ? form.apt : form.dept,
+        type:         form.type,
+        problem:      form.problem,
+        resolution:   form.resolution,
+        time_minutes: Number(form.time),
+        status:       form.status,
+      };
+      const res = await apiFetch(`/issues/${id}`, {method:'PATCH', body, token});
+      const updated = mapIssue(res.issue);
+      const upd = list => list.map(i=>i.id===id ? updated : i);
+      if (mode==='apt') setApt(upd); else setDept(upd);
+      const todayStr = new Date().toISOString().slice(0,10);
+      apiFetch(`/stats?date=${todayStr}`, {token}).then(r=>setStats(r.stats)).catch(()=>{});
+      setToast(t.toastUpdated);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  async function delIssue(id, mode) {
+    try {
+      await apiFetch(`/issues/${id}`, {method:'DELETE', token});
+      if (mode==='apt') setApt(p=>p.filter(i=>i.id!==id));
+      else              setDept(p=>p.filter(i=>i.id!==id));
+      const todayStr = new Date().toISOString().slice(0,10);
+      apiFetch(`/stats?date=${todayStr}`, {token}).then(r=>setStats(r.stats)).catch(()=>{});
+      setToast(t.toastDeleted);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  if (!session) return (
+    <LangCtx.Provider value={lang}>
+      <AuthScreen onLogin={login} lang={lang} onLangChange={setLang} theme={theme} onThemeChange={setTheme}/>
+    </LangCtx.Provider>
+  );
+
+  const nav = [
+    {id:'dashboard', label:t.dashboard,  icon:Ic.grid },
+    {id:'apt',       label:t.aptIssues,  icon:Ic.list },
+    {id:'dept',      label:t.deptIssues, icon:Ic.edit },
+    {id:'history',   label:t.history,    icon:Ic.clock},
+    {id:'team',      label:t.team,       icon:Ic.users},
+    {id:'reports',   label:'Reports',    icon:Ic.report},
+    {id:'profile',   label:'Profile',    icon:Ic.person},
+  ];
+
+  return (
+    <LangCtx.Provider value={lang}>
+      <div className="app">
+        <aside className="sidebar">
+          <div className="sidebar-logo">
+            <div className="logo-mark">{Ic.logo}</div>
+            <div><div className="logo-text">LIRA</div><div className="logo-sub">{t.appSub}</div></div>
+          </div>
+          <div className="sidebar-section">
+            <div className="sidebar-section-label">{t.menu}</div>
+            {nav.map(n=>(
+              <button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>setPage(n.id)}>
+                {n.icon}<span>{n.label}</span>
+              </button>
+            ))}
+          </div>
+          <div className="sidebar-footer">
+            <div className="sidebar-user" style={{cursor:'pointer'}} onClick={()=>setPage('profile')}>
+              {me.avatar_data
+                ? <img src={me.avatar_data} style={{width:30,height:30,borderRadius:'50%',objectFit:'cover',flexShrink:0}}/>
+                : <Avatar name={me.name} idx={me.avatar_idx}/>
+              }
+              <div>
+                <div className="sidebar-user-name">{me.name}</div>
+                <div className="sidebar-user-role">{me.role==='manager' ? t.managerRole : t.techRole}</div>
+              </div>
+            </div>
+            <button className="logout-btn" onClick={logout}>{Ic.logout} {t.signOut}</button>
+          </div>
+        </aside>
+
+        <div className="main">
+          <div className="topbar">
+            <div className="topbar-left">
+              <h1>{nav.find(n=>n.id===page)?.label || page.charAt(0).toUpperCase() + page.slice(1)}</h1>
+              <p>{today(lang)}</p>
+            </div>
+            <div className="topbar-right">
+              <ThemeToggle theme={theme} onChange={setTheme}/>
+              <LangToggle lang={lang} onChange={setLang}/>
+              {page !== 'profile' && page !== 'reports' && <>
+                <button className="btn btn-ghost" onClick={()=>setModal('dept')}>{Ic.plus} {t.deptIssueBtn}</button>
+                <button className="btn btn-primary" onClick={()=>setModal('apt')}>{Ic.plus} {t.aptIssueBtn}</button>
+              </>}
+            </div>
+          </div>
+
+          {apiErr && (
+            <div style={{margin:'16px 28px 0',background:'var(--red-light)',color:'var(--red)',borderRadius:'var(--radius-md)',padding:'10px 16px',fontSize:13,display:'flex',alignItems:'center',gap:8}}>
+              {Ic.info} {apiErr} <button style={{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',color:'var(--red)'}} onClick={()=>setApiErr('')}>{Ic.x}</button>
+            </div>
+          )}
+
+          <div className="content">
+            {page==='dashboard' && <Dashboard apt={apt} dept={dept} users={users} stats={stats}/>}
+            {page==='apt'       && <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='dept'      && <IssuesTable issues={dept} tableMode="dept" currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='history'   && <div>
+              <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>
+              <IssuesTable issues={dept} tableMode="dept" currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>
+            </div>}
+            {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}/>}
+            {page==='reports' && <ReportsPage token={token}/>}
+            {page==='profile' && <ProfilePage
+              currentUser={me}
+              token={token}
+              users={users}
+              onSessionUpdate={onSessionUpdate}
+              onUsersUpdate={setUsers}
+              setToast={setToast}
+              lang={lang}
+              onLangChange={setLang}
+            />}
+          </div>
+        </div>
+
+        {modal && (
+          <IssueModal issueMode={modal} currentUser={me} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)}/>
+        )}
+        {editing && (
+          <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me}
+            onClose={()=>setEditing(null)} onSave={form=>saveEdit(form,editing.mode,editing.issue.id)}/>
+        )}
+        {toast && <Toast msg={toast} onDone={()=>setToast(null)}/>}
+      </div>
+    </LangCtx.Provider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_data  text    NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS language     text    NOT NULL DEFAULT 'en';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS active       boolean NOT NULL DEFAULT true;
