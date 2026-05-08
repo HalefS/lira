@@ -1,332 +1,196 @@
-# LIRA — Llana IT Reporting & Alerts
+[![GitHub Workflow Status (branch)](https://img.shields.io/github/actions/workflow/status/golang-migrate/migrate/ci.yaml?branch=master)](https://github.com/golang-migrate/migrate/actions/workflows/ci.yaml?query=branch%3Amaster)
+[![GoDoc](https://pkg.go.dev/badge/github.com/golang-migrate/migrate)](https://pkg.go.dev/github.com/golang-migrate/migrate/v4)
+[![Coverage Status](https://img.shields.io/coveralls/github/golang-migrate/migrate/master.svg)](https://coveralls.io/github/golang-migrate/migrate?branch=master)
+[![packagecloud.io](https://img.shields.io/badge/deb-packagecloud.io-844fec.svg)](https://packagecloud.io/golang-migrate/migrate?filter=debs)
+[![Docker Pulls](https://img.shields.io/docker/pulls/migrate/migrate.svg)](https://hub.docker.com/r/migrate/migrate/)
+![Supported Go Versions](https://img.shields.io/badge/Go-1.20%2C%201.21-lightgrey.svg)
+[![GitHub Release](https://img.shields.io/github/release/golang-migrate/migrate.svg)](https://github.com/golang-migrate/migrate/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/golang-migrate/migrate/v4)](https://goreportcard.com/report/github.com/golang-migrate/migrate/v4)
 
-Go + PostgreSQL REST API for LIRA, the IT issue tracker for Hotel Llana. Structured after Alex Edwards' *Let's Go Further* greenlight pattern.
+# migrate
 
----
+__Database migrations written in Go. Use as [CLI](#cli-usage) or import as [library](#use-in-your-go-project).__
 
-## Project Structure
+* Migrate reads migrations from [sources](#migration-sources)
+   and applies them in correct order to a [database](#databases).
+* Drivers are "dumb", migrate glues everything together and makes sure the logic is bulletproof.
+   (Keeps the drivers lightweight, too.)
+* Database drivers don't assume things or try to correct user input. When in doubt, fail.
 
-```
-lira-backend/
-├── cmd/
-│   └── api/
-│       ├── main.go          # Entry point, DB pool, server startup
-│       ├── routes.go        # All route definitions
-│       ├── frontend.go      # Serves embedded frontend at /
-│       ├── middleware.go    # Auth, CORS, rate limiting, panic recovery
-│       ├── context.go       # Request context helpers
-│       ├── helpers.go       # JSON read/write, param parsing
-│       ├── errors.go        # Standardised error responses
-│       ├── users.go         # POST /v1/users, GET /v1/users
-│       ├── tokens.go        # POST /v1/tokens/authentication
-│       ├── issues.go        # Full CRUD /v1/issues + /v1/stats
-├── internal/
-│   ├── data/
-│   │   ├── models.go        # Models struct + sentinel errors
-│   │   ├── users.go         # UserModel (insert, get, getByEmail, getForToken)
-│   │   ├── tokens.go        # TokenModel (generate, insert, delete)
-│   │   └── issues.go        # IssueModel (CRUD, filters, stats)
-│   └── validator/
-│       └── validator.go     # Input validation helpers
-├── ui/
-│   ├── ui.go                # //go:embed — bundles web/ into the binary
-│   └── web/
-│       └── index.html       # The LIRA frontend (served at /)
-├── migrations/
-│   ├── 000001_create_users_table.up.sql
-│   ├── 000002_create_tokens_table.up.sql
-│   ├── 000003_create_issues_table.up.sql
-│   └── seed.sql
-├── .envrc                   # DSN env var (git-ignored)
-├── .gitignore
-├── Makefile
-├── go.mod
-└── go.sum
-```
+Forked from [mattes/migrate](https://github.com/mattes/migrate)
 
----
+## Databases
 
-## Prerequisites
+Database drivers run migrations. [Add a new database?](database/driver.go)
 
-| Tool | Purpose | Install |
-|------|---------|---------|
-| Go 1.22+ | Build & run | https://go.dev/dl/ |
-| PostgreSQL 14+ | Database | https://www.postgresql.org/download/ |
-| `migrate` CLI | Run migrations | `brew install golang-migrate` or see below |
+* [PostgreSQL](database/postgres)
+* [PGX v4](database/pgx)
+* [PGX v5](database/pgx/v5)
+* [Redshift](database/redshift)
+* [Ql](database/ql)
+* [Cassandra / ScyllaDB](database/cassandra)
+* [SQLite](database/sqlite)
+* [SQLite3](database/sqlite3) ([todo #165](https://github.com/mattes/migrate/issues/165))
+* [SQLCipher](database/sqlcipher)
+* [MySQL / MariaDB](database/mysql)
+* [Neo4j](database/neo4j)
+* [MongoDB](database/mongodb)
+* [CrateDB](database/crate) ([todo #170](https://github.com/mattes/migrate/issues/170))
+* [Shell](database/shell) ([todo #171](https://github.com/mattes/migrate/issues/171))
+* [Google Cloud Spanner](database/spanner)
+* [CockroachDB](database/cockroachdb)
+* [YugabyteDB](database/yugabytedb)
+* [ClickHouse](database/clickhouse)
+* [Firebird](database/firebird)
+* [MS SQL Server](database/sqlserver)
+* [RQLite](database/rqlite)
 
-### Install migrate CLI
-```bash
-# macOS
-brew install golang-migrate
+### Database URLs
 
-# Linux
-curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xvz
-sudo mv migrate /usr/local/bin/
+Database connection strings are specified via URLs. The URL format is driver dependent but generally has the form: `dbdriver://username:password@host:port/dbname?param1=true&param2=false`
 
-# Windows (scoop)
-scoop install migrate
-```
+Any [reserved URL characters](https://en.wikipedia.org/wiki/Percent-encoding#Percent-encoding_reserved_characters) need to be escaped. Note, the `%` character also [needs to be escaped](https://en.wikipedia.org/wiki/Percent-encoding#Percent-encoding_the_percent_character)
 
----
+Explicitly, the following characters need to be escaped:
+`!`, `#`, `$`, `%`, `&`, `'`, `(`, `)`, `*`, `+`, `,`, `/`, `:`, `;`, `=`, `?`, `@`, `[`, `]`
 
-## Setup
-
-### 1. Create the PostgreSQL database
+It's easiest to always run the URL parts of your DB connection URL (e.g. username, password, etc) through an URL encoder. See the example Python snippets below:
 
 ```bash
-# Connect as superuser
-psql -U postgres
-
-# Inside psql:
-CREATE USER lira WITH PASSWORD 'your_secure_password';
-CREATE DATABASE lira OWNER lira;
-\c lira
-CREATE EXTENSION IF NOT EXISTS citext;
-\q
+$ python3 -c 'import urllib.parse; print(urllib.parse.quote(input("String to encode: "), ""))'
+String to encode: FAKEpassword!#$%&'()*+,/:;=?@[]
+FAKEpassword%21%23%24%25%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D
+$ python2 -c 'import urllib; print urllib.quote(raw_input("String to encode: "), "")'
+String to encode: FAKEpassword!#$%&'()*+,/:;=?@[]
+FAKEpassword%21%23%24%25%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D
+$
 ```
 
-### 2. Configure the DSN
+## Migration Sources
 
-Edit `.envrc`:
-```bash
-LIRADB_DSN=postgres://lira:your_secure_password@localhost/lira?sslmode=disable
-```
+Source drivers read migrations from local or remote sources. [Add a new source?](source/driver.go)
 
-If you use `direnv`:
-```bash
-direnv allow
-```
+* [Filesystem](source/file) - read from filesystem
+* [io/fs](source/iofs) - read from a Go [io/fs](https://pkg.go.dev/io/fs#FS)
+* [Go-Bindata](source/go_bindata) - read from embedded binary data ([jteeuwen/go-bindata](https://github.com/jteeuwen/go-bindata))
+* [pkger](source/pkger) - read from embedded binary data ([markbates/pkger](https://github.com/markbates/pkger))
+* [GitHub](source/github) - read from remote GitHub repositories
+* [GitHub Enterprise](source/github_ee) - read from remote GitHub Enterprise repositories
+* [Bitbucket](source/bitbucket) - read from remote Bitbucket repositories
+* [Gitlab](source/gitlab) - read from remote Gitlab repositories
+* [AWS S3](source/aws_s3) - read from Amazon Web Services S3
+* [Google Cloud Storage](source/google_cloud_storage) - read from Google Cloud Platform Storage
 
-Otherwise, export manually:
-```bash
-export LIRADB_DSN=postgres://lira:your_secure_password@localhost/lira?sslmode=disable
-```
+## CLI usage
 
-### 3. Run migrations
+* Simple wrapper around this library.
+* Handles ctrl+c (SIGINT) gracefully.
+* No config search paths, no config files, no magic ENV var injections.
 
-```bash
-make db/migrations/up
-```
+__[CLI Documentation](cmd/migrate)__
 
-### 4. Install Go dependencies
+### Basic usage
 
 ```bash
-go mod tidy
+$ migrate -source file://path/to/migrations -database postgres://localhost:5432/database up 2
 ```
 
-### 5. Start the API
+### Docker usage
 
 ```bash
-make run/api
+$ docker run -v {{ migration dir }}:/migrations --network host migrate/migrate
+    -path=/migrations/ -database postgres://localhost:5432/database up 2
 ```
 
-For development (no rate limiting, verbose):
-```bash
-make run/api/dev
-```
+## Use in your Go project
 
-Server starts on **http://localhost:4000**
+* API is stable and frozen for this release (v3 & v4).
+* Uses [Go modules](https://golang.org/cmd/go/#hdr-Modules__module_versions__and_more) to manage dependencies.
+* To help prevent database corruptions, it supports graceful stops via `GracefulStop chan bool`.
+* Bring your own logger.
+* Uses `io.Reader` streams internally for low memory overhead.
+* Thread-safe and no goroutine leaks.
 
----
+__[Go Documentation](https://pkg.go.dev/github.com/golang-migrate/migrate/v4)__
 
-## API Reference
+```go
+import (
+    "github.com/golang-migrate/migrate/v4"
+    _ "github.com/golang-migrate/migrate/v4/database/postgres"
+    _ "github.com/golang-migrate/migrate/v4/source/github"
+)
 
-All protected endpoints require:
-```
-Authorization: Bearer <token>
-```
-
-### Auth
-
-#### Register
-```
-POST /v1/users
-Content-Type: application/json
-
-{
-  "name": "Eder Silva",
-  "email": "eder@hotel.com",
-  "password": "secret123",
-  "role": "technician"        // "technician" | "manager"
-}
-```
-Returns `user` + `token` (auto-login on register).
-
-#### Login
-```
-POST /v1/tokens/authentication
-Content-Type: application/json
-
-{
-  "email": "eder@hotel.com",
-  "password": "secret123"
-}
-```
-Returns `user` + `token`.
-
----
-
-### Users
-
-#### List all users
-```
-GET /v1/users
-Authorization: Bearer <token>
-```
-
-#### Get single user
-```
-GET /v1/users/:id
-Authorization: Bearer <token>
-```
-
----
-
-### Issues
-
-#### List issues
-```
-GET /v1/issues
-Authorization: Bearer <token>
-
-Query params:
-  mode=apt|dept
-  status=Ok|Pending
-  type=Door|Internet|Hardware|...
-  search=<text>
-  date=2026-03-21          (YYYY-MM-DD, defaults to all)
-```
-
-#### Create issue
-```
-POST /v1/issues
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "mode": "apt",            // "apt" | "dept"
-  "location": "1369",       // apartment number or department name
-  "type": "Door",
-  "problem": "Door blocked",
-  "resolution": "Battery replaced, reprogrammed",
-  "time_minutes": 8,
-  "status": "Ok"            // "Ok" | "Pending"
+func main() {
+    m, err := migrate.New(
+        "github://mattes:personal-access-token@mattes/migrate_test",
+        "postgres://localhost:5432/database?sslmode=enable")
+    m.Steps(2)
 }
 ```
 
-#### Get issue
-```
-GET /v1/issues/:id
-Authorization: Bearer <token>
-```
+Want to use an existing database client?
 
-#### Update issue (partial)
-```
-PATCH /v1/issues/:id
-Authorization: Bearer <token>
-Content-Type: application/json
+```go
+import (
+    "database/sql"
+    _ "github.com/lib/pq"
+    "github.com/golang-migrate/migrate/v4"
+    "github.com/golang-migrate/migrate/v4/database/postgres"
+    _ "github.com/golang-migrate/migrate/v4/source/file"
+)
 
-{
-  "status": "Ok",
-  "resolution": "Fixed by resetting the router"
-}
-```
-Only the issue owner or a manager can update.
-
-#### Delete issue
-```
-DELETE /v1/issues/:id
-Authorization: Bearer <token>
-```
-Only the issue owner or a manager can delete.
-
----
-
-### Dashboard Stats
-
-```
-GET /v1/stats?date=2026-03-21
-Authorization: Bearer <token>
-```
-
-Response:
-```json
-{
-  "stats": {
-    "total_issues": 10,
-    "resolved": 9,
-    "pending": 1,
-    "avg_minutes": 5.8,
-    "by_type": {
-      "Door": 6,
-      "Internet": 3,
-      "Hardware": 1
-    },
-    "by_technician": [
-      { "user_id": 2, "name": "Alcidio", "avatar_idx": 2, "count": 7 },
-      { "user_id": 1, "name": "Eder",    "avatar_idx": 1, "count": 4 }
-    ]
-  }
+func main() {
+    db, err := sql.Open("postgres", "postgres://localhost:5432/database?sslmode=enable")
+    driver, err := postgres.WithInstance(db, &postgres.Config{})
+    m, err := migrate.NewWithDatabaseInstance(
+        "file:///migrations",
+        "postgres", driver)
+    m.Up() // or m.Step(2) if you want to explicitly set the number of migrations to run
 }
 ```
 
----
+## Getting started
 
-## Frontend
+Go to [getting started](GETTING_STARTED.md)
 
-The LIRA frontend is **embedded directly into the binary** via `//go:embed`. Once the server is running, open:
+## Tutorials
 
-```
-http://localhost:4000
-```
+* [CockroachDB](database/cockroachdb/TUTORIAL.md)
+* [PostgreSQL](database/postgres/TUTORIAL.md)
 
-API calls use relative paths (`/v1/...`) so the app works on any host or port without any configuration. To update the UI, edit `ui/web/index.html` and rebuild.
+(more tutorials to come)
 
----
+## Migration files
 
-## Build for Production
-
-```bash
-make build/api
-# Binary at: ./bin/lira (current OS) and ./bin/linux_amd64/lira (Linux)
-# The binary contains the entire app — frontend + API. Just copy it and run it.
-```
-
-Run in production:
-```bash
-./bin/api \
-  -port=4000 \
-  -env=production \
-  -db-dsn=$LIRADB_DSN \
-  -db-max-open-conns=25 \
-  -db-max-idle-conns=25 \
-  -limiter-rps=100 \
-  -limiter-burst=200 \
-  -cors-trusted-origins="https://yourdomain.com"
-```
-
----
-
-## Security Notes
-
-- Passwords are hashed with **bcrypt** (cost 12)
-- Auth tokens are **SHA-256 hashed** before storage — only the plaintext is returned once
-- Tokens expire after **7 days**
-- Rate limiting: 100 req/s per IP, burst 200 (configurable)
-- Edit/delete permissions: owner or manager only
-- All DB queries use **parameterised statements** (no SQL injection)
-- Optimistic locking via `version` column prevents lost updates
-
----
-
-## Useful Make Targets
+Each migration has an up and down migration. [Why?](FAQ.md#why-two-separate-files-up-and-down-for-a-migration)
 
 ```bash
-make run/api          # Start the server
-make run/api/dev      # Start without rate limiting
-make db/psql          # Connect to DB with psql
-make db/migrations/up # Apply all migrations
-make db/migrations/new name=add_something  # Create new migration
-make audit            # Format, vet, test
-make build/api        # Compile binary
+1481574547_create_users_table.up.sql
+1481574547_create_users_table.down.sql
 ```
+
+[Best practices: How to write migrations.](MIGRATIONS.md)
+
+## Coming from another db migration tool?
+
+Check out [migradaptor](https://github.com/musinit/migradaptor/).
+*Note: migradaptor is not affliated or supported by this project*
+
+## Versions
+
+Version | Supported? | Import | Notes
+--------|------------|--------|------
+**master** | :white_check_mark: | `import "github.com/golang-migrate/migrate/v4"` | New features and bug fixes arrive here first |
+**v4** | :white_check_mark: | `import "github.com/golang-migrate/migrate/v4"` | Used for stable releases |
+**v3** | :x: | `import "github.com/golang-migrate/migrate"` (with package manager) or `import "gopkg.in/golang-migrate/migrate.v3"` (not recommended) | **DO NOT USE** - No longer supported |
+
+## Development and Contributing
+
+Yes, please! [`Makefile`](Makefile) is your friend,
+read the [development guide](CONTRIBUTING.md).
+
+Also have a look at the [FAQ](FAQ.md).
+
+---
+
+Looking for alternatives? [https://awesome-go.com/#database](https://awesome-go.com/#database).
