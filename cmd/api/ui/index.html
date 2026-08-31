@@ -136,16 +136,6 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
   background: var(--red-light); color: var(--red);
   border: 1px solid var(--red-mid); border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px;
 }
-.role-select { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.role-option {
-  border: 1.5px solid var(--gray-200); border-radius: var(--radius-md);
-  padding: 10px 12px; cursor: pointer; transition: all 0.12s; background: #fff;
-}
-.role-option:hover { border-color: var(--blue-mid); }
-.role-option.selected { border-color: var(--blue); background: var(--blue-light); }
-.role-option-title { font-size: 13px; font-weight: 600; }
-.role-option-sub { font-size: 11px; color: var(--gray-400); margin-top: 1px; }
-.role-option.selected .role-option-title { color: var(--blue); }
 .demo-box {
   margin-top: 16px; padding: 12px 14px;
   background: var(--gray-50); border-radius: var(--radius-md); border: 1px solid var(--gray-200);
@@ -433,8 +423,6 @@ html.dark .search-wrap input { color: var(--gray-900) !important; }
 html.dark .modal-overlay { background: rgba(0,0,0,0.65) !important; }
 html.dark .bar-track { background: var(--gray-200) !important; }
 html.dark .badge-type { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
-html.dark .role-option { background: var(--gray-100) !important; border-color: var(--gray-200) !important; }
-html.dark .role-option.selected { background: var(--blue-light) !important; border-color: var(--blue-mid) !important; }
 html.dark .demo-box { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
 html.dark .auth-screen { background: var(--gray-50) !important; }
 html.dark .auth-right  { background: var(--gray-50) !important; }
@@ -518,6 +506,11 @@ const T = {
     aptIssues: 'Apt. Issues',
     deptIssues: 'Dept. Issues',
     history: 'History',
+    historyPickDate: 'Select a date',
+    historyShowingAll: 'Showing all dates',
+    historyToday: 'Today',
+    historyAllDates: 'All dates',
+    historyNoIssues: 'No issues logged on this date.',
     team: 'Team',
     signOut: 'Sign out',
     deptIssueBtn: 'Dept. issue',
@@ -579,11 +572,8 @@ const T = {
     emailPlaceholder: 'you@llana.com',
     password: 'Password',
     passwordPlaceholder: 'Min. 6 characters',
-    role: 'Role',
     techRole: 'Technician',
-    techRoleSub: 'Log & manage own issues',
     managerRole: 'Manager',
-    managerRoleSub: 'Full access & team view',
     signInBtn: 'Sign in',
     createBtn: 'Create account',
     noAccount: "Don't have an account?",
@@ -620,6 +610,11 @@ const T = {
     aptIssues: 'Avarias Apt.',
     deptIssues: 'Avarias Dept.',
     history: 'Histórico',
+    historyPickDate: 'Selecionar uma data',
+    historyShowingAll: 'A mostrar todas as datas',
+    historyToday: 'Hoje',
+    historyAllDates: 'Todas as datas',
+    historyNoIssues: 'Nenhuma avaria registada nesta data.',
     team: 'Equipa',
     signOut: 'Sair',
     deptIssueBtn: 'Avaria Dept.',
@@ -681,11 +676,8 @@ const T = {
     emailPlaceholder: 'voce@llana.com',
     password: 'Palavra-passe',
     passwordPlaceholder: 'Mín. 6 caracteres',
-    role: 'Função',
     techRole: 'Técnico',
-    techRoleSub: 'Registar e gerir as suas avarias',
     managerRole: 'Gestor',
-    managerRoleSub: 'Acesso completo e visão da equipa',
     signInBtn: 'Iniciar sessão',
     createBtn: 'Criar conta',
     demoAccounts: 'Contas de demonstração',
@@ -813,7 +805,6 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
   const [email, setEmail]     = useState('');
   const [pw, setPw]           = useState('');
   const [name, setName]       = useState('');
-  const [role, setRole]       = useState('technician');
   const [showPw, setShowPw]   = useState(false);
   const [err, setErr]         = useState('');
   const [loading, setLoading] = useState(false);
@@ -834,7 +825,7 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
     e.preventDefault(); setErr(''); setLoading(true);
     try {
       const data = await apiFetch('/users', {
-        method:'POST', body:{ name, email, password:pw, role }
+        method:'POST', body:{ name, email, password:pw }
       });
       onLogin(data.user, data.token);
     } catch(ex) {
@@ -897,20 +888,6 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
                 </button>
               </div>
             </div>
-
-            {mode==='register' && (
-              <div className="form-group">
-                <label>{t.role}</label>
-                <div className="role-select">
-                  {[{v:'technician',label:t.techRole,sub:t.techRoleSub},{v:'manager',label:t.managerRole,sub:t.managerRoleSub}].map(r=>(
-                    <div key={r.v} className={`role-option ${role===r.v?'selected':''}`} onClick={()=>setRole(r.v)}>
-                      <div className="role-option-title">{r.label}</div>
-                      <div className="role-option-sub">{r.sub}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             <button type="submit" className="btn btn-primary btn-full" style={{marginTop:4}} disabled={loading}>
               {loading ? '…' : (mode==='login' ? t.signInBtn : t.createBtn)}
@@ -1170,6 +1147,43 @@ function IssuesTable({ issues, tableMode, currentUser, onDelete, onEdit }) {
             ))}
           </tbody>
         </table>
+      )}
+    </div>
+  );
+}
+
+/* ════════════════ HISTORY PAGE ════════════════ */
+function HistoryPage({ apt, dept, currentUser, onDelete, onEdit }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const todayStr = new Date().toISOString().slice(0,10);
+  const [date, setDate] = useState(todayStr);
+
+  const aptFiltered  = useMemo(()=> date ? apt.filter(i=>i.createdAt===date)  : apt,  [apt,date]);
+  const deptFiltered = useMemo(()=> date ? dept.filter(i=>i.createdAt===date) : dept, [dept,date]);
+  const hasAny = aptFiltered.length>0 || deptFiltered.length>0;
+
+  return (
+    <div>
+      <div className="table-card" style={{marginBottom:16,padding:'14px 20px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+        <label style={{fontSize:13,fontWeight:600,color:'var(--gray-600)'}}>{t.historyPickDate}</label>
+        <input
+          type="date" className="form-control" style={{width:'auto'}}
+          value={date} max={todayStr}
+          onChange={e=>setDate(e.target.value)}
+        />
+        <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate(todayStr)}>{t.historyToday}</button>
+        <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate('')}>{t.historyAllDates}</button>
+        {!date && <span style={{fontSize:12,color:'var(--gray-400)',marginLeft:'auto'}}>{t.historyShowingAll}</span>}
+      </div>
+
+      {date && !hasAny ? (
+        <div className="empty-state">{Ic.clock}<p>{t.historyNoIssues}</p></div>
+      ) : (
+        <>
+          <IssuesTable issues={aptFiltered}  tableMode="apt"  currentUser={currentUser} onDelete={onDelete} onEdit={onEdit}/>
+          <IssuesTable issues={deptFiltered} tableMode="dept" currentUser={currentUser} onDelete={onDelete} onEdit={onEdit}/>
+        </>
       )}
     </div>
   );
@@ -2204,10 +2218,7 @@ function App() {
             {page==='dashboard' && <Dashboard apt={apt} dept={dept} users={users} stats={stats}/>}
             {page==='apt'       && <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='dept'      && <IssuesTable issues={dept} tableMode="dept" currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
-            {page==='history'   && <div>
-              <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>
-              <IssuesTable issues={dept} tableMode="dept" currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>
-            </div>}
+            {page==='history'   && <HistoryPage apt={apt} dept={dept} currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}/>}
             {page==='reports' && <ReportsPage token={token}/>}
             {page==='admin' && me.role==='manager' && <AdminPage
