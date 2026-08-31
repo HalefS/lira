@@ -61,7 +61,18 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		issue.Status = "Pending"
 	}
 
+	canonicalType, err := app.resolveIssueType(issue.Type, "")
+	if err != nil && !errors.Is(err, data.ErrRecordNotFound) {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 	v := validator.New()
+	if errors.Is(err, data.ErrRecordNotFound) {
+		v.AddError("type", "must be a valid issue type")
+	} else {
+		issue.Type = canonicalType
+	}
 	if data.ValidateIssue(v, issue); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
@@ -121,6 +132,8 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	originalType := issue.Type
+
 	// Permission: only the owner or a manager can edit
 	currentUser := app.contextGetUser(r)
 	if currentUser.Role != "manager" && issue.LoggedBy != currentUser.ID {
@@ -165,7 +178,18 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		issue.Status = *input.Status
 	}
 
+	canonicalType, err := app.resolveIssueType(issue.Type, originalType)
+	if err != nil && !errors.Is(err, data.ErrRecordNotFound) {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 	v := validator.New()
+	if errors.Is(err, data.ErrRecordNotFound) {
+		v.AddError("type", "must be a valid issue type")
+	} else {
+		issue.Type = canonicalType
+	}
 	if data.ValidateIssue(v, issue); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
