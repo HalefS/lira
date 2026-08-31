@@ -14,7 +14,6 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		Name     string `json:"name"`
 		Email    string `json:"email"`
 		Password string `json:"password"`
-		Role     string `json:"role"`
 		Language string `json:"language"`
 	}
 	if err := app.readJSON(w, r, &input); err != nil {
@@ -25,11 +24,11 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 	user := &data.User{
 		Name:     input.Name,
 		Email:    input.Email,
-		Role:     input.Role,
+		// Self-registration always creates a technician account.
+		// Promotion to manager can only be done by an existing manager
+		// via PATCH /v1/users/:id/role.
+		Role:     "technician",
 		Language: input.Language,
-	}
-	if user.Role == "" {
-		user.Role = "technician"
 	}
 	if user.Language == "" {
 		user.Language = "en"

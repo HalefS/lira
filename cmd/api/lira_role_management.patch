@@ -1,0 +1,218 @@
+diff --git a/cmd/api/main.go b/cmd/api/main.go
+index d94e7a4..3332a8b 100644
+--- a/cmd/api/main.go
++++ b/cmd/api/main.go
+@@ -79,6 +79,10 @@ func main() {
+ 		models: data.NewModels(db),
+ 	}
+ 
++	if err := app.seedDefaultManager(); err != nil {
++		logger.Error("failed to seed default manager account", "error", err)
++	}
++
+ 	srv := &http.Server{
+ 		Addr:         fmt.Sprintf(":%d", cfg.port),
+ 		Handler:      app.routes(),
+diff --git a/cmd/api/seed.go b/cmd/api/seed.go
+new file mode 100644
+index 0000000..569b069
+--- /dev/null
++++ b/cmd/api/seed.go
+@@ -0,0 +1,59 @@
++package main
++
++import (
++	"errors"
++
++	"github.com/HalefS/lira/internal/data"
++)
++
++// defaultManagerEmail/defaultManagerPassword are the credentials for the
++// built-in manager account that LIRA seeds automatically on first run, so
++// there's always at least one manager able to log in and promote other
++// users. The login system is email-based, so "lira" becomes this address;
++// the account name and password stay literally "lira" as requested.
++const (
++	defaultManagerName     = "lira"
++	defaultManagerEmail    = "lira@lira.local"
++	defaultManagerPassword = "lira"
++)
++
++// seedDefaultManager ensures a default manager account exists so the
++// application is usable out of the box. It's a no-op if that account (or
++// any account with the same email) already exists. It never overwrites an
++// existing account, so changing the seeded password later is safe.
++func (app *application) seedDefaultManager() error {
++	_, err := app.models.Users.GetByEmail(defaultManagerEmail)
++	if err == nil {
++		// Already seeded.
++		return nil
++	}
++	if !errors.Is(err, data.ErrRecordNotFound) {
++		return err
++	}
++
++	user := &data.User{
++		Name:     defaultManagerName,
++		Email:    defaultManagerEmail,
++		Role:     "manager",
++		Language: "en",
++	}
++
++	// Set directly rather than going through the public registration
++	// validator: the default password is intentionally short ("lira"),
++	// which wouldn't pass the normal sign-up strength check.
++	if err := user.Password.Set(defaultManagerPassword); err != nil {
++		return err
++	}
++
++	if err := app.models.Users.Insert(user); err != nil {
++		if errors.Is(err, data.ErrDuplicateEmail) {
++			// Created concurrently by another instance/process — fine.
++			return nil
++		}
++		return err
++	}
++
++	app.logger.Info("seeded default manager account",
++		"email", defaultManagerEmail, "password", defaultManagerPassword)
++	return nil
++}
+diff --git a/cmd/api/tokens.go b/cmd/api/tokens.go
+index 3a2dec1..d5f63ec 100644
+--- a/cmd/api/tokens.go
++++ b/cmd/api/tokens.go
+@@ -22,7 +22,11 @@ func (app *application) createAuthTokenHandler(w http.ResponseWriter, r *http.Re
+ 
+ 	v := validator.New()
+ 	validator.ValidateEmail(v, input.Email)
+-	validator.ValidatePasswordPlaintext(v, input.Password)
++	// Only check that a password was supplied here — the length/strength
++	// rules in ValidatePasswordPlaintext apply at registration time, not
++	// login, since some accounts (e.g. the seeded default) may predate
++	// or bypass those rules.
++	v.Check(input.Password != "", "password", "must be provided")
+ 	if !v.Valid() {
+ 		app.failedValidationResponse(w, r, v.Errors)
+ 		return
+diff --git a/cmd/api/ui/index.html b/cmd/api/ui/index.html
+index a023f61..337c461 100644
+--- a/cmd/api/ui/index.html
++++ b/cmd/api/ui/index.html
+@@ -136,16 +136,6 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
+   background: var(--red-light); color: var(--red);
+   border: 1px solid var(--red-mid); border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px;
+ }
+-.role-select { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+-.role-option {
+-  border: 1.5px solid var(--gray-200); border-radius: var(--radius-md);
+-  padding: 10px 12px; cursor: pointer; transition: all 0.12s; background: #fff;
+-}
+-.role-option:hover { border-color: var(--blue-mid); }
+-.role-option.selected { border-color: var(--blue); background: var(--blue-light); }
+-.role-option-title { font-size: 13px; font-weight: 600; }
+-.role-option-sub { font-size: 11px; color: var(--gray-400); margin-top: 1px; }
+-.role-option.selected .role-option-title { color: var(--blue); }
+ .demo-box {
+   margin-top: 16px; padding: 12px 14px;
+   background: var(--gray-50); border-radius: var(--radius-md); border: 1px solid var(--gray-200);
+@@ -433,8 +423,6 @@ html.dark .search-wrap input { color: var(--gray-900) !important; }
+ html.dark .modal-overlay { background: rgba(0,0,0,0.65) !important; }
+ html.dark .bar-track { background: var(--gray-200) !important; }
+ html.dark .badge-type { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
+-html.dark .role-option { background: var(--gray-100) !important; border-color: var(--gray-200) !important; }
+-html.dark .role-option.selected { background: var(--blue-light) !important; border-color: var(--blue-mid) !important; }
+ html.dark .demo-box { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
+ html.dark .auth-screen { background: var(--gray-50) !important; }
+ html.dark .auth-right  { background: var(--gray-50) !important; }
+@@ -579,11 +567,8 @@ const T = {
+     emailPlaceholder: 'you@llana.com',
+     password: 'Password',
+     passwordPlaceholder: 'Min. 6 characters',
+-    role: 'Role',
+     techRole: 'Technician',
+-    techRoleSub: 'Log & manage own issues',
+     managerRole: 'Manager',
+-    managerRoleSub: 'Full access & team view',
+     signInBtn: 'Sign in',
+     createBtn: 'Create account',
+     noAccount: "Don't have an account?",
+@@ -681,11 +666,8 @@ const T = {
+     emailPlaceholder: 'voce@llana.com',
+     password: 'Palavra-passe',
+     passwordPlaceholder: 'Mín. 6 caracteres',
+-    role: 'Função',
+     techRole: 'Técnico',
+-    techRoleSub: 'Registar e gerir as suas avarias',
+     managerRole: 'Gestor',
+-    managerRoleSub: 'Acesso completo e visão da equipa',
+     signInBtn: 'Iniciar sessão',
+     createBtn: 'Criar conta',
+     demoAccounts: 'Contas de demonstração',
+@@ -813,7 +795,6 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
+   const [email, setEmail]     = useState('');
+   const [pw, setPw]           = useState('');
+   const [name, setName]       = useState('');
+-  const [role, setRole]       = useState('technician');
+   const [showPw, setShowPw]   = useState(false);
+   const [err, setErr]         = useState('');
+   const [loading, setLoading] = useState(false);
+@@ -834,7 +815,7 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
+     e.preventDefault(); setErr(''); setLoading(true);
+     try {
+       const data = await apiFetch('/users', {
+-        method:'POST', body:{ name, email, password:pw, role }
++        method:'POST', body:{ name, email, password:pw }
+       });
+       onLogin(data.user, data.token);
+     } catch(ex) {
+@@ -898,20 +879,6 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
+               </div>
+             </div>
+ 
+-            {mode==='register' && (
+-              <div className="form-group">
+-                <label>{t.role}</label>
+-                <div className="role-select">
+-                  {[{v:'technician',label:t.techRole,sub:t.techRoleSub},{v:'manager',label:t.managerRole,sub:t.managerRoleSub}].map(r=>(
+-                    <div key={r.v} className={`role-option ${role===r.v?'selected':''}`} onClick={()=>setRole(r.v)}>
+-                      <div className="role-option-title">{r.label}</div>
+-                      <div className="role-option-sub">{r.sub}</div>
+-                    </div>
+-                  ))}
+-                </div>
+-              </div>
+-            )}
+-
+             <button type="submit" className="btn btn-primary btn-full" style={{marginTop:4}} disabled={loading}>
+               {loading ? '…' : (mode==='login' ? t.signInBtn : t.createBtn)}
+             </button>
+diff --git a/cmd/api/users.go b/cmd/api/users.go
+index e651160..a392f71 100644
+--- a/cmd/api/users.go
++++ b/cmd/api/users.go
+@@ -14,7 +14,6 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
+ 		Name     string `json:"name"`
+ 		Email    string `json:"email"`
+ 		Password string `json:"password"`
+-		Role     string `json:"role"`
+ 		Language string `json:"language"`
+ 	}
+ 	if err := app.readJSON(w, r, &input); err != nil {
+@@ -25,12 +24,12 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
+ 	user := &data.User{
+ 		Name:     input.Name,
+ 		Email:    input.Email,
+-		Role:     input.Role,
++		// Self-registration always creates a technician account.
++		// Promotion to manager can only be done by an existing manager
++		// via PATCH /v1/users/:id/role.
++		Role:     "technician",
+ 		Language: input.Language,
+ 	}
+-	if user.Role == "" {
+-		user.Role = "technician"
+-	}
+ 	if user.Language == "" {
+ 		user.Language = "en"
+ 	}

@@ -22,7 +22,11 @@ func (app *application) createAuthTokenHandler(w http.ResponseWriter, r *http.Re
 
 	v := validator.New()
 	validator.ValidateEmail(v, input.Email)
-	validator.ValidatePasswordPlaintext(v, input.Password)
+	// Only check that a password was supplied here — the length/strength
+	// rules in ValidatePasswordPlaintext apply at registration time, not
+	// login, since some accounts (e.g. the seeded default) may predate
+	// or bypass those rules.
+	v.Check(input.Password != "", "password", "must be provided")
 	if !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return

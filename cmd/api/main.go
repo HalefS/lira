@@ -79,6 +79,10 @@ func main() {
 		models: data.NewModels(db),
 	}
 
+	if err := app.seedDefaultManager(); err != nil {
+		logger.Error("failed to seed default manager account", "error", err)
+	}
+
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.port),
 		Handler:      app.routes(),
