@@ -554,7 +554,10 @@ const T = {
     descPlaceholder: 'Describe the issue…',
     resolutionLabel: 'Resolution',
     resolutionPlaceholder: 'What was done to fix it?',
-    timeMins: 'Time (minutes)',
+    startTime: 'Start time',
+    endTime: 'End time',
+    duration: 'Duration',
+    invalidTimeRange: 'End time must be after start time',
     statusLabel: 'Status',
     statusOk: 'Ok — Resolved',
     statusPending: 'Pending',
@@ -658,7 +661,10 @@ const T = {
     descPlaceholder: 'Descreva a avaria…',
     resolutionLabel: 'Resolução',
     resolutionPlaceholder: 'O que foi feito para resolver?',
-    timeMins: 'Tempo (minutos)',
+    startTime: 'Hora de início',
+    endTime: 'Hora de fim',
+    duration: 'Duração',
+    invalidTimeRange: 'A hora de fim deve ser depois da hora de início',
     statusLabel: 'Estado',
     statusOk: 'Ok — Resolvida',
     statusPending: 'Pendente',
@@ -906,6 +912,19 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
 }
 
 /* ════════════════ ISSUE MODAL ════════════════ */
+/* Computes whole minutes between two "HH:MM" times, treating an end time
+   earlier than the start time as crossing midnight. Returns null when the
+   inputs are missing or the duration works out to zero. */
+function computeDurationMinutes(startTime, endTime) {
+  if (!startTime || !endTime) return null;
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = endTime.split(':').map(Number);
+  if ([sh,sm,eh,em].some(n => Number.isNaN(n))) return null;
+  let diff = (eh*60+em) - (sh*60+sm);
+  if (diff < 0) diff += 24*60; // crossed midnight
+  return diff > 0 ? diff : null;
+}
+
 function IssueModal({ issueMode, editIssue, currentUser, issueTypes, onClose, onSave }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
@@ -916,22 +935,33 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, onClose, on
   }
   const firstType = typeNames[0] || '';
   const defaults = issueMode==='apt'
-    ? {apt:'', type:firstType, problem:'', resolution:'', time:'', status:'Ok'}
-    : {dept:'',type:firstType, problem:'', resolution:'', time:'', status:'Ok'};
+    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok'}
+    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok'};
   const [form, setForm] = useState(isEdit ? {
     apt:        editIssue.apt||'',
     dept:       editIssue.dept||'',
     type:       editIssue.type,
     problem:    editIssue.problem,
     resolution: editIssue.resolution,
-    time:       String(editIssue.time),
+    // The stored issue only has a total duration, not real clock times, so
+    // reconstruct a plausible start/end pair (ending "now") that reproduces
+    // the existing duration. Editing either field recalculates it.
+    ...(() => {
+      const end = new Date();
+      const start = new Date(end.getTime() - editIssue.time*60000);
+      const toHM = d => String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+      return { startTime: toHM(start), endTime: toHM(end) };
+    })(),
     status:     editIssue.status,
   } : defaults);
 
   function set(k,v) { setForm(f=>({...f,[k]:v})); }
-  const valid = issueMode==='apt'
-    ? form.apt && form.type && form.problem && form.resolution && form.time
-    : form.dept && form.type && form.problem && form.resolution && form.time;
+  const duration = useMemo(()=>computeDurationMinutes(form.startTime, form.endTime), [form.startTime, form.endTime]);
+  const timeRangeInvalid = form.startTime && form.endTime && duration === null;
+  const valid = (issueMode==='apt'
+    ? form.apt && form.type && form.problem && form.resolution
+    : form.dept && form.type && form.problem && form.resolution
+  ) && duration !== null;
 
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -974,17 +1004,26 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, onClose, on
           </div>
           <div className="form-row">
             <div className="form-group">
-              <label>{t.timeMins}</label>
-              <input className="form-control" type="number" min="1" placeholder="e.g. 5" value={form.time} onChange={e=>set('time',e.target.value)} />
+              <label>{t.startTime}</label>
+              <input className="form-control" type="time" value={form.startTime} onChange={e=>set('startTime',e.target.value)} />
             </div>
             <div className="form-group">
-              <label>{t.statusLabel}</label>
-              <select className="form-control" value={form.status} onChange={e=>set('status',e.target.value)}>
-                <option value="Ok">{t.statusOk}</option>
-                <option value="Pending">{t.statusPending}</option>
-              </select>
+              <label>{t.endTime}</label>
+              <input className="form-control" type="time" value={form.endTime} onChange={e=>set('endTime',e.target.value)} />
             </div>
           </div>
+          <div className="form-group">
+            <label>{t.statusLabel}</label>
+            <select className="form-control" value={form.status} onChange={e=>set('status',e.target.value)}>
+              <option value="Ok">{t.statusOk}</option>
+              <option value="Pending">{t.statusPending}</option>
+            </select>
+          </div>
+          {timeRangeInvalid ? (
+            <div style={{fontSize:12.5,color:'var(--red)',marginTop:-8}}>{t.invalidTimeRange}</div>
+          ) : duration !== null ? (
+            <div style={{fontSize:12.5,color:'var(--gray-400)',marginTop:-8}}>{t.duration}: <strong style={{color:'var(--gray-600)'}}>{duration}m</strong></div>
+          ) : null}
           {!isEdit && (
             <div style={{background:'var(--blue-light)',borderRadius:'var(--radius-md)',padding:'10px 14px',fontSize:13,color:'var(--blue)',display:'flex',alignItems:'center',gap:8}}>
               {Ic.info} {t.loggedUnder} <strong>{currentUser.name}</strong>
@@ -993,7 +1032,7 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, onClose, on
         </div>
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>{t.cancel}</button>
-          <button className="btn btn-primary" disabled={!valid} onClick={()=>{onSave({...form,time:Number(form.time)});onClose();}}>
+          <button className="btn btn-primary" disabled={!valid} onClick={()=>{onSave({...form,time:duration});onClose();}}>
             {Ic.check} {isEdit ? t.saveChanges : t.logIssue}
           </button>
         </div>
