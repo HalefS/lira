@@ -28,6 +28,47 @@ func (app *application) listIssuesHandler(w http.ResponseWriter, r *http.Request
 	app.writeJSON(w, http.StatusOK, envelope{"issues": issues}, nil)
 }
 
+// checkDuplicateIssuesHandler powers the recurring-issue alert shown while
+// logging an issue: it looks for other issues of the same type at the same
+// location within the manager-configured time window.
+func (app *application) checkDuplicateIssuesHandler(w http.ResponseWriter, r *http.Request) {
+	qs := r.URL.Query()
+	mode := app.readString(qs, "mode", "")
+	location := app.readString(qs, "location", "")
+	issueType := app.readString(qs, "type", "")
+	excludeID := int64(app.readInt(qs, "exclude_id", 0))
+
+	v := validator.New()
+	v.Check(mode == "apt" || mode == "dept", "mode", "must be 'apt' or 'dept'")
+	v.Check(location != "", "location", "must be provided")
+	v.Check(issueType != "", "type", "must be provided")
+	if !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	settings, err := app.models.Settings.Get()
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	duplicates, err := app.models.Issues.GetRecentDuplicates(mode, location, issueType, settings.DuplicateWindowHours, excludeID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	if duplicates == nil {
+		duplicates = []*data.DuplicateIssue{}
+	}
+
+	app.writeJSON(w, http.StatusOK, envelope{
+		"count":        len(duplicates),
+		"window_hours": settings.DuplicateWindowHours,
+		"issues":       duplicates,
+	}, nil)
+}
+
 func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Mode        string `json:"mode"`

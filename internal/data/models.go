@@ -17,6 +17,7 @@ type Models struct {
 	Tokens     TokenModel
 	Issues     IssueModel
 	IssueTypes IssueTypeModel
+	Settings   SettingsModel
 }
 
 func NewModels(db *sql.DB) Models {
@@ -25,5 +26,6 @@ func NewModels(db *sql.DB) Models {
 		Tokens:     TokenModel{DB: db},
 		Issues:     IssueModel{DB: db},
 		IssueTypes: IssueTypeModel{DB: db},
+		Settings:   SettingsModel{DB: db},
 	}
 }

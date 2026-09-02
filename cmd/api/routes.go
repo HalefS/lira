@@ -52,6 +52,15 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPatch, "/v1/issues/:id", app.requireAuth(app.updateIssueHandler))
 	router.HandlerFunc(http.MethodDelete, "/v1/issues/:id", app.requireAuth(app.deleteIssueHandler))
 
+	// Recurring-issue check (protected) — used while logging a new issue.
+	// Named issue-duplicates (not nested under /v1/issues/) to avoid
+	// colliding with the /v1/issues/:id wildcard route above.
+	router.HandlerFunc(http.MethodGet, "/v1/issue-duplicates", app.requireAuth(app.checkDuplicateIssuesHandler))
+
+	// Settings — readable by any authenticated user, editable by managers only
+	router.HandlerFunc(http.MethodGet, "/v1/settings", app.requireAuth(app.getSettingsHandler))
+	router.HandlerFunc(http.MethodPatch, "/v1/settings", app.requireAuth(app.requireManager(app.updateSettingsHandler)))
+
 	// Issue types — list for all authenticated users; mutate for managers only
 	router.HandlerFunc(http.MethodGet, "/v1/issue-types", app.requireAuth(app.listIssueTypesHandler))
 	router.HandlerFunc(http.MethodPost, "/v1/issue-types", app.requireAuth(app.requireManager(app.createIssueTypeHandler)))

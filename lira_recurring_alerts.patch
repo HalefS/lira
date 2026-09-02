@@ -1,0 +1,508 @@
+diff --git a/cmd/api/issues.go b/cmd/api/issues.go
+index 03a4376..dc37d26 100644
+--- a/cmd/api/issues.go
++++ b/cmd/api/issues.go
+@@ -28,6 +28,47 @@ func (app *application) listIssuesHandler(w http.ResponseWriter, r *http.Request
+ 	app.writeJSON(w, http.StatusOK, envelope{"issues": issues}, nil)
+ }
+ 
++// checkDuplicateIssuesHandler powers the recurring-issue alert shown while
++// logging an issue: it looks for other issues of the same type at the same
++// location within the manager-configured time window.
++func (app *application) checkDuplicateIssuesHandler(w http.ResponseWriter, r *http.Request) {
++	qs := r.URL.Query()
++	mode := app.readString(qs, "mode", "")
++	location := app.readString(qs, "location", "")
++	issueType := app.readString(qs, "type", "")
++	excludeID := int64(app.readInt(qs, "exclude_id", 0))
++
++	v := validator.New()
++	v.Check(mode == "apt" || mode == "dept", "mode", "must be 'apt' or 'dept'")
++	v.Check(location != "", "location", "must be provided")
++	v.Check(issueType != "", "type", "must be provided")
++	if !v.Valid() {
++		app.failedValidationResponse(w, r, v.Errors)
++		return
++	}
++
++	settings, err := app.models.Settings.Get()
++	if err != nil {
++		app.serverErrorResponse(w, r, err)
++		return
++	}
++
++	duplicates, err := app.models.Issues.GetRecentDuplicates(mode, location, issueType, settings.DuplicateWindowHours, excludeID)
++	if err != nil {
++		app.serverErrorResponse(w, r, err)
++		return
++	}
++	if duplicates == nil {
++		duplicates = []*data.DuplicateIssue{}
++	}
++
++	app.writeJSON(w, http.StatusOK, envelope{
++		"count":        len(duplicates),
++		"window_hours": settings.DuplicateWindowHours,
++		"issues":       duplicates,
++	}, nil)
++}
++
+ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Request) {
+ 	var input struct {
+ 		Mode        string `json:"mode"`
+diff --git a/cmd/api/routes.go b/cmd/api/routes.go
+index e8c8c1f..fbc1260 100644
+--- a/cmd/api/routes.go
++++ b/cmd/api/routes.go
+@@ -52,6 +52,15 @@ func (app *application) routes() http.Handler {
+ 	router.HandlerFunc(http.MethodPatch, "/v1/issues/:id", app.requireAuth(app.updateIssueHandler))
+ 	router.HandlerFunc(http.MethodDelete, "/v1/issues/:id", app.requireAuth(app.deleteIssueHandler))
+ 
++	// Recurring-issue check (protected) — used while logging a new issue.
++	// Named issue-duplicates (not nested under /v1/issues/) to avoid
++	// colliding with the /v1/issues/:id wildcard route above.
++	router.HandlerFunc(http.MethodGet, "/v1/issue-duplicates", app.requireAuth(app.checkDuplicateIssuesHandler))
++
++	// Settings — readable by any authenticated user, editable by managers only
++	router.HandlerFunc(http.MethodGet, "/v1/settings", app.requireAuth(app.getSettingsHandler))
++	router.HandlerFunc(http.MethodPatch, "/v1/settings", app.requireAuth(app.requireManager(app.updateSettingsHandler)))
++
+ 	// Issue types — list for all authenticated users; mutate for managers only
+ 	router.HandlerFunc(http.MethodGet, "/v1/issue-types", app.requireAuth(app.listIssueTypesHandler))
+ 	router.HandlerFunc(http.MethodPost, "/v1/issue-types", app.requireAuth(app.requireManager(app.createIssueTypeHandler)))
+diff --git a/cmd/api/settings.go b/cmd/api/settings.go
+new file mode 100644
+index 0000000..3ee8cea
+--- /dev/null
++++ b/cmd/api/settings.go
+@@ -0,0 +1,42 @@
++package main
++
++import (
++	"net/http"
++
++	"github.com/HalefS/lira/internal/data"
++	"github.com/HalefS/lira/internal/validator"
++)
++
++func (app *application) getSettingsHandler(w http.ResponseWriter, r *http.Request) {
++	settings, err := app.models.Settings.Get()
++	if err != nil {
++		app.serverErrorResponse(w, r, err)
++		return
++	}
++	app.writeJSON(w, http.StatusOK, envelope{"settings": settings}, nil)
++}
++
++func (app *application) updateSettingsHandler(w http.ResponseWriter, r *http.Request) {
++	var input struct {
++		DuplicateWindowHours int `json:"duplicate_window_hours"`
++	}
++	if err := app.readJSON(w, r, &input); err != nil {
++		app.badRequestResponse(w, r, err)
++		return
++	}
++
++	s := &data.Settings{DuplicateWindowHours: input.DuplicateWindowHours}
++	v := validator.New()
++	if data.ValidateSettings(v, s); !v.Valid() {
++		app.failedValidationResponse(w, r, v.Errors)
++		return
++	}
++
++	user := app.contextGetUser(r)
++	updated, err := app.models.Settings.Update(s.DuplicateWindowHours, user.ID)
++	if err != nil {
++		app.serverErrorResponse(w, r, err)
++		return
++	}
++	app.writeJSON(w, http.StatusOK, envelope{"settings": updated}, nil)
++}
+diff --git a/cmd/api/ui/index.html b/cmd/api/ui/index.html
+index 3034f73..8dcfaca 100644
+--- a/cmd/api/ui/index.html
++++ b/cmd/api/ui/index.html
+@@ -603,6 +603,11 @@ const T = {
+     issueTypePlaceholder: 'e.g. Plumbing',
+     toastTypeAdded: 'Issue type added',
+     toastTypeDeleted: 'Issue type removed',
++    adminAlerts: 'Recurring issue alerts',
++    adminAlertsSub: 'When a technician logs an issue, warn them if the same issue type has already happened at that location within this window.',
++    duplicateWindowLabel: 'Alert window (hours)',
++    settingsSaved: 'Settings saved',
++    duplicateAlertTitle: 'Possible recurring issue',
+     noIssueTypes: 'No issue types yet.',
+     removeType: 'Remove',
+   },
+@@ -711,6 +716,11 @@ const T = {
+     issueTypePlaceholder: 'ex. Canalização',
+     toastTypeAdded: 'Tipo de avaria adicionado',
+     toastTypeDeleted: 'Tipo de avaria removido',
++    adminAlerts: 'Alertas de avarias recorrentes',
++    adminAlertsSub: 'Quando um técnico regista uma avaria, avisá-lo se o mesmo tipo de avaria já ocorreu nesse local dentro desta janela de tempo.',
++    duplicateWindowLabel: 'Janela de alerta (horas)',
++    settingsSaved: 'Definições guardadas',
++    duplicateAlertTitle: 'Possível avaria recorrente',
+     noIssueTypes: 'Ainda não há tipos de avaria.',
+     removeType: 'Remover',
+   }
+@@ -912,6 +922,14 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
+ }
+ 
+ /* ════════════════ ISSUE MODAL ════════════════ */
++/* Builds the recurring-issue warning sentence in the active language. */
++function duplicateAlertMessage(lang, count, location, windowHours) {
++  if (lang === 'pt') {
++    return `Este tipo de avaria já ocorreu ${count} ${count===1?'vez':'vezes'} em ${location} nas últimas ${windowHours}h.`;
++  }
++  return `This issue type has happened ${count} ${count===1?'time':'times'} at ${location} in the last ${windowHours}h.`;
++}
++
+ /* Computes whole minutes between two "HH:MM" times, treating an end time
+    earlier than the start time as crossing midnight. Returns null when the
+    inputs are missing or the duration works out to zero. */
+@@ -925,7 +943,7 @@ function computeDurationMinutes(startTime, endTime) {
+   return diff > 0 ? diff : null;
+ }
+ 
+-function IssueModal({ issueMode, editIssue, currentUser, issueTypes, onClose, onSave }) {
++function IssueModal({ issueMode, editIssue, currentUser, issueTypes, token, onClose, onSave }) {
+   const lang = React.useContext(LangCtx);
+   const t = T[lang];
+   const isEdit = !!editIssue;
+@@ -963,6 +981,23 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, onClose, on
+     : form.dept && form.type && form.problem && form.resolution
+   ) && duration !== null;
+ 
++  // Recurring-issue check: once a location + type are picked, ask the
++  // backend (debounced) whether this same issue type has already happened
++  // there within the manager-configured window.
++  const location = issueMode==='apt' ? form.apt : form.dept;
++  const [dupeInfo, setDupeInfo] = useState(null); // {count, window_hours, issues}
++  useEffect(() => {
++    if (!location || !form.type || !token) { setDupeInfo(null); return; }
++    const handle = setTimeout(() => {
++      const params = new URLSearchParams({ mode: issueMode, location, type: form.type });
++      if (isEdit) params.set('exclude_id', String(editIssue.id));
++      apiFetch(`/issue-duplicates?${params.toString()}`, {token})
++        .then(res => setDupeInfo(res))
++        .catch(() => {}); // non-critical — fail silently, don't block logging
++    }, 400);
++    return () => clearTimeout(handle);
++  }, [location, form.type, issueMode, token, isEdit, editIssue?.id]);
++
+   return (
+     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+       <div className="modal">
+@@ -994,6 +1029,15 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, onClose, on
+               </select>
+             </div>
+           </div>
++          {dupeInfo && dupeInfo.count > 0 && (
++            <div style={{background:'var(--amber-light)',borderRadius:'var(--radius-md)',padding:'10px 14px',fontSize:13,color:'var(--amber)',display:'flex',alignItems:'flex-start',gap:8}}>
++              <span style={{flexShrink:0,marginTop:1}}>{Ic.clock}</span>
++              <div>
++                <strong>{t.duplicateAlertTitle}.</strong>{' '}
++                {duplicateAlertMessage(lang, dupeInfo.count, location, dupeInfo.window_hours)}
++              </div>
++            </div>
++          )}
+           <div className="form-group">
+             <label>{t.problemDesc}</label>
+             <input className="form-control" placeholder={t.descPlaceholder} value={form.problem} onChange={e=>set('problem',e.target.value)} />
+@@ -1982,13 +2026,30 @@ function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate
+ }
+ 
+ /* ════════════════ ADMIN PAGE (managers only) ════════════════ */
+-function AdminPage({ token, issueTypes, onTypesUpdate, setToast }) {
++function AdminPage({ token, issueTypes, onTypesUpdate, settings, onSettingsUpdate, setToast }) {
+   const lang = React.useContext(LangCtx);
+   const t = T[lang];
+   const [name, setName] = useState('');
+   const [saving, setSaving] = useState(false);
+   const [err, setErr] = useState('');
+ 
++  const [windowHours, setWindowHours] = useState(settings?.duplicate_window_hours ?? 24);
++  const [savingSettings, setSavingSettings] = useState(false);
++  useEffect(() => {
++    if (settings) setWindowHours(settings.duplicate_window_hours);
++  }, [settings]);
++
++  async function saveSettings(e) {
++    e.preventDefault();
++    setSavingSettings(true);
++    try {
++      const res = await apiFetch('/settings', {method:'PATCH', body:{duplicate_window_hours: Number(windowHours)}, token});
++      onSettingsUpdate(res.settings);
++      setToast(t.settingsSaved);
++    } catch(ex) { setToast('Error: ' + ex.message); }
++    finally { setSavingSettings(false); }
++  }
++
+   async function addType(e) {
+     e.preventDefault();
+     const trimmed = name.trim();
+@@ -2013,6 +2074,21 @@ function AdminPage({ token, issueTypes, onTypesUpdate, setToast }) {
+ 
+   return (
+     <div style={{maxWidth:720}}>
++      <div className="mini-card" style={{marginBottom:20}}>
++        <div className="mini-card-title" style={{marginBottom:6}}>{t.adminAlerts}</div>
++        <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminAlertsSub}</p>
++        <form onSubmit={saveSettings} style={{display:'flex',gap:10,alignItems:'flex-end'}}>
++          <div className="form-group" style={{flex:1,marginBottom:0,maxWidth:180}}>
++            <label>{t.duplicateWindowLabel}</label>
++            <input className="form-control" type="number" min="1" max="720" value={windowHours}
++              onChange={e=>setWindowHours(e.target.value)} />
++          </div>
++          <button type="submit" className="btn btn-primary" disabled={savingSettings || !windowHours} style={{marginBottom:1}}>
++            {Ic.check} {savingSettings ? '…' : t.saveChanges}
++          </button>
++        </form>
++      </div>
++
+       <div className="mini-card" style={{marginBottom:20}}>
+         <div className="mini-card-title" style={{marginBottom:6}}>{t.adminIssueTypes}</div>
+         <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminIssueTypesSub}</p>
+@@ -2066,6 +2142,7 @@ function App() {
+   const [dept,    setDept]    = useState([]);
+   const [users,   setUsers]   = useState([]);
+   const [issueTypes, setIssueTypes] = useState([]);
++  const [settings, setSettings] = useState(null);
+   const [stats,   setStats]   = useState(null);
+   const [page,    setPage]    = useState('dashboard');
+   const [modal,   setModal]   = useState(null);
+@@ -2098,12 +2175,14 @@ function App() {
+       apiFetch('/users', {token}),
+       apiFetch(`/stats?date=${todayStr}`, {token}),
+       apiFetch('/issue-types', {token}),
+-    ]).then(([aptRes, deptRes, usersRes, statsRes, typesRes]) => {
++      apiFetch('/settings', {token}),
++    ]).then(([aptRes, deptRes, usersRes, statsRes, typesRes, settingsRes]) => {
+       setApt((aptRes.issues || []).map(mapIssue));
+       setDept((deptRes.issues || []).map(mapIssue));
+       setUsers(usersRes.users || []);
+       setStats(statsRes.stats);
+       setIssueTypes(typesRes.issue_types || []);
++      setSettings(settingsRes.settings);
+     }).catch(ex => {
+       if (ex.message.includes('401') || ex.message.toLowerCase().includes('token')) {
+         setSession(null); // token expired
+@@ -2120,7 +2199,7 @@ function App() {
+ 
+   function logout() {
+     setSession(null);
+-    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]);
++    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setSettings(null);
+   }
+ 
+   // Called when profile updates come back from API
+@@ -2264,6 +2343,8 @@ function App() {
+               token={token}
+               issueTypes={issueTypes}
+               onTypesUpdate={setIssueTypes}
++              settings={settings}
++              onSettingsUpdate={setSettings}
+               setToast={setToast}
+             />}
+             {page==='profile' && <ProfilePage
+@@ -2280,10 +2361,10 @@ function App() {
+         </div>
+ 
+         {modal && (
+-          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)}/>
++          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)}/>
+         )}
+         {editing && (
+-          <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes}
++          <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} token={token}
+             onClose={()=>setEditing(null)} onSave={form=>saveEdit(form,editing.mode,editing.issue.id)}/>
+         )}
+         {toast && <Toast msg={toast} onDone={()=>setToast(null)}/>}
+diff --git a/internal/data/issues.go b/internal/data/issues.go
+index c62a52a..a04bde8 100644
+--- a/internal/data/issues.go
++++ b/internal/data/issues.go
+@@ -382,6 +382,51 @@ func (m IssueModel) GetByUser(userID int64, limit int) ([]*Issue, error) {
+ 	return issues, rows.Err()
+ }
+ 
++// ── Recurring-issue detection ───────────────────────────────────────────────
++
++type DuplicateIssue struct {
++	ID           int64     `json:"id"`
++	CreatedAt    time.Time `json:"created_at"`
++	Status       string    `json:"status"`
++	LoggedByName string    `json:"logged_by_name"`
++}
++
++// GetRecentDuplicates returns other issues of the same type, logged against
++// the same location (case-insensitively), within windowHours of now.
++// excludeID lets an issue being edited exclude itself from its own results
++// (pass 0 when logging a brand new issue).
++func (m IssueModel) GetRecentDuplicates(mode, location, issueType string, windowHours int, excludeID int64) ([]*DuplicateIssue, error) {
++	query := `
++		SELECT i.id, i.created_at, i.status, u.name
++		FROM issues i
++		INNER JOIN users u ON i.logged_by = u.id
++		WHERE i.mode = $1
++		  AND LOWER(i.location) = LOWER($2)
++		  AND i.type = $3
++		  AND i.created_at >= NOW() - ($4 * INTERVAL '1 hour')
++		  AND i.id != $5
++		ORDER BY i.created_at DESC`
++
++	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
++	defer cancel()
++
++	rows, err := m.DB.QueryContext(ctx, query, mode, location, issueType, windowHours, excludeID)
++	if err != nil {
++		return nil, err
++	}
++	defer rows.Close()
++
++	var out []*DuplicateIssue
++	for rows.Next() {
++		var d DuplicateIssue
++		if err := rows.Scan(&d.ID, &d.CreatedAt, &d.Status, &d.LoggedByName); err != nil {
++			return nil, err
++		}
++		out = append(out, &d)
++	}
++	return out, rows.Err()
++}
++
+ // ── Daily Report ──────────────────────────────────────────────────────────────
+ 
+ type DailyReport struct {
+diff --git a/internal/data/models.go b/internal/data/models.go
+index e45fed8..162145d 100644
+--- a/internal/data/models.go
++++ b/internal/data/models.go
+@@ -17,6 +17,7 @@ type Models struct {
+ 	Tokens     TokenModel
+ 	Issues     IssueModel
+ 	IssueTypes IssueTypeModel
++	Settings   SettingsModel
+ }
+ 
+ func NewModels(db *sql.DB) Models {
+@@ -25,5 +26,6 @@ func NewModels(db *sql.DB) Models {
+ 		Tokens:     TokenModel{DB: db},
+ 		Issues:     IssueModel{DB: db},
+ 		IssueTypes: IssueTypeModel{DB: db},
++		Settings:   SettingsModel{DB: db},
+ 	}
+ }
+diff --git a/internal/data/settings.go b/internal/data/settings.go
+new file mode 100644
+index 0000000..2965bfb
+--- /dev/null
++++ b/internal/data/settings.go
+@@ -0,0 +1,77 @@
++package data
++
++import (
++	"context"
++	"database/sql"
++	"time"
++
++	"github.com/HalefS/lira/internal/validator"
++)
++
++type Settings struct {
++	DuplicateWindowHours int       `json:"duplicate_window_hours"`
++	UpdatedAt            time.Time `json:"updated_at"`
++	UpdatedBy            *int64    `json:"updated_by,omitempty"`
++}
++
++func ValidateSettings(v *validator.Validator, s *Settings) {
++	v.Check(s.DuplicateWindowHours > 0, "duplicate_window_hours", "must be greater than zero")
++	v.Check(s.DuplicateWindowHours <= 24*30, "duplicate_window_hours", "must not be more than 720 hours (30 days)")
++}
++
++type SettingsModel struct {
++	DB *sql.DB
++}
++
++// Get returns the single application settings row. If the row is somehow
++// missing (e.g. the seed insert didn't run on an older deployment), it
++// falls back to sane defaults rather than erroring.
++func (m SettingsModel) Get() (*Settings, error) {
++	query := `
++		SELECT duplicate_window_hours, updated_at, updated_by
++		FROM app_settings
++		WHERE id = 1`
++
++	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
++	defer cancel()
++
++	var s Settings
++	var updatedBy sql.NullInt64
++	err := m.DB.QueryRowContext(ctx, query).Scan(&s.DuplicateWindowHours, &s.UpdatedAt, &updatedBy)
++	if err != nil {
++		if err == sql.ErrNoRows {
++			return &Settings{DuplicateWindowHours: 24}, nil
++		}
++		return nil, err
++	}
++	if updatedBy.Valid {
++		s.UpdatedBy = &updatedBy.Int64
++	}
++	return &s, nil
++}
++
++// Update upserts the singleton settings row.
++func (m SettingsModel) Update(hours int, updatedBy int64) (*Settings, error) {
++	query := `
++		INSERT INTO app_settings (id, duplicate_window_hours, updated_at, updated_by)
++		VALUES (1, $1, NOW(), $2)
++		ON CONFLICT (id) DO UPDATE
++		SET duplicate_window_hours = EXCLUDED.duplicate_window_hours,
++		    updated_at             = NOW(),
++		    updated_by             = EXCLUDED.updated_by
++		RETURNING duplicate_window_hours, updated_at, updated_by`
++
++	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
++	defer cancel()
++
++	var s Settings
++	var ub sql.NullInt64
++	err := m.DB.QueryRowContext(ctx, query, hours, updatedBy).Scan(&s.DuplicateWindowHours, &s.UpdatedAt, &ub)
++	if err != nil {
++		return nil, err
++	}
++	if ub.Valid {
++		s.UpdatedBy = &ub.Int64
++	}
++	return &s, nil
++}
+diff --git a/migrations/000006_create_app_settings_table.down.sql b/migrations/000006_create_app_settings_table.down.sql
+new file mode 100644
+index 0000000..7829077
+--- /dev/null
++++ b/migrations/000006_create_app_settings_table.down.sql
+@@ -0,0 +1,2 @@
++DROP INDEX IF EXISTS issues_mode_location_type_idx;
++DROP TABLE IF EXISTS app_settings;
+diff --git a/migrations/000006_create_app_settings_table.up.sql b/migrations/000006_create_app_settings_table.up.sql
+new file mode 100644
+index 0000000..02aa8b8
+--- /dev/null
++++ b/migrations/000006_create_app_settings_table.up.sql
+@@ -0,0 +1,15 @@
++-- Single-row table of application-wide settings a manager can tune.
++-- The `id = 1` check enforces there's ever only one row (a singleton).
++CREATE TABLE IF NOT EXISTS app_settings (
++    id                     smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
++    duplicate_window_hours integer NOT NULL DEFAULT 24 CHECK (duplicate_window_hours > 0),
++    updated_at             timestamp(0) with time zone NOT NULL DEFAULT NOW(),
++    updated_by             bigint REFERENCES users ON DELETE SET NULL
++);
++
++INSERT INTO app_settings (id, duplicate_window_hours) VALUES (1, 24)
++ON CONFLICT (id) DO NOTHING;
++
++-- Speeds up the recurring-issue lookup that runs every time a technician
++-- picks a location + issue type while logging a new issue.
++CREATE INDEX IF NOT EXISTS issues_mode_location_type_idx ON issues (mode, location, type);

@@ -382,6 +382,51 @@ func (m IssueModel) GetByUser(userID int64, limit int) ([]*Issue, error) {
 	return issues, rows.Err()
 }
 
+// ── Recurring-issue detection ───────────────────────────────────────────────
+
+type DuplicateIssue struct {
+	ID           int64     `json:"id"`
+	CreatedAt    time.Time `json:"created_at"`
+	Status       string    `json:"status"`
+	LoggedByName string    `json:"logged_by_name"`
+}
+
+// GetRecentDuplicates returns other issues of the same type, logged against
+// the same location (case-insensitively), within windowHours of now.
+// excludeID lets an issue being edited exclude itself from its own results
+// (pass 0 when logging a brand new issue).
+func (m IssueModel) GetRecentDuplicates(mode, location, issueType string, windowHours int, excludeID int64) ([]*DuplicateIssue, error) {
+	query := `
+		SELECT i.id, i.created_at, i.status, u.name
+		FROM issues i
+		INNER JOIN users u ON i.logged_by = u.id
+		WHERE i.mode = $1
+		  AND LOWER(i.location) = LOWER($2)
+		  AND i.type = $3
+		  AND i.created_at >= NOW() - ($4 * INTERVAL '1 hour')
+		  AND i.id != $5
+		ORDER BY i.created_at DESC`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	rows, err := m.DB.QueryContext(ctx, query, mode, location, issueType, windowHours, excludeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*DuplicateIssue
+	for rows.Next() {
+		var d DuplicateIssue
+		if err := rows.Scan(&d.ID, &d.CreatedAt, &d.Status, &d.LoggedByName); err != nil {
+			return nil, err
+		}
+		out = append(out, &d)
+	}
+	return out, rows.Err()
+}
+
 // ── Daily Report ──────────────────────────────────────────────────────────────
 
 type DailyReport struct {
