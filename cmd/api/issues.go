@@ -71,13 +71,15 @@ func (app *application) checkDuplicateIssuesHandler(w http.ResponseWriter, r *ht
 
 func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Mode        string `json:"mode"`
-		Location    string `json:"location"`
-		Type        string `json:"type"`
-		Problem     string `json:"problem"`
-		Resolution  string `json:"resolution"`
-		TimeMinutes int    `json:"time_minutes"`
-		Status      string `json:"status"`
+		Mode        string  `json:"mode"`
+		Location    string  `json:"location"`
+		Type        string  `json:"type"`
+		Problem     string  `json:"problem"`
+		Resolution  string  `json:"resolution"`
+		TimeMinutes int     `json:"time_minutes"`
+		Status      string  `json:"status"`
+		StartTime   *string `json:"start_time"`
+		EndTime     *string `json:"end_time"`
 	}
 
 	if err := app.readJSON(w, r, &input); err != nil {
@@ -94,6 +96,8 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		Problem:     input.Problem,
 		Resolution:  input.Resolution,
 		TimeMinutes: input.TimeMinutes,
+		StartTime:   input.StartTime,
+		EndTime:     input.EndTime,
 		Status:      input.Status,
 		LoggedBy:    user.ID,
 	}
@@ -114,6 +118,24 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 	} else {
 		issue.Type = canonicalType
 	}
+
+	// The stored duration is always derived from the start/end clock times
+	// when both are supplied, rather than trusted verbatim from the
+	// client — this guarantees time_minutes stays consistent with the
+	// times shown when the issue is later reopened for editing.
+	if issue.StartTime != nil && issue.EndTime != nil {
+		data.ValidateClockTime(v, "start_time", *issue.StartTime)
+		data.ValidateClockTime(v, "end_time", *issue.EndTime)
+		if v.Valid() {
+			minutes, ok := data.ComputeDurationMinutes(*issue.StartTime, *issue.EndTime)
+			if !ok {
+				v.AddError("end_time", "must result in a duration greater than zero")
+			} else {
+				issue.TimeMinutes = minutes
+			}
+		}
+	}
+
 	if data.ValidateIssue(v, issue); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
@@ -190,6 +212,8 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		Resolution  *string `json:"resolution"`
 		TimeMinutes *int    `json:"time_minutes"`
 		Status      *string `json:"status"`
+		StartTime   *string `json:"start_time"`
+		EndTime     *string `json:"end_time"`
 	}
 
 	if err := app.readJSON(w, r, &input); err != nil {
@@ -218,6 +242,12 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 	if input.Status != nil {
 		issue.Status = *input.Status
 	}
+	if input.StartTime != nil {
+		issue.StartTime = input.StartTime
+	}
+	if input.EndTime != nil {
+		issue.EndTime = input.EndTime
+	}
 
 	canonicalType, err := app.resolveIssueType(issue.Type, originalType)
 	if err != nil && !errors.Is(err, data.ErrRecordNotFound) {
@@ -231,6 +261,22 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 	} else {
 		issue.Type = canonicalType
 	}
+
+	// Same rule as creation: if both clock times are present, they are the
+	// source of truth for the stored duration.
+	if issue.StartTime != nil && issue.EndTime != nil {
+		data.ValidateClockTime(v, "start_time", *issue.StartTime)
+		data.ValidateClockTime(v, "end_time", *issue.EndTime)
+		if v.Valid() {
+			minutes, ok := data.ComputeDurationMinutes(*issue.StartTime, *issue.EndTime)
+			if !ok {
+				v.AddError("end_time", "must result in a duration greater than zero")
+			} else {
+				issue.TimeMinutes = minutes
+			}
+		}
+	}
+
 	if data.ValidateIssue(v, issue); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return

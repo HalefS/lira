@@ -488,6 +488,8 @@ function mapIssue(i) {
     problem:       i.problem,
     resolution:    i.resolution,
     time:          i.time_minutes,
+    startTime:     i.start_time || undefined,
+    endTime:       i.end_time || undefined,
     status:        i.status,
     loggedBy:      i.logged_by,
     loggedByName:  i.logged_by_name,
@@ -961,15 +963,20 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, token, onCl
     type:       editIssue.type,
     problem:    editIssue.problem,
     resolution: editIssue.resolution,
-    // The stored issue only has a total duration, not real clock times, so
-    // reconstruct a plausible start/end pair (ending "now") that reproduces
-    // the existing duration. Editing either field recalculates it.
-    ...(() => {
-      const end = new Date();
-      const start = new Date(end.getTime() - editIssue.time*60000);
-      const toHM = d => String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-      return { startTime: toHM(start), endTime: toHM(end) };
-    })(),
+    // Use the actual start/end times the issue was logged with. Only
+    // issues logged before this feature existed lack them — for those
+    // legacy rows only, fall back to a placeholder pair ending "now" that
+    // reproduces the existing total duration, since real clock times were
+    // never recorded for them.
+    ...(editIssue.startTime && editIssue.endTime
+      ? { startTime: editIssue.startTime, endTime: editIssue.endTime }
+      : (() => {
+          const end = new Date();
+          const start = new Date(end.getTime() - editIssue.time*60000);
+          const toHM = d => String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+          return { startTime: toHM(start), endTime: toHM(end) };
+        })()
+    ),
     status:     editIssue.status,
   } : defaults);
 
@@ -2219,6 +2226,8 @@ function App() {
         problem:      form.problem,
         resolution:   form.resolution,
         time_minutes: Number(form.time),
+        start_time:   form.startTime,
+        end_time:     form.endTime,
         status:       form.status,
       };
       const res = await apiFetch('/issues', {method:'POST', body, token});
@@ -2241,6 +2250,8 @@ function App() {
         problem:      form.problem,
         resolution:   form.resolution,
         time_minutes: Number(form.time),
+        start_time:   form.startTime,
+        end_time:     form.endTime,
         status:       form.status,
       };
       const res = await apiFetch(`/issues/${id}`, {method:'PATCH', body, token});

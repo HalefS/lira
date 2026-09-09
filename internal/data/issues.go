@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +22,8 @@ type Issue struct {
 	Problem      string    `json:"problem"`
 	Resolution   string    `json:"resolution"`
 	TimeMinutes  int       `json:"time_minutes"`
+	StartTime    *string   `json:"start_time"`
+	EndTime      *string   `json:"end_time"`
 	Status       string    `json:"status"`
 	LoggedBy     int64     `json:"logged_by"`
 	LoggedByName string    `json:"logged_by_name"`
@@ -63,19 +67,60 @@ func ValidateIssue(v *validator.Validator, issue *Issue) {
 	v.Check(issue.Status == "Ok" || issue.Status == "Pending", "status", "must be 'Ok' or 'Pending'")
 }
 
+var clockTimePattern = regexp.MustCompile(`^([01]\d|2[0-3]):([0-5]\d)$`)
+
+// ValidateClockTime checks a "HH:MM" 24-hour string, matching exactly what
+// an <input type="time"> element produces.
+func ValidateClockTime(v *validator.Validator, field, value string) {
+	v.Check(clockTimePattern.MatchString(value), field, "must be a time in HH:MM 24-hour format")
+}
+
+func parseClockTime(s string) (hour, minute int, ok bool) {
+	m := clockTimePattern.FindStringSubmatch(s)
+	if m == nil {
+		return 0, 0, false
+	}
+	hour, _ = strconv.Atoi(m[1])
+	minute, _ = strconv.Atoi(m[2])
+	return hour, minute, true
+}
+
+// ComputeDurationMinutes returns the whole minutes between two "HH:MM"
+// clock times, treating an end time earlier than the start time as
+// crossing midnight (e.g. an overnight shift). It returns ok=false when
+// either input is malformed or the resulting duration is zero — this is
+// the same rule the frontend applies, kept in sync here since this is the
+// authoritative, server-side calculation that actually gets stored.
+func ComputeDurationMinutes(start, end string) (minutes int, ok bool) {
+	sh, sm, ok1 := parseClockTime(start)
+	eh, em, ok2 := parseClockTime(end)
+	if !ok1 || !ok2 {
+		return 0, false
+	}
+	diff := (eh*60 + em) - (sh*60 + sm)
+	if diff < 0 {
+		diff += 24 * 60
+	}
+	if diff <= 0 {
+		return 0, false
+	}
+	return diff, true
+}
+
 type IssueModel struct {
 	DB *sql.DB
 }
 
 func (m IssueModel) Insert(issue *Issue) error {
 	query := `
-		INSERT INTO issues (mode, location, type, problem, resolution, time_minutes, status, logged_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO issues (mode, location, type, problem, resolution, time_minutes, status, logged_by, start_time, end_time)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id, created_at, version`
 
 	args := []any{
 		issue.Mode, issue.Location, issue.Type, issue.Problem,
 		issue.Resolution, issue.TimeMinutes, issue.Status, issue.LoggedBy,
+		issue.StartTime, issue.EndTime,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -87,7 +132,7 @@ func (m IssueModel) Insert(issue *Issue) error {
 func (m IssueModel) Get(id int64) (*Issue, error) {
 	query := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
-		       i.resolution, i.time_minutes, i.status, i.logged_by,
+		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.status, i.logged_by,
 		       u.name, u.avatar_idx, i.version
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
@@ -99,7 +144,7 @@ func (m IssueModel) Get(id int64) (*Issue, error) {
 
 	err := m.DB.QueryRowContext(ctx, query, id).Scan(
 		&issue.ID, &issue.CreatedAt, &issue.Mode, &issue.Location, &issue.Type,
-		&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.Status,
+		&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.Status,
 		&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version,
 	)
 	if err != nil {
@@ -150,7 +195,7 @@ func (m IssueModel) GetAll(f IssueFilters) ([]*Issue, error) {
 
 	query := fmt.Sprintf(`
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
-		       i.resolution, i.time_minutes, i.status, i.logged_by,
+		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.status, i.logged_by,
 		       u.name, u.avatar_idx, i.version
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
@@ -171,7 +216,7 @@ func (m IssueModel) GetAll(f IssueFilters) ([]*Issue, error) {
 		var issue Issue
 		err := rows.Scan(
 			&issue.ID, &issue.CreatedAt, &issue.Mode, &issue.Location, &issue.Type,
-			&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.Status,
+			&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.Status,
 			&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version,
 		)
 		if err != nil {
@@ -189,13 +234,14 @@ func (m IssueModel) Update(issue *Issue) error {
 	query := `
 		UPDATE issues
 		SET mode=$1, location=$2, type=$3, problem=$4, resolution=$5,
-		    time_minutes=$6, status=$7, version=version+1
-		WHERE id=$8 AND version=$9
+		    time_minutes=$6, status=$7, start_time=$8, end_time=$9, version=version+1
+		WHERE id=$10 AND version=$11
 		RETURNING version`
 
 	args := []any{
 		issue.Mode, issue.Location, issue.Type, issue.Problem,
 		issue.Resolution, issue.TimeMinutes, issue.Status,
+		issue.StartTime, issue.EndTime,
 		issue.ID, issue.Version,
 	}
 
@@ -349,7 +395,7 @@ func (m IssueModel) GetUserStats(userID int64) (*UserStats, error) {
 func (m IssueModel) GetByUser(userID int64, limit int) ([]*Issue, error) {
 	query := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
-		       i.resolution, i.time_minutes, i.status, i.logged_by,
+		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.status, i.logged_by,
 		       u.name, u.avatar_idx, i.version
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
@@ -371,7 +417,7 @@ func (m IssueModel) GetByUser(userID int64, limit int) ([]*Issue, error) {
 		var issue Issue
 		err := rows.Scan(
 			&issue.ID, &issue.CreatedAt, &issue.Mode, &issue.Location, &issue.Type,
-			&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.Status,
+			&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.Status,
 			&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version,
 		)
 		if err != nil {
@@ -502,7 +548,7 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 	// ── All issues (apt + dept) ──
 	issueQ := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
-		       i.resolution, i.time_minutes, i.status, i.logged_by,
+		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.status, i.logged_by,
 		       u.name, u.avatar_idx, i.version
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
@@ -519,7 +565,7 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 		var i Issue
 		if err := rows.Scan(
 			&i.ID, &i.CreatedAt, &i.Mode, &i.Location, &i.Type,
-			&i.Problem, &i.Resolution, &i.TimeMinutes, &i.Status,
+			&i.Problem, &i.Resolution, &i.TimeMinutes, &i.StartTime, &i.EndTime, &i.Status,
 			&i.LoggedBy, &i.LoggedByName, &i.LoggedByIdx, &i.Version,
 		); err != nil {
 			return nil, err
