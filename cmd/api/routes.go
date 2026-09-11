@@ -71,6 +71,11 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPost, "/v1/departments", app.requireAuth(app.requireManager(app.createDepartmentHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/departments/:id", app.requireAuth(app.requireManager(app.deleteDepartmentHandler)))
 
+	// Melia Connecta Agents — list for all authenticated users; mutate for managers only
+	router.HandlerFunc(http.MethodGet, "/v1/connecta-agents", app.requireAuth(app.listConnectaAgentsHandler))
+	router.HandlerFunc(http.MethodPost, "/v1/connecta-agents", app.requireAuth(app.requireManager(app.createConnectaAgentHandler)))
+	router.HandlerFunc(http.MethodDelete, "/v1/connecta-agents/:id", app.requireAuth(app.requireManager(app.deleteConnectaAgentHandler)))
+
 	// Stats (protected)
 	router.HandlerFunc(http.MethodGet, "/v1/stats", app.requireAuth(app.statsHandler))
 

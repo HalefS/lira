@@ -71,15 +71,17 @@ func (app *application) checkDuplicateIssuesHandler(w http.ResponseWriter, r *ht
 
 func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Mode        string  `json:"mode"`
-		Location    string  `json:"location"`
-		Type        string  `json:"type"`
-		Problem     string  `json:"problem"`
-		Resolution  string  `json:"resolution"`
-		TimeMinutes int     `json:"time_minutes"`
-		Status      string  `json:"status"`
-		StartTime   *string `json:"start_time"`
-		EndTime     *string `json:"end_time"`
+		Mode             string  `json:"mode"`
+		Location         string  `json:"location"`
+		Type             string  `json:"type"`
+		Problem          string  `json:"problem"`
+		Resolution       string  `json:"resolution"`
+		TimeMinutes      int     `json:"time_minutes"`
+		Status           string  `json:"status"`
+		StartTime        *string `json:"start_time"`
+		EndTime          *string `json:"end_time"`
+		ReportedByAgent  *string `json:"reported_by_agent"`
+		ConfirmedByAgent *string `json:"confirmed_by_agent"`
 	}
 
 	if err := app.readJSON(w, r, &input); err != nil {
@@ -90,16 +92,18 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 	user := app.contextGetUser(r)
 
 	issue := &data.Issue{
-		Mode:        input.Mode,
-		Location:    input.Location,
-		Type:        input.Type,
-		Problem:     input.Problem,
-		Resolution:  input.Resolution,
-		TimeMinutes: input.TimeMinutes,
-		StartTime:   input.StartTime,
-		EndTime:     input.EndTime,
-		Status:      input.Status,
-		LoggedBy:    user.ID,
+		Mode:             input.Mode,
+		Location:         input.Location,
+		Type:             input.Type,
+		Problem:          input.Problem,
+		Resolution:       input.Resolution,
+		TimeMinutes:      input.TimeMinutes,
+		StartTime:        input.StartTime,
+		EndTime:          input.EndTime,
+		ReportedByAgent:  input.ReportedByAgent,
+		ConfirmedByAgent: input.ConfirmedByAgent,
+		Status:           input.Status,
+		LoggedBy:         user.ID,
 	}
 
 	if issue.Status == "" {
@@ -130,6 +134,19 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		} else {
 			issue.Location = canonicalDept
 		}
+	}
+
+	if resolved, err := app.resolveOptionalAgentField(v, "reported_by_agent", issue.ReportedByAgent, ""); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	} else {
+		issue.ReportedByAgent = resolved
+	}
+	if resolved, err := app.resolveOptionalAgentField(v, "confirmed_by_agent", issue.ConfirmedByAgent, ""); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	} else {
+		issue.ConfirmedByAgent = resolved
 	}
 
 	// The stored duration is always derived from the start/end clock times
@@ -210,6 +227,14 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 
 	originalType := issue.Type
 	originalLocation := issue.Location
+	originalReportedByAgent := ""
+	if issue.ReportedByAgent != nil {
+		originalReportedByAgent = *issue.ReportedByAgent
+	}
+	originalConfirmedByAgent := ""
+	if issue.ConfirmedByAgent != nil {
+		originalConfirmedByAgent = *issue.ConfirmedByAgent
+	}
 
 	// Permission: only the owner or a manager can edit
 	currentUser := app.contextGetUser(r)
@@ -219,15 +244,17 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	var input struct {
-		Mode        *string `json:"mode"`
-		Location    *string `json:"location"`
-		Type        *string `json:"type"`
-		Problem     *string `json:"problem"`
-		Resolution  *string `json:"resolution"`
-		TimeMinutes *int    `json:"time_minutes"`
-		Status      *string `json:"status"`
-		StartTime   *string `json:"start_time"`
-		EndTime     *string `json:"end_time"`
+		Mode             *string `json:"mode"`
+		Location         *string `json:"location"`
+		Type             *string `json:"type"`
+		Problem          *string `json:"problem"`
+		Resolution       *string `json:"resolution"`
+		TimeMinutes      *int    `json:"time_minutes"`
+		Status           *string `json:"status"`
+		StartTime        *string `json:"start_time"`
+		EndTime          *string `json:"end_time"`
+		ReportedByAgent  *string `json:"reported_by_agent"`
+		ConfirmedByAgent *string `json:"confirmed_by_agent"`
 	}
 
 	if err := app.readJSON(w, r, &input); err != nil {
@@ -262,6 +289,12 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 	if input.EndTime != nil {
 		issue.EndTime = input.EndTime
 	}
+	if input.ReportedByAgent != nil {
+		issue.ReportedByAgent = input.ReportedByAgent
+	}
+	if input.ConfirmedByAgent != nil {
+		issue.ConfirmedByAgent = input.ConfirmedByAgent
+	}
 
 	canonicalType, err := app.resolveIssueType(issue.Type, originalType)
 	if err != nil && !errors.Is(err, data.ErrRecordNotFound) {
@@ -287,6 +320,19 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		} else {
 			issue.Location = canonicalDept
 		}
+	}
+
+	if resolved, err := app.resolveOptionalAgentField(v, "reported_by_agent", issue.ReportedByAgent, originalReportedByAgent); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	} else {
+		issue.ReportedByAgent = resolved
+	}
+	if resolved, err := app.resolveOptionalAgentField(v, "confirmed_by_agent", issue.ConfirmedByAgent, originalConfirmedByAgent); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	} else {
+		issue.ConfirmedByAgent = resolved
 	}
 
 	// Same rule as creation: if both clock times are present, they are the

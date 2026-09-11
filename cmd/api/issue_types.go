@@ -32,8 +32,16 @@ func (app *application) createIssueTypeHandler(w http.ResponseWriter, r *http.Re
 
 	user := app.contextGetUser(r)
 	createdBy := user.ID
+
+	color, err := app.models.IssueTypes.NextAvailableColor()
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 	it := &data.IssueType{
 		Name:      strings.TrimSpace(input.Name),
+		Color:     color,
 		CreatedBy: &createdBy,
 	}
 

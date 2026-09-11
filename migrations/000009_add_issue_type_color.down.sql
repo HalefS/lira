@@ -1,0 +1,1 @@
+ALTER TABLE issue_types DROP COLUMN IF EXISTS color;

@@ -6,29 +6,32 @@ import (
 )
 
 var (
-	ErrRecordNotFound      = errors.New("record not found")
-	ErrEditConflict        = errors.New("edit conflict")
-	ErrDuplicateEmail      = errors.New("duplicate email")
-	ErrDuplicateIssueType  = errors.New("duplicate issue type")
-	ErrDuplicateDepartment = errors.New("duplicate department")
+	ErrRecordNotFound         = errors.New("record not found")
+	ErrEditConflict           = errors.New("edit conflict")
+	ErrDuplicateEmail         = errors.New("duplicate email")
+	ErrDuplicateIssueType     = errors.New("duplicate issue type")
+	ErrDuplicateDepartment    = errors.New("duplicate department")
+	ErrDuplicateConnectaAgent = errors.New("duplicate connecta agent")
 )
 
 type Models struct {
-	Users       UserModel
-	Tokens      TokenModel
-	Issues      IssueModel
-	IssueTypes  IssueTypeModel
-	Departments DepartmentModel
-	Settings    SettingsModel
+	Users          UserModel
+	Tokens         TokenModel
+	Issues         IssueModel
+	IssueTypes     IssueTypeModel
+	Departments    DepartmentModel
+	ConnectaAgents ConnectaAgentModel
+	Settings       SettingsModel
 }
 
 func NewModels(db *sql.DB) Models {
 	return Models{
-		Users:       UserModel{DB: db},
-		Tokens:      TokenModel{DB: db},
-		Issues:      IssueModel{DB: db},
-		IssueTypes:  IssueTypeModel{DB: db},
-		Departments: DepartmentModel{DB: db},
-		Settings:    SettingsModel{DB: db},
+		Users:          UserModel{DB: db},
+		Tokens:         TokenModel{DB: db},
+		Issues:         IssueModel{DB: db},
+		IssueTypes:     IssueTypeModel{DB: db},
+		Departments:    DepartmentModel{DB: db},
+		ConnectaAgents: ConnectaAgentModel{DB: db},
+		Settings:       SettingsModel{DB: db},
 	}
 }

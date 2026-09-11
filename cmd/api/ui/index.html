@@ -280,10 +280,19 @@ tbody tr:hover td { background: var(--gray-50); }
 .badge-hardware { background: var(--amber-light); color: var(--amber); border: 1px solid #FAC775; }
 .badge-violet { background: #F3E8FF; color: #6B21A8; border: 1px solid #E9D5FF; }
 .badge-sky { background: #E0F2FE; color: #075985; border: 1px solid #BAE6FD; }
-.badge-rose { background: #FCE7F3; color: #9D174D; border: 1px solid #FBCFE8; }
+.badge-rose { background: #FFE4E6; color: #9F1239; border: 1px solid #FECDD3; }
 .badge-slate { background: #F1F5F9; color: #334155; border: 1px solid #CBD5E1; }
 .badge-orange { background: #FFEDD5; color: #9A3412; border: 1px solid #FED7AA; }
 .badge-fuchsia { background: #FAE8FF; color: #86198F; border: 1px solid #F5D0FE; }
+.badge-red { background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; }
+.badge-yellow { background: #FEF9C3; color: #854D0E; border: 1px solid #FEF08A; }
+.badge-lime { background: #ECFCCB; color: #4D7C0F; border: 1px solid #D9F99D; }
+.badge-emerald { background: #D1FAE5; color: #065F46; border: 1px solid #A7F3D0; }
+.badge-cyan { background: #CFFAFE; color: #155E75; border: 1px solid #A5F3FC; }
+.badge-blue { background: #DBEAFE; color: #1E40AF; border: 1px solid #BFDBFE; }
+.badge-purple { background: #EDE9FE; color: #5B21B6; border: 1px solid #DDD6FE; }
+.badge-pink { background: #FCE7F3; color: #BE185D; border: 1px solid #FBCFE8; }
+.badge-brown { background: #F5EBE0; color: #78502B; border: 1px solid #E3D0BB; }
 .badge-type { background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200); }
 
 /* ── Icon btn ── */
@@ -299,6 +308,7 @@ tbody tr:hover td { background: var(--gray-50); }
 
 /* ── Bottom grid ── */
 .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
 .mini-card { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: 18px 20px; }
 .mini-card-title { font-size: 13px; font-weight: 600; margin-bottom: 14px; }
 .bar-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--gray-100); }
@@ -496,6 +506,10 @@ function mapIssue(i) {
     time:          i.time_minutes,
     startTime:     i.start_time || undefined,
     endTime:       i.end_time || undefined,
+    // Only ever read/written by the add/edit issue modal — never shown in
+    // any table, history, or dashboard view.
+    reportedByAgent:  i.reported_by_agent || undefined,
+    confirmedByAgent: i.confirmed_by_agent || undefined,
     status:        i.status,
     loggedBy:      i.logged_by,
     loggedByName:  i.logged_by_name,
@@ -566,6 +580,9 @@ const T = {
     endTime: 'End time',
     duration: 'Duration',
     invalidTimeRange: 'End time must be after start time',
+    reportedByAgent: 'Reported by (Agent)',
+    confirmedByAgent: 'Confirmed with (Agent)',
+    noAgentSelected: 'None selected',
     statusLabel: 'Status',
     statusOk: 'Ok — Resolved',
     statusPending: 'Pending',
@@ -619,6 +636,15 @@ const T = {
     toastDeptDeleted: 'Department removed',
     noDepartments: 'No departments yet.',
     removeDepartment: 'Remove',
+    adminAgents: 'Melia Connecta Agents',
+    adminAgentsSub: 'The agent who reported an issue, and the one told once it\'s fixed, are picked from this list. Only visible when adding or editing an issue.',
+    connectaAgent: 'Connecta Agent',
+    addAgent: 'Add agent',
+    agentPlaceholder: 'e.g. Jane Smith',
+    toastAgentAdded: 'Agent added',
+    toastAgentDeleted: 'Agent removed',
+    noAgents: 'No agents yet.',
+    removeAgent: 'Remove',
     adminAlerts: 'Recurring issue alerts',
     adminAlertsSub: 'When a technician logs an issue, warn them if the same issue type has already happened at that location within this window.',
     duplicateWindowLabel: 'Alert window (hours)',
@@ -686,6 +712,9 @@ const T = {
     endTime: 'Hora de fim',
     duration: 'Duração',
     invalidTimeRange: 'A hora de fim deve ser depois da hora de início',
+    reportedByAgent: 'Reportado por (Agente)',
+    confirmedByAgent: 'Confirmado com (Agente)',
+    noAgentSelected: 'Nenhum selecionado',
     statusLabel: 'Estado',
     statusOk: 'Ok — Resolvida',
     statusPending: 'Pendente',
@@ -740,6 +769,15 @@ const T = {
     toastDeptDeleted: 'Departamento removido',
     noDepartments: 'Ainda não há departamentos.',
     removeDepartment: 'Remover',
+    adminAgents: 'Agentes Melia Connecta',
+    adminAgentsSub: 'O agente que reportou uma avaria, e aquele a quem confirmámos a resolução, são escolhidos desta lista. Só visível ao adicionar ou editar uma avaria.',
+    connectaAgent: 'Agente Connecta',
+    addAgent: 'Adicionar agente',
+    agentPlaceholder: 'ex. Jane Smith',
+    toastAgentAdded: 'Agente adicionado',
+    toastAgentDeleted: 'Agente removido',
+    noAgents: 'Ainda não há agentes.',
+    removeAgent: 'Remover',
     adminAlerts: 'Alertas de avarias recorrentes',
     adminAlertsSub: 'Quando um técnico regista uma avaria, avisá-lo se o mesmo tipo de avaria já ocorreu nesse local dentro desta janela de tempo.',
     duplicateWindowLabel: 'Janela de alerta (horas)',
@@ -789,47 +827,18 @@ function Avatar({ name, idx, size='md' }) {
 }
 
 /* ── TypeBadge ── */
-// Fixed, hand-picked colors for the issue types LIRA ships with, so none
-// of them ever share a color. This mapping is intentionally hardcoded
-// rather than computed, per the defaults it's meant for.
-const DEFAULT_TYPE_COLORS = {
-  Door:     'badge-door',
-  Internet: 'badge-internet',
-  Hardware: 'badge-hardware',
-  TV:       'badge-violet',
-  AC:       'badge-sky',
-  Phone:    'badge-rose',
-  Other:    'badge-slate',
-};
-
-// Extra colors handed out (in this fixed order) to any issue type a
-// manager adds later that isn't one of the defaults above.
-const CUSTOM_TYPE_COLOR_PALETTE = [
-  'badge-orange', 'badge-fuchsia', 'badge-violet', 'badge-sky',
-  'badge-rose', 'badge-slate', 'badge-door', 'badge-internet', 'badge-hardware',
-];
-
-// Deterministic string hash (djb2). Given the same issue type name, this
-// always produces the same number — every run, every reload — so a newly
-// added type's color never changes between sessions without needing to
-// store a color value in the database.
-function hashString(str) {
-  let hash = 5381;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) + hash) + str.charCodeAt(i);
-    hash = hash & hash; // keep it a 32-bit int
-  }
-  return Math.abs(hash);
-}
-
-function typeColorClass(name) {
-  if (DEFAULT_TYPE_COLORS[name]) return DEFAULT_TYPE_COLORS[name];
-  return CUSTOM_TYPE_COLOR_PALETTE[hashString(name) % CUSTOM_TYPE_COLOR_PALETTE.length];
-}
+// Colors are assigned server-side and stored per issue type (guaranteed
+// unique — see the admin issue-types catalog). TypeColorCtx makes that
+// name -> CSS class lookup available to any <TypeBadge> without having to
+// thread issueTypes through every table component that renders one.
+const TypeColorCtx = React.createContext({});
 
 function TypeBadge({ type }) {
-  return <span className={`badge ${typeColorClass(type)}`}>{type}</span>;
+  const colors = React.useContext(TypeColorCtx);
+  const cls = colors[type] || 'badge-type';
+  return <span className={`badge ${cls}`}>{type}</span>;
 }
+
 
 /* ── Toast ── */
 function Toast({ msg, onDone }) {
@@ -1003,7 +1012,7 @@ function computeDurationMinutes(startTime, endTime) {
   return diff > 0 ? diff : null;
 }
 
-function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments, token, onClose, onSave }) {
+function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments, connectaAgents, token, onClose, onSave }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const isEdit = !!editIssue;
@@ -1015,10 +1024,17 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
   if (isEdit && editIssue.dept && !deptNames.includes(editIssue.dept)) {
     deptNames.unshift(editIssue.dept);
   }
+  const agentNames = (connectaAgents || []).map(a => a.name);
+  if (isEdit && editIssue.reportedByAgent && !agentNames.includes(editIssue.reportedByAgent)) {
+    agentNames.unshift(editIssue.reportedByAgent);
+  }
+  if (isEdit && editIssue.confirmedByAgent && !agentNames.includes(editIssue.confirmedByAgent)) {
+    agentNames.unshift(editIssue.confirmedByAgent);
+  }
   const firstType = typeNames[0] || '';
   const defaults = issueMode==='apt'
-    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok'}
-    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok'};
+    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:''}
+    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:''};
   const [form, setForm] = useState(isEdit ? {
     apt:        editIssue.apt||'',
     dept:       editIssue.dept||'',
@@ -1039,7 +1055,9 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
           return { startTime: toHM(start), endTime: toHM(end) };
         })()
     ),
-    status:     editIssue.status,
+    status:           editIssue.status,
+    reportedByAgent:  editIssue.reportedByAgent || '',
+    confirmedByAgent: editIssue.confirmedByAgent || '',
   } : defaults);
 
   function set(k,v) { setForm(f=>({...f,[k]:v})); }
@@ -1132,20 +1150,31 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
               <option value="Pending">{t.statusPending}</option>
             </select>
           </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>{t.reportedByAgent}</label>
+              <select className="form-control" value={form.reportedByAgent} onChange={e=>set('reportedByAgent',e.target.value)}>
+                <option value="">{t.noAgentSelected}</option>
+                {agentNames.map(a=><option key={a}>{a}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>{t.confirmedByAgent}</label>
+              <select className="form-control" value={form.confirmedByAgent} onChange={e=>set('confirmedByAgent',e.target.value)}>
+                <option value="">{t.noAgentSelected}</option>
+                {agentNames.map(a=><option key={a}>{a}</option>)}
+              </select>
+            </div>
+          </div>
           {timeRangeInvalid ? (
             <div style={{fontSize:12.5,color:'var(--red)',marginTop:-8}}>{t.invalidTimeRange}</div>
           ) : duration !== null ? (
             <div style={{fontSize:12.5,color:'var(--gray-400)',marginTop:-8}}>{t.duration}: <strong style={{color:'var(--gray-600)'}}>{duration}m</strong></div>
           ) : null}
-          {!isEdit && (
-            <div style={{background:'var(--blue-light)',borderRadius:'var(--radius-md)',padding:'10px 14px',fontSize:13,color:'var(--blue)',display:'flex',alignItems:'center',gap:8}}>
-              {Ic.info} {t.loggedUnder} <strong>{currentUser.name}</strong>
-            </div>
-          )}
         </div>
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>{t.cancel}</button>
-          <button className="btn btn-primary" disabled={!valid} onClick={()=>{onSave({...form,time:duration});onClose();}}>
+          <button className="btn btn-primary" disabled={!valid} onClick={()=>{onSave({...form,time:duration,reportedByAgent:form.reportedByAgent||null,confirmedByAgent:form.confirmedByAgent||null});onClose();}}>
             {Ic.check} {isEdit ? t.saveChanges : t.logIssue}
           </button>
         </div>
@@ -2097,7 +2126,7 @@ function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate
 }
 
 /* ════════════════ ADMIN PAGE (managers only) ════════════════ */
-function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartmentsUpdate, settings, onSettingsUpdate, setToast }) {
+function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartmentsUpdate, connectaAgents, onConnectaAgentsUpdate, settings, onSettingsUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [name, setName] = useState('');
@@ -2107,6 +2136,10 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
   const [deptName, setDeptName] = useState('');
   const [savingDept, setSavingDept] = useState(false);
   const [deptErr, setDeptErr] = useState('');
+
+  const [agentName, setAgentName] = useState('');
+  const [savingAgent, setSavingAgent] = useState(false);
+  const [agentErr, setAgentErr] = useState('');
 
   const [windowHours, setWindowHours] = useState(settings?.duplicate_window_hours ?? 24);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -2169,8 +2202,30 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
+  async function addAgent(e) {
+    e.preventDefault();
+    const trimmed = agentName.trim();
+    if (!trimmed) return;
+    setSavingAgent(true); setAgentErr('');
+    try {
+      const res = await apiFetch('/connecta-agents', {method:'POST', body:{name: trimmed}, token});
+      onConnectaAgentsUpdate(prev => [...prev, res.connecta_agent].sort((a,b)=>a.name.localeCompare(b.name)));
+      setAgentName('');
+      setToast(t.toastAgentAdded);
+    } catch(ex) { setAgentErr(ex.message); }
+    finally { setSavingAgent(false); }
+  }
+
+  async function removeAgent(id) {
+    try {
+      await apiFetch(`/connecta-agents/${id}`, {method:'DELETE', token});
+      onConnectaAgentsUpdate(prev => prev.filter(a => a.id !== id));
+      setToast(t.toastAgentDeleted);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
   return (
-    <div style={{maxWidth:980}}>
+    <div style={{maxWidth:1360}}>
       <div className="mini-card" style={{marginBottom:20}}>
         <div className="mini-card-title" style={{marginBottom:6}}>{t.adminAlerts}</div>
         <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminAlertsSub}</p>
@@ -2186,7 +2241,7 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
         </form>
       </div>
 
-      <div className="bottom-grid">
+      <div className="admin-grid">
         <div>
           <div className="mini-card" style={{marginBottom:20}}>
             <div className="mini-card-title" style={{marginBottom:6}}>{t.adminIssueTypes}</div>
@@ -2272,6 +2327,49 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
             }
           </div>
         </div>
+
+        <div>
+          <div className="mini-card" style={{marginBottom:20}}>
+            <div className="mini-card-title" style={{marginBottom:6}}>{t.adminAgents}</div>
+            <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminAgentsSub}</p>
+            {agentErr && <div className="auth-error" style={{marginBottom:14}}>{agentErr}</div>}
+            <form onSubmit={addAgent} style={{display:'flex',gap:10,alignItems:'flex-end'}}>
+              <div className="form-group" style={{flex:1,marginBottom:0}}>
+                <label>{t.connectaAgent}</label>
+                <input className="form-control" placeholder={t.agentPlaceholder} value={agentName}
+                  onChange={e=>setAgentName(e.target.value)} maxLength={100}/>
+              </div>
+              <button type="submit" className="btn btn-primary" disabled={savingAgent || !agentName.trim()} style={{marginBottom:1}}>
+                {Ic.plus} {savingAgent ? '…' : t.addAgent}
+              </button>
+            </form>
+          </div>
+
+          <div className="table-card">
+            <div className="table-header">
+              <span className="table-title">{t.adminAgents}</span>
+              <span style={{fontSize:12,color:'var(--gray-400)'}}>{connectaAgents.length}</span>
+            </div>
+            {connectaAgents.length === 0
+              ? <div className="empty-state">{Ic.list}<p>{t.noAgents}</p></div>
+              : <table>
+                  <thead>
+                    <tr><th>{t.connectaAgent}</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {connectaAgents.map(a=>(
+                      <tr key={a.id}>
+                        <td>{a.name}</td>
+                        <td style={{textAlign:'right'}}>
+                          <button className="icon-btn" title={t.removeAgent} onClick={()=>removeAgent(a.id)}>{Ic.trash}</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+            }
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -2287,7 +2385,12 @@ function App() {
   const [users,   setUsers]   = useState([]);
   const [issueTypes, setIssueTypes] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [connectaAgents, setConnectaAgents] = useState([]);
   const [settings, setSettings] = useState(null);
+  const typeColorMap = useMemo(
+    () => Object.fromEntries(issueTypes.map(it => [it.name, it.color])),
+    [issueTypes]
+  );
   const [stats,   setStats]   = useState(null);
   const [page,    setPage]    = useState('dashboard');
   const [modal,   setModal]   = useState(null);
@@ -2321,14 +2424,16 @@ function App() {
       apiFetch(`/stats?date=${todayStr}`, {token}),
       apiFetch('/issue-types', {token}),
       apiFetch('/departments', {token}),
+      apiFetch('/connecta-agents', {token}),
       apiFetch('/settings', {token}),
-    ]).then(([aptRes, deptRes, usersRes, statsRes, typesRes, deptsRes, settingsRes]) => {
+    ]).then(([aptRes, deptRes, usersRes, statsRes, typesRes, deptsRes, agentsRes, settingsRes]) => {
       setApt((aptRes.issues || []).map(mapIssue));
       setDept((deptRes.issues || []).map(mapIssue));
       setUsers(usersRes.users || []);
       setStats(statsRes.stats);
       setIssueTypes(typesRes.issue_types || []);
       setDepartments(deptsRes.departments || []);
+      setConnectaAgents(agentsRes.connecta_agents || []);
       setSettings(settingsRes.settings);
     }).catch(ex => {
       if (ex.message.includes('401') || ex.message.toLowerCase().includes('token')) {
@@ -2346,7 +2451,7 @@ function App() {
 
   function logout() {
     setSession(null);
-    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setSettings(null);
+    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setSettings(null);
   }
 
   // Called when profile updates come back from API
@@ -2367,6 +2472,8 @@ function App() {
         start_time:   form.startTime,
         end_time:     form.endTime,
         status:       form.status,
+        reported_by_agent:  form.reportedByAgent,
+        confirmed_by_agent: form.confirmedByAgent,
       };
       const res = await apiFetch('/issues', {method:'POST', body, token});
       const issue = mapIssue(res.issue);
@@ -2391,6 +2498,8 @@ function App() {
         start_time:   form.startTime,
         end_time:     form.endTime,
         status:       form.status,
+        reported_by_agent:  form.reportedByAgent,
+        confirmed_by_agent: form.confirmedByAgent,
       };
       const res = await apiFetch(`/issues/${id}`, {method:'PATCH', body, token});
       const updated = mapIssue(res.issue);
@@ -2432,6 +2541,7 @@ function App() {
 
   return (
     <LangCtx.Provider value={lang}>
+    <TypeColorCtx.Provider value={typeColorMap}>
       <div className="app">
         <aside className="sidebar">
           <div className="sidebar-logo">
@@ -2496,6 +2606,8 @@ function App() {
               onTypesUpdate={setIssueTypes}
               departments={departments}
               onDepartmentsUpdate={setDepartments}
+              connectaAgents={connectaAgents}
+              onConnectaAgentsUpdate={setConnectaAgents}
               settings={settings}
               onSettingsUpdate={setSettings}
               setToast={setToast}
@@ -2514,14 +2626,15 @@ function App() {
         </div>
 
         {modal && (
-          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} departments={departments} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)}/>
+          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)}/>
         )}
         {editing && (
-          <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} departments={departments} token={token}
+          <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} token={token}
             onClose={()=>setEditing(null)} onSave={form=>saveEdit(form,editing.mode,editing.issue.id)}/>
         )}
         {toast && <Toast msg={toast} onDone={()=>setToast(null)}/>}
       </div>
+    </TypeColorCtx.Provider>
     </LangCtx.Provider>
   );
 }
