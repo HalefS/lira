@@ -22,8 +22,8 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	user := &data.User{
-		Name:     input.Name,
-		Email:    input.Email,
+		Name:  input.Name,
+		Email: input.Email,
 		// Self-registration always creates a technician account.
 		// Promotion to manager can only be done by an existing manager
 		// via PATCH /v1/users/:id/role.

@@ -119,6 +119,19 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		issue.Type = canonicalType
 	}
 
+	if issue.Mode == "dept" {
+		canonicalDept, err := app.resolveDepartment(issue.Location, "")
+		if err != nil && !errors.Is(err, data.ErrRecordNotFound) {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+		if errors.Is(err, data.ErrRecordNotFound) {
+			v.AddError("location", "must be a valid department")
+		} else {
+			issue.Location = canonicalDept
+		}
+	}
+
 	// The stored duration is always derived from the start/end clock times
 	// when both are supplied, rather than trusted verbatim from the
 	// client — this guarantees time_minutes stays consistent with the
@@ -196,6 +209,7 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	originalType := issue.Type
+	originalLocation := issue.Location
 
 	// Permission: only the owner or a manager can edit
 	currentUser := app.contextGetUser(r)
@@ -260,6 +274,19 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		v.AddError("type", "must be a valid issue type")
 	} else {
 		issue.Type = canonicalType
+	}
+
+	if issue.Mode == "dept" {
+		canonicalDept, err := app.resolveDepartment(issue.Location, originalLocation)
+		if err != nil && !errors.Is(err, data.ErrRecordNotFound) {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+		if errors.Is(err, data.ErrRecordNotFound) {
+			v.AddError("location", "must be a valid department")
+		} else {
+			issue.Location = canonicalDept
+		}
 	}
 
 	// Same rule as creation: if both clock times are present, they are the

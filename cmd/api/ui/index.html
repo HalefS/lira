@@ -278,6 +278,12 @@ tbody tr:hover td { background: var(--gray-50); }
 .badge-door { background: #EEF2FF; color: #3730A3; border: 1px solid #C7D2FE; }
 .badge-internet { background: var(--teal-light); color: var(--teal); border: 1px solid var(--teal-mid); }
 .badge-hardware { background: var(--amber-light); color: var(--amber); border: 1px solid #FAC775; }
+.badge-violet { background: #F3E8FF; color: #6B21A8; border: 1px solid #E9D5FF; }
+.badge-sky { background: #E0F2FE; color: #075985; border: 1px solid #BAE6FD; }
+.badge-rose { background: #FCE7F3; color: #9D174D; border: 1px solid #FBCFE8; }
+.badge-slate { background: #F1F5F9; color: #334155; border: 1px solid #CBD5E1; }
+.badge-orange { background: #FFEDD5; color: #9A3412; border: 1px solid #FED7AA; }
+.badge-fuchsia { background: #FAE8FF; color: #86198F; border: 1px solid #F5D0FE; }
 .badge-type { background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200); }
 
 /* ── Icon btn ── */
@@ -605,6 +611,14 @@ const T = {
     issueTypePlaceholder: 'e.g. Plumbing',
     toastTypeAdded: 'Issue type added',
     toastTypeDeleted: 'Issue type removed',
+    adminDepartments: 'Departments',
+    adminDepartmentsSub: 'These appear in the dropdown when a department issue is logged. Only managers can add or remove them.',
+    addDepartment: 'Add department',
+    departmentPlaceholder: 'e.g. Housekeeping',
+    toastDeptAdded: 'Department added',
+    toastDeptDeleted: 'Department removed',
+    noDepartments: 'No departments yet.',
+    removeDepartment: 'Remove',
     adminAlerts: 'Recurring issue alerts',
     adminAlertsSub: 'When a technician logs an issue, warn them if the same issue type has already happened at that location within this window.',
     duplicateWindowLabel: 'Alert window (hours)',
@@ -718,6 +732,14 @@ const T = {
     issueTypePlaceholder: 'ex. Canalização',
     toastTypeAdded: 'Tipo de avaria adicionado',
     toastTypeDeleted: 'Tipo de avaria removido',
+    adminDepartments: 'Departamentos',
+    adminDepartmentsSub: 'Estes aparecem no menu ao registar uma avaria de departamento. Só os gestores podem adicionar ou remover.',
+    addDepartment: 'Adicionar departamento',
+    departmentPlaceholder: 'ex. Governanta',
+    toastDeptAdded: 'Departamento adicionado',
+    toastDeptDeleted: 'Departamento removido',
+    noDepartments: 'Ainda não há departamentos.',
+    removeDepartment: 'Remover',
     adminAlerts: 'Alertas de avarias recorrentes',
     adminAlertsSub: 'Quando um técnico regista uma avaria, avisá-lo se o mesmo tipo de avaria já ocorreu nesse local dentro desta janela de tempo.',
     duplicateWindowLabel: 'Janela de alerta (horas)',
@@ -731,7 +753,6 @@ const T = {
 /* ── Lang context ── */
 const LangCtx = React.createContext('en');
 
-const DEPARTMENTS = ['Guest','Reception','Restaurant','Gym','Spa','Kitchen','Conference','Back Office'];
 const TYPE_COLORS = { Door:'#185FA5', Internet:'#1D9E75', Hardware:'#BA7517', TV:'#9D174D', AC:'#3730A3', Phone:'#854F0B', Other:'#5F5E5A' };
 
 /* ── icons ── */
@@ -768,9 +789,46 @@ function Avatar({ name, idx, size='md' }) {
 }
 
 /* ── TypeBadge ── */
+// Fixed, hand-picked colors for the issue types LIRA ships with, so none
+// of them ever share a color. This mapping is intentionally hardcoded
+// rather than computed, per the defaults it's meant for.
+const DEFAULT_TYPE_COLORS = {
+  Door:     'badge-door',
+  Internet: 'badge-internet',
+  Hardware: 'badge-hardware',
+  TV:       'badge-violet',
+  AC:       'badge-sky',
+  Phone:    'badge-rose',
+  Other:    'badge-slate',
+};
+
+// Extra colors handed out (in this fixed order) to any issue type a
+// manager adds later that isn't one of the defaults above.
+const CUSTOM_TYPE_COLOR_PALETTE = [
+  'badge-orange', 'badge-fuchsia', 'badge-violet', 'badge-sky',
+  'badge-rose', 'badge-slate', 'badge-door', 'badge-internet', 'badge-hardware',
+];
+
+// Deterministic string hash (djb2). Given the same issue type name, this
+// always produces the same number — every run, every reload — so a newly
+// added type's color never changes between sessions without needing to
+// store a color value in the database.
+function hashString(str) {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i);
+    hash = hash & hash; // keep it a 32-bit int
+  }
+  return Math.abs(hash);
+}
+
+function typeColorClass(name) {
+  if (DEFAULT_TYPE_COLORS[name]) return DEFAULT_TYPE_COLORS[name];
+  return CUSTOM_TYPE_COLOR_PALETTE[hashString(name) % CUSTOM_TYPE_COLOR_PALETTE.length];
+}
+
 function TypeBadge({ type }) {
-  const cls = {Door:'badge-door',Internet:'badge-internet',Hardware:'badge-hardware'}[type]||'badge-type';
-  return <span className={`badge ${cls}`}>{type}</span>;
+  return <span className={`badge ${typeColorClass(type)}`}>{type}</span>;
 }
 
 /* ── Toast ── */
@@ -945,13 +1003,17 @@ function computeDurationMinutes(startTime, endTime) {
   return diff > 0 ? diff : null;
 }
 
-function IssueModal({ issueMode, editIssue, currentUser, issueTypes, token, onClose, onSave }) {
+function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments, token, onClose, onSave }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const isEdit = !!editIssue;
   const typeNames = (issueTypes || []).map(it => it.name);
   if (isEdit && editIssue.type && !typeNames.includes(editIssue.type)) {
     typeNames.unshift(editIssue.type);
+  }
+  const deptNames = (departments || []).map(d => d.name);
+  if (isEdit && editIssue.dept && !deptNames.includes(editIssue.dept)) {
+    deptNames.unshift(editIssue.dept);
   }
   const firstType = typeNames[0] || '';
   const defaults = issueMode==='apt'
@@ -1024,7 +1086,7 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, token, onCl
                 <label>{t.department}</label>
                 <select className="form-control" value={form.dept} onChange={e=>set('dept',e.target.value)}>
                   <option value="">{t.selectDept}</option>
-                  {DEPARTMENTS.map(d=><option key={d}>{d}</option>)}
+                  {deptNames.map(d=><option key={d}>{d}</option>)}
                 </select>
               </div>
             )}
@@ -2035,12 +2097,16 @@ function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate
 }
 
 /* ════════════════ ADMIN PAGE (managers only) ════════════════ */
-function AdminPage({ token, issueTypes, onTypesUpdate, settings, onSettingsUpdate, setToast }) {
+function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartmentsUpdate, settings, onSettingsUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+
+  const [deptName, setDeptName] = useState('');
+  const [savingDept, setSavingDept] = useState(false);
+  const [deptErr, setDeptErr] = useState('');
 
   const [windowHours, setWindowHours] = useState(settings?.duplicate_window_hours ?? 24);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -2081,8 +2147,30 @@ function AdminPage({ token, issueTypes, onTypesUpdate, settings, onSettingsUpdat
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
+  async function addDept(e) {
+    e.preventDefault();
+    const trimmed = deptName.trim();
+    if (!trimmed) return;
+    setSavingDept(true); setDeptErr('');
+    try {
+      const res = await apiFetch('/departments', {method:'POST', body:{name: trimmed}, token});
+      onDepartmentsUpdate(prev => [...prev, res.department].sort((a,b)=>a.name.localeCompare(b.name)));
+      setDeptName('');
+      setToast(t.toastDeptAdded);
+    } catch(ex) { setDeptErr(ex.message); }
+    finally { setSavingDept(false); }
+  }
+
+  async function removeDept(id) {
+    try {
+      await apiFetch(`/departments/${id}`, {method:'DELETE', token});
+      onDepartmentsUpdate(prev => prev.filter(d => d.id !== id));
+      setToast(t.toastDeptDeleted);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
   return (
-    <div style={{maxWidth:720}}>
+    <div style={{maxWidth:980}}>
       <div className="mini-card" style={{marginBottom:20}}>
         <div className="mini-card-title" style={{marginBottom:6}}>{t.adminAlerts}</div>
         <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminAlertsSub}</p>
@@ -2098,45 +2186,92 @@ function AdminPage({ token, issueTypes, onTypesUpdate, settings, onSettingsUpdat
         </form>
       </div>
 
-      <div className="mini-card" style={{marginBottom:20}}>
-        <div className="mini-card-title" style={{marginBottom:6}}>{t.adminIssueTypes}</div>
-        <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminIssueTypesSub}</p>
-        {err && <div className="auth-error" style={{marginBottom:14}}>{err}</div>}
-        <form onSubmit={addType} style={{display:'flex',gap:10,alignItems:'flex-end'}}>
-          <div className="form-group" style={{flex:1,marginBottom:0}}>
-            <label>{t.issueType}</label>
-            <input className="form-control" placeholder={t.issueTypePlaceholder} value={name}
-              onChange={e=>setName(e.target.value)} maxLength={50}/>
+      <div className="bottom-grid">
+        <div>
+          <div className="mini-card" style={{marginBottom:20}}>
+            <div className="mini-card-title" style={{marginBottom:6}}>{t.adminIssueTypes}</div>
+            <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminIssueTypesSub}</p>
+            {err && <div className="auth-error" style={{marginBottom:14}}>{err}</div>}
+            <form onSubmit={addType} style={{display:'flex',gap:10,alignItems:'flex-end'}}>
+              <div className="form-group" style={{flex:1,marginBottom:0}}>
+                <label>{t.issueType}</label>
+                <input className="form-control" placeholder={t.issueTypePlaceholder} value={name}
+                  onChange={e=>setName(e.target.value)} maxLength={50}/>
+              </div>
+              <button type="submit" className="btn btn-primary" disabled={saving || !name.trim()} style={{marginBottom:1}}>
+                {Ic.plus} {saving ? '…' : t.addIssueType}
+              </button>
+            </form>
           </div>
-          <button type="submit" className="btn btn-primary" disabled={saving || !name.trim()} style={{marginBottom:1}}>
-            {Ic.plus} {saving ? '…' : t.addIssueType}
-          </button>
-        </form>
-      </div>
 
-      <div className="table-card">
-        <div className="table-header">
-          <span className="table-title">{t.adminIssueTypes}</span>
-          <span style={{fontSize:12,color:'var(--gray-400)'}}>{issueTypes.length}</span>
+          <div className="table-card">
+            <div className="table-header">
+              <span className="table-title">{t.adminIssueTypes}</span>
+              <span style={{fontSize:12,color:'var(--gray-400)'}}>{issueTypes.length}</span>
+            </div>
+            {issueTypes.length === 0
+              ? <div className="empty-state">{Ic.list}<p>{t.noIssueTypes}</p></div>
+              : <table>
+                  <thead>
+                    <tr><th>{t.type}</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {issueTypes.map(it=>(
+                      <tr key={it.id}>
+                        <td><TypeBadge type={it.name}/></td>
+                        <td style={{textAlign:'right'}}>
+                          <button className="icon-btn" title={t.removeType} onClick={()=>removeType(it.id)}>{Ic.trash}</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+            }
+          </div>
         </div>
-        {issueTypes.length === 0
-          ? <div className="empty-state">{Ic.list}<p>{t.noIssueTypes}</p></div>
-          : <table>
-              <thead>
-                <tr><th>{t.type}</th><th></th></tr>
-              </thead>
-              <tbody>
-                {issueTypes.map(it=>(
-                  <tr key={it.id}>
-                    <td><TypeBadge type={it.name}/></td>
-                    <td style={{textAlign:'right'}}>
-                      <button className="icon-btn" title={t.removeType} onClick={()=>removeType(it.id)}>{Ic.trash}</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-        }
+
+        <div>
+          <div className="mini-card" style={{marginBottom:20}}>
+            <div className="mini-card-title" style={{marginBottom:6}}>{t.adminDepartments}</div>
+            <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminDepartmentsSub}</p>
+            {deptErr && <div className="auth-error" style={{marginBottom:14}}>{deptErr}</div>}
+            <form onSubmit={addDept} style={{display:'flex',gap:10,alignItems:'flex-end'}}>
+              <div className="form-group" style={{flex:1,marginBottom:0}}>
+                <label>{t.department}</label>
+                <input className="form-control" placeholder={t.departmentPlaceholder} value={deptName}
+                  onChange={e=>setDeptName(e.target.value)} maxLength={50}/>
+              </div>
+              <button type="submit" className="btn btn-primary" disabled={savingDept || !deptName.trim()} style={{marginBottom:1}}>
+                {Ic.plus} {savingDept ? '…' : t.addDepartment}
+              </button>
+            </form>
+          </div>
+
+          <div className="table-card">
+            <div className="table-header">
+              <span className="table-title">{t.adminDepartments}</span>
+              <span style={{fontSize:12,color:'var(--gray-400)'}}>{departments.length}</span>
+            </div>
+            {departments.length === 0
+              ? <div className="empty-state">{Ic.list}<p>{t.noDepartments}</p></div>
+              : <table>
+                  <thead>
+                    <tr><th>{t.department}</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {departments.map(d=>(
+                      <tr key={d.id}>
+                        <td>{d.name}</td>
+                        <td style={{textAlign:'right'}}>
+                          <button className="icon-btn" title={t.removeDepartment} onClick={()=>removeDept(d.id)}>{Ic.trash}</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+            }
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -2151,6 +2286,7 @@ function App() {
   const [dept,    setDept]    = useState([]);
   const [users,   setUsers]   = useState([]);
   const [issueTypes, setIssueTypes] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [settings, setSettings] = useState(null);
   const [stats,   setStats]   = useState(null);
   const [page,    setPage]    = useState('dashboard');
@@ -2184,13 +2320,15 @@ function App() {
       apiFetch('/users', {token}),
       apiFetch(`/stats?date=${todayStr}`, {token}),
       apiFetch('/issue-types', {token}),
+      apiFetch('/departments', {token}),
       apiFetch('/settings', {token}),
-    ]).then(([aptRes, deptRes, usersRes, statsRes, typesRes, settingsRes]) => {
+    ]).then(([aptRes, deptRes, usersRes, statsRes, typesRes, deptsRes, settingsRes]) => {
       setApt((aptRes.issues || []).map(mapIssue));
       setDept((deptRes.issues || []).map(mapIssue));
       setUsers(usersRes.users || []);
       setStats(statsRes.stats);
       setIssueTypes(typesRes.issue_types || []);
+      setDepartments(deptsRes.departments || []);
       setSettings(settingsRes.settings);
     }).catch(ex => {
       if (ex.message.includes('401') || ex.message.toLowerCase().includes('token')) {
@@ -2208,7 +2346,7 @@ function App() {
 
   function logout() {
     setSession(null);
-    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setSettings(null);
+    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setSettings(null);
   }
 
   // Called when profile updates come back from API
@@ -2356,6 +2494,8 @@ function App() {
               token={token}
               issueTypes={issueTypes}
               onTypesUpdate={setIssueTypes}
+              departments={departments}
+              onDepartmentsUpdate={setDepartments}
               settings={settings}
               onSettingsUpdate={setSettings}
               setToast={setToast}
@@ -2374,10 +2514,10 @@ function App() {
         </div>
 
         {modal && (
-          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)}/>
+          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} departments={departments} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)}/>
         )}
         {editing && (
-          <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} token={token}
+          <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} departments={departments} token={token}
             onClose={()=>setEditing(null)} onSave={form=>saveEdit(form,editing.mode,editing.issue.id)}/>
         )}
         {toast && <Toast msg={toast} onDone={()=>setToast(null)}/>}
