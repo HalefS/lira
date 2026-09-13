@@ -480,6 +480,93 @@ func (m IssueModel) GetRecentDuplicates(mode, location, issueType string, window
 	return out, rows.Err()
 }
 
+// GetRecurringGroups powers the Alerts page: it finds every (mode,
+// location, type) combination with 2 or more issues logged within
+// windowHours of now, and returns each occurrence within that group —
+// including who logged it, when, and how it was resolved — so a manager
+// can spot a pattern (e.g. the same AC fault at the same apartment three
+// times this week) at a glance.
+type RecurringGroup struct {
+	Mode     string                 `json:"mode"`
+	Location string                 `json:"location"`
+	Type     string                 `json:"type"`
+	Issues   []*RecurringGroupIssue `json:"issues"`
+}
+
+type RecurringGroupIssue struct {
+	ID           int64     `json:"id"`
+	CreatedAt    time.Time `json:"created_at"`
+	Problem      string    `json:"problem"`
+	Resolution   string    `json:"resolution"`
+	Status       string    `json:"status"`
+	LoggedByName string    `json:"logged_by_name"`
+}
+
+func (m IssueModel) GetRecurringGroups(windowHours int) ([]*RecurringGroup, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	groupQuery := `
+		SELECT mode, MAX(location) AS location, type
+		FROM issues
+		WHERE created_at >= NOW() - ($1 * INTERVAL '1 hour')
+		GROUP BY mode, LOWER(TRIM(location)), type
+		HAVING COUNT(*) >= 2
+		ORDER BY MAX(created_at) DESC`
+
+	rows, err := m.DB.QueryContext(ctx, groupQuery, windowHours)
+	if err != nil {
+		return nil, err
+	}
+	type groupKey struct{ mode, location, issueType string }
+	var keys []groupKey
+	for rows.Next() {
+		var k groupKey
+		if err := rows.Scan(&k.mode, &k.location, &k.issueType); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		keys = append(keys, k)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	issueQuery := `
+		SELECT i.id, i.created_at, i.problem, i.resolution, i.status, u.name
+		FROM issues i
+		INNER JOIN users u ON i.logged_by = u.id
+		WHERE i.mode = $1 AND LOWER(TRIM(i.location)) = LOWER(TRIM($2)) AND i.type = $3
+		  AND i.created_at >= NOW() - ($4 * INTERVAL '1 hour')
+		ORDER BY i.created_at DESC`
+
+	groups := make([]*RecurringGroup, 0, len(keys))
+	for _, k := range keys {
+		irows, err := m.DB.QueryContext(ctx, issueQuery, k.mode, k.location, k.issueType, windowHours)
+		if err != nil {
+			return nil, err
+		}
+		var issues []*RecurringGroupIssue
+		for irows.Next() {
+			var gi RecurringGroupIssue
+			if err := irows.Scan(&gi.ID, &gi.CreatedAt, &gi.Problem, &gi.Resolution, &gi.Status, &gi.LoggedByName); err != nil {
+				irows.Close()
+				return nil, err
+			}
+			issues = append(issues, &gi)
+		}
+		if err := irows.Err(); err != nil {
+			irows.Close()
+			return nil, err
+		}
+		irows.Close()
+		groups = append(groups, &RecurringGroup{Mode: k.mode, Location: k.location, Type: k.issueType, Issues: issues})
+	}
+	return groups, nil
+}
+
 // ── Daily Report ──────────────────────────────────────────────────────────────
 
 type DailyReport struct {

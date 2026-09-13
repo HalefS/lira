@@ -57,6 +57,9 @@ func (app *application) routes() http.Handler {
 	// colliding with the /v1/issues/:id wildcard route above.
 	router.HandlerFunc(http.MethodGet, "/v1/issue-duplicates", app.requireAuth(app.checkDuplicateIssuesHandler))
 
+	// Alerts — currently-recurring issue groups, for the Alerts page
+	router.HandlerFunc(http.MethodGet, "/v1/alerts", app.requireAuth(app.listAlertsHandler))
+
 	// Settings — readable by any authenticated user, editable by managers only
 	router.HandlerFunc(http.MethodGet, "/v1/settings", app.requireAuth(app.getSettingsHandler))
 	router.HandlerFunc(http.MethodPatch, "/v1/settings", app.requireAuth(app.requireManager(app.updateSettingsHandler)))

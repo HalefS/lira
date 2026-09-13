@@ -266,7 +266,20 @@ thead th {
 }
 tbody td { padding: 11px 18px; border-bottom: 1px solid var(--gray-100); vertical-align: middle; }
 tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover td { background: var(--gray-50); }
+tbody tr:hover td { background: #F8FAFC; }
+
+/* ── New-row entrance + status highlight ── */
+@keyframes rowFadeSlide {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.row-enter td { animation: rowFadeSlide 200ms ease-out; }
+
+@keyframes statusHighlightPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(37,99,235,0.35); }
+  100% { box-shadow: 0 0 0 6px rgba(37,99,235,0); }
+}
+.status-highlight { animation: statusHighlightPulse 700ms ease-out; }
 
 /* ── Badges ── */
 .badge {
@@ -562,6 +575,12 @@ const T = {
     time: 'Time',
     status: 'Status',
     loggedBy: 'Logged by',
+    date: 'Date',
+    alerts: 'Alerts',
+    alertsSubtitle: 'Issue types that have happened more than once at the same location within the alert window.',
+    alertsEmpty: 'No recurring issues right now.',
+    alertsOccurrences: 'occurrences',
+    alertsWindowNote: 'Showing issues from the last',
     you: 'you',
     issues: 'Issues',
     avg: 'Avg',
@@ -580,13 +599,12 @@ const T = {
     endTime: 'End time',
     duration: 'Duration',
     invalidTimeRange: 'End time must be after start time',
-    reportedByAgent: 'Reported by (Agent)',
-    confirmedByAgent: 'Confirmed with (Agent)',
+    reportedByAgent: 'Reported by (Connecta Agent)',
+    confirmedByAgent: 'Confirmed with (Connecta Agent)',
     noAgentSelected: 'None selected',
     statusLabel: 'Status',
     statusOk: 'Ok — Resolved',
     statusPending: 'Pending',
-    loggedUnder: 'Logged under your account:',
     cancel: 'Cancel',
     saveChanges: 'Save changes',
     logIssue: 'Log issue',
@@ -694,6 +712,12 @@ const T = {
     time: 'Tempo',
     status: 'Estado',
     loggedBy: 'Registado por',
+    date: 'Data',
+    alerts: 'Alertas',
+    alertsSubtitle: 'Tipos de avaria que ocorreram mais do que uma vez no mesmo local dentro da janela de alerta.',
+    alertsEmpty: 'Sem avarias recorrentes neste momento.',
+    alertsOccurrences: 'ocorrências',
+    alertsWindowNote: 'A mostrar avarias das últimas',
     you: 'tu',
     issues: 'Avarias',
     avg: 'Méd.',
@@ -712,13 +736,12 @@ const T = {
     endTime: 'Hora de fim',
     duration: 'Duração',
     invalidTimeRange: 'A hora de fim deve ser depois da hora de início',
-    reportedByAgent: 'Reportado por (Agente)',
-    confirmedByAgent: 'Confirmado com (Agente)',
+    reportedByAgent: 'Reportado por (Agente Connecta)',
+    confirmedByAgent: 'Confirmado com (Agente Connecta)',
     noAgentSelected: 'Nenhum selecionado',
     statusLabel: 'Estado',
     statusOk: 'Ok — Resolvida',
     statusPending: 'Pendente',
-    loggedUnder: 'Registado na conta de:',
     cancel: 'Cancelar',
     saveChanges: 'Guardar alterações',
     logIssue: 'Registar avaria',
@@ -815,6 +838,7 @@ const Ic = {
   person: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>,
   upload: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 10V3M5 6l3-3 3 3"/><path d="M2 13h12"/></svg>,
   camera: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 5a1 1 0 011-1h1.5l1-2h5l1 2H13a1 1 0 011 1v7a1 1 0 01-1 1H2a1 1 0 01-1-1z"/><circle cx="8" cy="8.5" r="2.5"/></svg>,
+  bell:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2a3 3 0 00-3 3v2c0 1-.5 2-1.3 2.7A.8.8 0 004 11h8a.8.8 0 00.3-1.3C11.5 9 11 8 11 7V5a3 3 0 00-3-3z"/><path d="M6.5 13a1.5 1.5 0 003 0"/></svg>,
   report: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="1" width="12" height="14" rx="1"/><path d="M5 5h6M5 8h6M5 11h4"/></svg>,
   download: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 13h12"/></svg>,
   calendar: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="3" width="14" height="12" rx="1"/><path d="M1 7h14M5 1v4M11 1v4"/></svg>,
@@ -1255,7 +1279,7 @@ function Dashboard({ apt, dept, users, stats }) {
 }
 
 /* ════════════════ ISSUES TABLE ════════════════ */
-function IssuesTable({ issues, tableMode, currentUser, onDelete, onEdit }) {
+function IssuesTable({ issues, tableMode, currentUser, newIssueId, onDelete, onEdit }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [filter, setFilter] = useState('All');
@@ -1296,13 +1320,13 @@ function IssuesTable({ issues, tableMode, currentUser, onDelete, onEdit }) {
           </thead>
           <tbody>
             {filtered.map(issue=>(
-              <tr key={issue.id}>
+              <tr key={issue.id} className={issue.id===newIssueId ? 'row-enter' : ''}>
                 <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.apt||issue.dept}</strong></td>
                 <td><TypeBadge type={issue.type}/></td>
                 <td style={{maxWidth:150}}>{issue.problem}</td>
                 <td style={{maxWidth:190,color:'var(--gray-600)',fontSize:13}}>{issue.resolution}</td>
                 <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.time}m</td>
-                <td><span className={`badge ${issue.status==='Ok'?'badge-ok':'badge-pending'}`}>{issue.status}</span></td>
+                <td><span className={`badge ${issue.status==='Ok'?'badge-ok':'badge-pending'} ${issue.id===newIssueId ? 'status-highlight' : ''}`}>{issue.status}</span></td>
                 <td>
                   <div style={{display:'flex',alignItems:'center',gap:7}}>
                     <Avatar name={issue.loggedByName} idx={issue.loggedByIdx??0} size="sm"/>
@@ -1366,6 +1390,71 @@ function HistoryPage({ apt, dept, currentUser, onDelete, onEdit }) {
           <IssuesTable issues={deptFiltered} tableMode="dept" currentUser={currentUser} onDelete={onDelete} onEdit={onEdit}/>
         </>
       )}
+    </div>
+  );
+}
+
+/* ════════════════ ALERTS PAGE ════════════════ */
+function AlertsPage({ alerts, windowHours }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+
+  return (
+    <div>
+      <div className="table-card" style={{marginBottom:16,padding:'14px 20px'}}>
+        <p style={{fontSize:13,color:'var(--gray-400)',margin:0}}>{t.alertsSubtitle}</p>
+        {windowHours != null && (
+          <p style={{fontSize:12,color:'var(--gray-300)',margin:'6px 0 0'}}>
+            {t.alertsWindowNote} {windowHours}h.
+          </p>
+        )}
+      </div>
+
+      {!alerts || alerts.length === 0 ? (
+        <div className="empty-state">{Ic.bell}<p>{t.alertsEmpty}</p></div>
+      ) : alerts.map((group, gi) => (
+        <div className="table-card" key={gi} style={{marginBottom:16}}>
+          <div className="table-header">
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <span style={{color:'var(--amber)'}}>{Ic.bell}</span>
+              <span className="table-title">{group.location}</span>
+              <TypeBadge type={group.type}/>
+            </div>
+            <span style={{fontSize:12,color:'var(--gray-400)'}}>{group.issues.length} {t.alertsOccurrences}</span>
+          </div>
+          <table style={{tableLayout:'fixed'}}>
+            <colgroup>
+              <col style={{width:'14%'}}/>
+              <col style={{width:'20%'}}/>
+              <col style={{width:'34%'}}/>
+              <col style={{width:'12%'}}/>
+              <col style={{width:'20%'}}/>
+            </colgroup>
+            <thead>
+              <tr>
+                <th>{t.date}</th>
+                <th>{t.problem}</th>
+                <th>{t.resolution}</th>
+                <th>{t.status}</th>
+                <th>{t.loggedBy}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {group.issues.map(issue => (
+                <tr key={issue.id}>
+                  <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>
+                    {new Date(issue.created_at).toLocaleString()}
+                  </td>
+                  <td>{issue.problem || '—'}</td>
+                  <td>{issue.resolution || '—'}</td>
+                  <td><span className={`badge ${issue.status==='Ok'?'badge-ok':'badge-pending'}`}>{issue.status}</span></td>
+                  <td>{issue.logged_by_name}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
     </div>
   );
 }
@@ -2387,6 +2476,8 @@ function App() {
   const [departments, setDepartments] = useState([]);
   const [connectaAgents, setConnectaAgents] = useState([]);
   const [settings, setSettings] = useState(null);
+  const [alerts, setAlerts] = useState([]);
+  const [alertsWindowHours, setAlertsWindowHours] = useState(null);
   const typeColorMap = useMemo(
     () => Object.fromEntries(issueTypes.map(it => [it.name, it.color])),
     [issueTypes]
@@ -2396,6 +2487,7 @@ function App() {
   const [modal,   setModal]   = useState(null);
   const [editing, setEditing] = useState(null);
   const [toast,   setToast]   = useState(null);
+  const [newIssueId, setNewIssueId] = useState(null);
   const [apiErr,  setApiErr]  = useState('');
 
   const t     = T[lang];
@@ -2426,7 +2518,8 @@ function App() {
       apiFetch('/departments', {token}),
       apiFetch('/connecta-agents', {token}),
       apiFetch('/settings', {token}),
-    ]).then(([aptRes, deptRes, usersRes, statsRes, typesRes, deptsRes, agentsRes, settingsRes]) => {
+      apiFetch('/alerts', {token}),
+    ]).then(([aptRes, deptRes, usersRes, statsRes, typesRes, deptsRes, agentsRes, settingsRes, alertsRes]) => {
       setApt((aptRes.issues || []).map(mapIssue));
       setDept((deptRes.issues || []).map(mapIssue));
       setUsers(usersRes.users || []);
@@ -2435,6 +2528,8 @@ function App() {
       setDepartments(deptsRes.departments || []);
       setConnectaAgents(agentsRes.connecta_agents || []);
       setSettings(settingsRes.settings);
+      setAlerts(alertsRes.alerts || []);
+      setAlertsWindowHours(alertsRes.window_hours ?? null);
     }).catch(ex => {
       if (ex.message.includes('401') || ex.message.toLowerCase().includes('token')) {
         setSession(null); // token expired
@@ -2451,7 +2546,7 @@ function App() {
 
   function logout() {
     setSession(null);
-    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setSettings(null);
+    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setSettings(null); setAlerts([]); setAlertsWindowHours(null);
   }
 
   // Called when profile updates come back from API
@@ -2479,6 +2574,10 @@ function App() {
       const issue = mapIssue(res.issue);
       if (mode==='apt') setApt(p=>[issue,...p]);
       else              setDept(p=>[issue,...p]);
+      // Briefly flag the new row so IssuesTable can animate it in and
+      // pulse its status indicator, then clear the flag once that's done.
+      setNewIssueId(issue.id);
+      setTimeout(() => setNewIssueId(id => id===issue.id ? null : id), 1200);
       // Refresh stats
       const todayStr = new Date().toISOString().slice(0,10);
       apiFetch(`/stats?date=${todayStr}`, {token}).then(r=>setStats(r.stats)).catch(()=>{});
@@ -2533,6 +2632,7 @@ function App() {
     {id:'apt',       label:t.aptIssues,  icon:Ic.list },
     {id:'dept',      label:t.deptIssues, icon:Ic.edit },
     {id:'history',   label:t.history,    icon:Ic.clock},
+    {id:'alerts',    label:t.alerts,     icon:Ic.bell },
     {id:'team',      label:t.team,       icon:Ic.users},
     {id:'reports',   label:'Reports',    icon:Ic.report},
     ...(me.role === 'manager' ? [{id:'admin', label:t.admin, icon:Ic.shield}] : []),
@@ -2595,9 +2695,10 @@ function App() {
 
           <div className="content">
             {page==='dashboard' && <Dashboard apt={apt} dept={dept} users={users} stats={stats}/>}
-            {page==='apt'       && <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
-            {page==='dept'      && <IssuesTable issues={dept} tableMode="dept" currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='apt'       && <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} newIssueId={newIssueId} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='dept'      && <IssuesTable issues={dept} tableMode="dept" currentUser={me} newIssueId={newIssueId} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='history'   && <HistoryPage apt={apt} dept={dept} currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='alerts'    && <AlertsPage alerts={alerts} windowHours={alertsWindowHours}/>}
             {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}/>}
             {page==='reports' && <ReportsPage token={token}/>}
             {page==='admin' && me.role==='manager' && <AdminPage
