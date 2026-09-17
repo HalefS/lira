@@ -62,6 +62,9 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPatch, "/v1/alerts/:id/solve", app.requireAuth(app.requireManager(app.solveAlertHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/alerts/:id", app.requireAuth(app.requireManager(app.deleteAlertHandler)))
 
+	// Analytics — week/month comparisons, for the Analytics page
+	router.HandlerFunc(http.MethodGet, "/v1/analytics", app.requireAuth(app.getAnalyticsHandler))
+
 	// Settings — readable by any authenticated user, editable by managers only
 	router.HandlerFunc(http.MethodGet, "/v1/settings", app.requireAuth(app.getSettingsHandler))
 	router.HandlerFunc(http.MethodPatch, "/v1/settings", app.requireAuth(app.requireManager(app.updateSettingsHandler)))

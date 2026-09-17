@@ -23,6 +23,7 @@ type Models struct {
 	ConnectaAgents  ConnectaAgentModel
 	Settings        SettingsModel
 	RecurringAlerts RecurringAlertModel
+	Analytics       AnalyticsModel
 }
 
 func NewModels(db *sql.DB) Models {
@@ -35,5 +36,6 @@ func NewModels(db *sql.DB) Models {
 		ConnectaAgents:  ConnectaAgentModel{DB: db},
 		Settings:        SettingsModel{DB: db},
 		RecurringAlerts: RecurringAlertModel{DB: db},
+		Analytics:       AnalyticsModel{DB: db},
 	}
 }

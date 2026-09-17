@@ -330,6 +330,7 @@ tbody tr:hover td { background: #F8FAFC; }
 /* ── Bottom grid ── */
 .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
 .mini-card { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: 18px 20px; }
 .mini-card-title { font-size: 13px; font-weight: 600; margin-bottom: 14px; }
 .bar-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--gray-100); }
@@ -599,6 +600,29 @@ const T = {
     confirmSolved: 'Confirm solved',
     alertSolved: 'Alert marked as solved',
     alertDeleted: 'Alert deleted',
+    analytics: 'Analytics',
+    analyticsSubtitle: 'How things are trending compared to the previous period.',
+    rangeWeek: 'Week',
+    rangeMonth: 'Month',
+    vsPrevious: 'vs previous period',
+    totalIssuesMetric: 'Total issues',
+    resolvedMetric: 'Resolved',
+    pendingMetric: 'Pending',
+    resolutionRateMetric: 'Resolution rate',
+    avgTimeMetric: 'Avg. resolution time',
+    fastestTimeMetric: 'Fastest fix',
+    recurringAlertsMetric: 'Recurring alerts opened',
+    bestAvgTime: 'Best average time',
+    teamPerformance: 'Team performance',
+    issuesLogged: 'Issues logged',
+    typeBreakdown: 'Issue type breakdown',
+    thisPeriod: 'This period',
+    previousPeriod: 'Previous period',
+    thingsToWatch: 'Things to watch',
+    allGood: 'No red flags — things are trending well.',
+    analyticsLoading: 'Loading analytics…',
+    analyticsNoData: 'Not enough data yet for this period.',
+    bestLabel: 'Best',
     you: 'you',
     issues: 'Issues',
     avg: 'Avg',
@@ -746,6 +770,29 @@ const T = {
     confirmSolved: 'Confirmar resolução',
     alertSolved: 'Alerta marcado como resolvido',
     alertDeleted: 'Alerta eliminado',
+    analytics: 'Análises',
+    analyticsSubtitle: 'Como as coisas estão a evoluir em comparação com o período anterior.',
+    rangeWeek: 'Semana',
+    rangeMonth: 'Mês',
+    vsPrevious: 'vs período anterior',
+    totalIssuesMetric: 'Total de avarias',
+    resolvedMetric: 'Resolvidas',
+    pendingMetric: 'Pendentes',
+    resolutionRateMetric: 'Taxa de resolução',
+    avgTimeMetric: 'Tempo médio de resolução',
+    fastestTimeMetric: 'Resolução mais rápida',
+    recurringAlertsMetric: 'Alertas recorrentes abertos',
+    bestAvgTime: 'Melhor tempo médio',
+    teamPerformance: 'Desempenho da equipa',
+    issuesLogged: 'Avarias registadas',
+    typeBreakdown: 'Avarias por tipo',
+    thisPeriod: 'Este período',
+    previousPeriod: 'Período anterior',
+    thingsToWatch: 'A ter em atenção',
+    allGood: 'Sem sinais de alerta — tudo a correr bem.',
+    analyticsLoading: 'A carregar análises…',
+    analyticsNoData: 'Ainda não há dados suficientes para este período.',
+    bestLabel: 'Melhor',
     you: 'tu',
     issues: 'Avarias',
     avg: 'Méd.',
@@ -867,6 +914,7 @@ const Ic = {
   upload: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 10V3M5 6l3-3 3 3"/><path d="M2 13h12"/></svg>,
   camera: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 5a1 1 0 011-1h1.5l1-2h5l1 2H13a1 1 0 011 1v7a1 1 0 01-1 1H2a1 1 0 01-1-1z"/><circle cx="8" cy="8.5" r="2.5"/></svg>,
   bell:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2a3 3 0 00-3 3v2c0 1-.5 2-1.3 2.7A.8.8 0 004 11h8a.8.8 0 00.3-1.3C11.5 9 11 8 11 7V5a3 3 0 00-3-3z"/><path d="M6.5 13a1.5 1.5 0 003 0"/></svg>,
+  trending: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 11l4-4 2.5 2.5L14 4"/><path d="M10 4h4v4"/></svg>,
   report: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="1" width="12" height="14" rx="1"/><path d="M5 5h6M5 8h6M5 11h4"/></svg>,
   download: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 13h12"/></svg>,
   calendar: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="3" width="14" height="12" rx="1"/><path d="M1 7h14M5 1v4M11 1v4"/></svg>,
@@ -1556,6 +1604,188 @@ function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
           </table>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* Formats a current-vs-previous change: {pct, dir, color}. goodDirection
+   is 'up', 'down', or 'neutral' — determines whether an increase should be
+   shown as good (green) or bad (red). */
+function analyticsChange(current, previous, goodDirection) {
+  if (previous === 0) {
+    if (current === 0) return null;
+    const dir = current > 0 ? 'up' : 'down';
+    return { pct: null, dir, color: analyticsChangeColor(dir, goodDirection) };
+  }
+  const pct = ((current - previous) / previous) * 100;
+  if (Math.abs(pct) < 0.5) return { pct: 0, dir: 'flat', color: 'var(--gray-400)' };
+  const dir = pct > 0 ? 'up' : 'down';
+  return { pct, dir, color: analyticsChangeColor(dir, goodDirection) };
+}
+function analyticsChangeColor(dir, goodDirection) {
+  if (goodDirection === 'neutral') return 'var(--gray-400)';
+  const isGood = (dir === 'up' && goodDirection === 'up') || (dir === 'down' && goodDirection === 'down');
+  return isGood ? 'var(--green)' : 'var(--red)';
+}
+
+function AnalyticsMetricCard({ label, current, previous, suffix, decimals, goodDirection, t }) {
+  const change = analyticsChange(current, previous, goodDirection);
+  return (
+    <div className="stat-card">
+      <div className="stat-label">{label}</div>
+      <div className="stat-value">{current.toFixed(decimals||0)}{suffix||''}</div>
+      <div className="stat-sub">
+        {change && change.dir !== 'flat' && (
+          <span style={{color:change.color,fontWeight:600}}>
+            {change.dir==='up' ? '▲' : '▼'} {change.pct!=null ? Math.abs(change.pct).toFixed(0)+'%' : ''}
+          </span>
+        )}
+        <span style={{color:'var(--gray-400)'}}>{t.vsPrevious}</span>
+      </div>
+    </div>
+  );
+}
+
+function AnalyticsPage({ token, alertsPendingCount }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const [range, setRange] = useState('week');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    apiFetch(`/analytics?range=${range}`, {token})
+      .then(res => { if (!cancelled) setData(res.analytics); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [range, token]);
+
+  const bestTech = data && data.best_technician_id != null
+    ? data.by_technician.find(tech => tech.user_id === data.best_technician_id)
+    : null;
+
+  const techByAvg = data ? [...data.by_technician].filter(x=>x.resolved>0).sort((a,b)=>a.avg_time_minutes-b.avg_time_minutes) : [];
+
+  const watchItems = [];
+  if (data) {
+    const pendingChange = analyticsChange(data.pending.current, data.pending.previous, 'down');
+    if (pendingChange && pendingChange.dir==='up') {
+      watchItems.push(lang==='pt'
+        ? `A pendência subiu de ${data.pending.previous} para ${data.pending.current} avarias.`
+        : `Pending backlog rose from ${data.pending.previous} to ${data.pending.current} issues.`);
+    }
+    const avgChange = analyticsChange(data.avg_time_minutes.current, data.avg_time_minutes.previous, 'down');
+    if (avgChange && avgChange.dir==='up') {
+      watchItems.push(lang==='pt'
+        ? `O tempo médio de resolução aumentou ${Math.abs(avgChange.pct).toFixed(0)}%.`
+        : `Average resolution time increased ${Math.abs(avgChange.pct).toFixed(0)}%.`);
+    }
+    const rateChange = analyticsChange(data.resolution_rate.current, data.resolution_rate.previous, 'up');
+    if (rateChange && rateChange.dir==='down') {
+      watchItems.push(lang==='pt'
+        ? `A taxa de resolução desceu de ${data.resolution_rate.previous}% para ${data.resolution_rate.current}%.`
+        : `Resolution rate dropped from ${data.resolution_rate.previous}% to ${data.resolution_rate.current}%.`);
+    }
+    if (alertsPendingCount > 0) {
+      watchItems.push(lang==='pt'
+        ? `${alertsPendingCount} avaria(s) recorrente(s) ainda por resolver.`
+        : `${alertsPendingCount} recurring issue${alertsPendingCount===1?'':'s'} still unresolved.`);
+    }
+  }
+
+  return (
+    <div>
+      <div className="table-card" style={{marginBottom:16,padding:'14px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}}>
+        <p style={{fontSize:13,color:'var(--gray-400)',margin:0}}>{t.analyticsSubtitle}</p>
+        <div style={{display:'flex',gap:8}}>
+          <button className={`chip ${range==='week'?'active':''}`} onClick={()=>setRange('week')}>{t.rangeWeek}</button>
+          <button className={`chip ${range==='month'?'active':''}`} onClick={()=>setRange('month')}>{t.rangeMonth}</button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="empty-state"><p>{t.analyticsLoading}</p></div>
+      ) : !data || data.total_issues.current + data.total_issues.previous === 0 ? (
+        <div className="empty-state">{Ic.trending}<p>{t.analyticsNoData}</p></div>
+      ) : (
+        <>
+          <div className="analytics-grid">
+            <AnalyticsMetricCard t={t} label={t.totalIssuesMetric} current={data.total_issues.current} previous={data.total_issues.previous} goodDirection="neutral"/>
+            <AnalyticsMetricCard t={t} label={t.resolvedMetric} current={data.resolved.current} previous={data.resolved.previous} goodDirection="up"/>
+            <AnalyticsMetricCard t={t} label={t.pendingMetric} current={data.pending.current} previous={data.pending.previous} goodDirection="down"/>
+            <AnalyticsMetricCard t={t} label={t.resolutionRateMetric} current={data.resolution_rate.current} previous={data.resolution_rate.previous} suffix="%" decimals={0} goodDirection="up"/>
+            <AnalyticsMetricCard t={t} label={t.avgTimeMetric} current={data.avg_time_minutes.current} previous={data.avg_time_minutes.previous} suffix="m" decimals={1} goodDirection="down"/>
+            <AnalyticsMetricCard t={t} label={t.fastestTimeMetric} current={data.fastest_time_minutes.current} previous={data.fastest_time_minutes.previous} suffix="m" decimals={0} goodDirection="down"/>
+            <AnalyticsMetricCard t={t} label={t.recurringAlertsMetric} current={data.recurring_alerts_opened.current} previous={data.recurring_alerts_opened.previous} goodDirection="down"/>
+          </div>
+
+          {bestTech && (
+            <div className="mini-card" style={{marginBottom:20,display:'flex',alignItems:'center',gap:14}}>
+              <span style={{color:'var(--green)'}}>{Ic.check}</span>
+              <div>
+                <div className="mini-card-title" style={{marginBottom:2}}>{t.bestAvgTime}: {bestTech.name}</div>
+                <div style={{fontSize:13,color:'var(--gray-400)'}}>{bestTech.avg_time_minutes}m {t.avgTimeMetric.toLowerCase()} · {bestTech.resolved} {t.resolvedMetric.toLowerCase()}</div>
+              </div>
+            </div>
+          )}
+
+          {watchItems.length > 0 ? (
+            <div className="mini-card" style={{marginBottom:20,background:'var(--amber-light)',border:'none'}}>
+              <div className="mini-card-title" style={{marginBottom:8,color:'var(--amber)'}}>{t.thingsToWatch}</div>
+              <ul style={{margin:0,paddingLeft:18,fontSize:13,color:'var(--gray-900)'}}>
+                {watchItems.map((w,i)=><li key={i} style={{marginBottom:4}}>{w}</li>)}
+              </ul>
+            </div>
+          ) : (
+            <div className="mini-card" style={{marginBottom:20,background:'var(--green-light)',border:'none'}}>
+              <div style={{fontSize:13,color:'var(--green)',fontWeight:500}}>✓ {t.allGood}</div>
+            </div>
+          )}
+
+          <div className="admin-grid">
+            <div className="table-card">
+              <div className="table-header"><span className="table-title">{t.teamPerformance}</span></div>
+              <table>
+                <thead><tr><th>{t.loggedBy}</th><th>{t.issuesLogged}</th><th>{t.resolvedMetric}</th><th>{t.avgTimeMetric}</th></tr></thead>
+                <tbody>
+                  {techByAvg.map(tech=>(
+                    <tr key={tech.user_id}>
+                      <td>
+                        {tech.name}
+                        {data.best_technician_id===tech.user_id && (
+                          <span className="badge badge-ok" style={{marginLeft:8,fontSize:10}}>{t.bestLabel}</span>
+                        )}
+                      </td>
+                      <td>{tech.issues_logged}</td>
+                      <td>{tech.resolved}</td>
+                      <td>{tech.avg_time_minutes}m</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="table-card">
+              <div className="table-header"><span className="table-title">{t.typeBreakdown}</span></div>
+              <table>
+                <thead><tr><th>{t.type}</th><th>{t.thisPeriod}</th><th>{t.previousPeriod}</th></tr></thead>
+                <tbody>
+                  {data.by_type.map(bt=>(
+                    <tr key={bt.type}>
+                      <td><TypeBadge type={bt.type}/></td>
+                      <td>{bt.current}</td>
+                      <td style={{color:'var(--gray-400)'}}>{bt.previous}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -2733,6 +2963,7 @@ function App() {
     {id:'dept',      label:t.deptIssues, icon:Ic.edit },
     {id:'history',   label:t.history,    icon:Ic.clock},
     {id:'alerts',    label:t.alerts,     icon:Ic.bell },
+    {id:'analytics', label:t.analytics,  icon:Ic.trending},
     {id:'team',      label:t.team,       icon:Ic.users},
     {id:'reports',   label:'Reports',    icon:Ic.report},
     ...(me.role === 'manager' ? [{id:'admin', label:t.admin, icon:Ic.shield}] : []),
@@ -2805,6 +3036,7 @@ function App() {
             {page==='dept'      && <IssuesTable issues={dept} tableMode="dept" currentUser={me} newIssueId={newIssueId} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='history'   && <HistoryPage apt={apt} dept={dept} currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='alerts'    && <AlertsPage alerts={alerts} currentUser={me} token={token} onAlertsUpdate={setAlerts} setToast={setToast}/>}
+            {page==='analytics' && <AnalyticsPage token={token} alertsPendingCount={alertsPendingCount}/>}
             {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}/>}
             {page==='reports' && <ReportsPage token={token}/>}
             {page==='admin' && me.role==='manager' && <AdminPage
