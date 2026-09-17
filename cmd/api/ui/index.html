@@ -182,6 +182,14 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
 .nav-item:hover { background: var(--gray-100); color: var(--gray-900); }
 .nav-item.active { background: var(--blue-light); color: var(--blue); font-weight: 500; }
 .nav-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+.nav-icon-wrap { position: relative; display: inline-flex; }
+.nav-badge {
+  position: absolute; top: -6px; right: -8px;
+  background: var(--red); color: #fff;
+  font-size: 10px; font-weight: 600; line-height: 1;
+  min-width: 15px; height: 15px; padding: 0 4px;
+  border-radius: 999px; display: flex; align-items: center; justify-content: center;
+}
 .sidebar-footer { margin-top: auto; padding: 10px 10px 12px; border-top: 1px solid var(--gray-200); }
 .sidebar-user { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 2px; }
 .sidebar-user-name { font-size: 13px; font-weight: 500; }
@@ -580,7 +588,17 @@ const T = {
     alertsSubtitle: 'Issue types that have happened more than once at the same location within the alert window.',
     alertsEmpty: 'No recurring issues right now.',
     alertsOccurrences: 'occurrences',
-    alertsWindowNote: 'Showing issues from the last',
+    alertsPending: 'Pending',
+    alertsSolved: 'Solved',
+    alertsSolvedEmpty: 'No solved recurring issues yet.',
+    markSolved: 'Mark as solved',
+    deleteAlert: 'Delete alert',
+    finalSolution: 'Final solution',
+    finalSolutionPlaceholder: 'What was done to permanently fix this?',
+    solvedBy: 'Solved by',
+    confirmSolved: 'Confirm solved',
+    alertSolved: 'Alert marked as solved',
+    alertDeleted: 'Alert deleted',
     you: 'you',
     issues: 'Issues',
     avg: 'Avg',
@@ -717,7 +735,17 @@ const T = {
     alertsSubtitle: 'Tipos de avaria que ocorreram mais do que uma vez no mesmo local dentro da janela de alerta.',
     alertsEmpty: 'Sem avarias recorrentes neste momento.',
     alertsOccurrences: 'ocorrências',
-    alertsWindowNote: 'A mostrar avarias das últimas',
+    alertsPending: 'Pendentes',
+    alertsSolved: 'Resolvidas',
+    alertsSolvedEmpty: 'Ainda não há avarias recorrentes resolvidas.',
+    markSolved: 'Marcar como resolvida',
+    deleteAlert: 'Eliminar alerta',
+    finalSolution: 'Solução final',
+    finalSolutionPlaceholder: 'O que foi feito para resolver definitivamente?',
+    solvedBy: 'Resolvido por',
+    confirmSolved: 'Confirmar resolução',
+    alertSolved: 'Alerta marcado como resolvido',
+    alertDeleted: 'Alerta eliminado',
     you: 'tu',
     issues: 'Avarias',
     avg: 'Méd.',
@@ -1395,33 +1423,106 @@ function HistoryPage({ apt, dept, currentUser, onDelete, onEdit }) {
 }
 
 /* ════════════════ ALERTS PAGE ════════════════ */
-function AlertsPage({ alerts, windowHours }) {
+function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
+  const isManager = currentUser.role === 'manager';
+  const [filter, setFilter] = useState('pending');
+  const [solvingId, setSolvingId] = useState(null);
+  const [solutionText, setSolutionText] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const list = alerts || [];
+  const pendingCount = list.filter(a => a.status === 'pending').length;
+  const solvedCount = list.filter(a => a.status === 'solved').length;
+  const filtered = list.filter(a => a.status === filter);
+
+  async function submitSolve(id) {
+    const trimmed = solutionText.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    try {
+      const res = await apiFetch(`/alerts/${id}/solve`, {method:'PATCH', body:{solution:trimmed}, token});
+      onAlertsUpdate(prev => prev.map(a => a.id===id ? {...a, ...res.alert} : a));
+      setSolvingId(null);
+      setSolutionText('');
+      setToast(t.alertSolved);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+    finally { setSaving(false); }
+  }
+
+  async function removeAlert(id) {
+    try {
+      await apiFetch(`/alerts/${id}`, {method:'DELETE', token});
+      onAlertsUpdate(prev => prev.filter(a => a.id !== id));
+      setToast(t.alertDeleted);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
 
   return (
     <div>
       <div className="table-card" style={{marginBottom:16,padding:'14px 20px'}}>
         <p style={{fontSize:13,color:'var(--gray-400)',margin:0}}>{t.alertsSubtitle}</p>
-        {windowHours != null && (
-          <p style={{fontSize:12,color:'var(--gray-300)',margin:'6px 0 0'}}>
-            {t.alertsWindowNote} {windowHours}h.
-          </p>
-        )}
       </div>
 
-      {!alerts || alerts.length === 0 ? (
-        <div className="empty-state">{Ic.bell}<p>{t.alertsEmpty}</p></div>
-      ) : alerts.map((group, gi) => (
-        <div className="table-card" key={gi} style={{marginBottom:16}}>
+      <div style={{display:'flex',gap:8,marginBottom:16}}>
+        <button className={`chip ${filter==='pending'?'active':''}`} onClick={()=>setFilter('pending')}>
+          {t.alertsPending} ({pendingCount})
+        </button>
+        <button className={`chip ${filter==='solved'?'active':''}`} onClick={()=>setFilter('solved')}>
+          {t.alertsSolved} ({solvedCount})
+        </button>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="empty-state">{Ic.bell}<p>{filter==='pending' ? t.alertsEmpty : t.alertsSolvedEmpty}</p></div>
+      ) : filtered.map(alert => (
+        <div className="table-card" key={alert.id} style={{marginBottom:16}}>
           <div className="table-header">
             <div style={{display:'flex',alignItems:'center',gap:10}}>
-              <span style={{color:'var(--amber)'}}>{Ic.bell}</span>
-              <span className="table-title">{group.location}</span>
-              <TypeBadge type={group.type}/>
+              <span style={{color: alert.status==='solved' ? 'var(--green)' : 'var(--amber)'}}>{Ic.bell}</span>
+              <span className="table-title">{alert.location}</span>
+              <TypeBadge type={alert.type}/>
             </div>
-            <span style={{fontSize:12,color:'var(--gray-400)'}}>{group.issues.length} {t.alertsOccurrences}</span>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <span style={{fontSize:12,color:'var(--gray-400)'}}>{alert.issues.length} {t.alertsOccurrences}</span>
+              {isManager && alert.status==='pending' && solvingId!==alert.id && (
+                <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12}}
+                  onClick={()=>{setSolvingId(alert.id); setSolutionText('');}}>
+                  {t.markSolved}
+                </button>
+              )}
+              {isManager && (
+                <button className="icon-btn" title={t.deleteAlert} onClick={()=>removeAlert(alert.id)}>{Ic.trash}</button>
+              )}
+            </div>
           </div>
+
+          {alert.status === 'solved' && (
+            <div style={{padding:'12px 20px',background:'var(--green-light)',borderBottom:'1px solid var(--gray-200)'}}>
+              <div style={{fontSize:11,fontWeight:600,color:'var(--green)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:4}}>{t.finalSolution}</div>
+              <div style={{fontSize:13,color:'var(--gray-900)'}}>{alert.solution}</div>
+              <div style={{fontSize:11.5,color:'var(--gray-400)',marginTop:6}}>
+                {t.solvedBy} <strong>{alert.solved_by_name}</strong> · {new Date(alert.solved_at).toLocaleString()}
+              </div>
+            </div>
+          )}
+
+          {solvingId === alert.id && (
+            <div style={{padding:'14px 20px',background:'var(--gray-50)',borderBottom:'1px solid var(--gray-200)'}}>
+              <label style={{fontSize:11,fontWeight:600,color:'var(--gray-600)',textTransform:'uppercase',letterSpacing:'0.07em'}}>{t.finalSolution}</label>
+              <textarea className="form-control" rows={2} style={{marginTop:6,marginBottom:10,resize:'vertical'}}
+                value={solutionText} onChange={e=>setSolutionText(e.target.value)}
+                placeholder={t.finalSolutionPlaceholder}/>
+              <div style={{display:'flex',gap:8}}>
+                <button className="btn btn-ghost" style={{padding:'6px 14px',fontSize:12.5}} onClick={()=>setSolvingId(null)}>{t.cancel}</button>
+                <button className="btn btn-primary" style={{padding:'6px 14px',fontSize:12.5}} disabled={saving || !solutionText.trim()} onClick={()=>submitSolve(alert.id)}>
+                  {saving ? '…' : t.confirmSolved}
+                </button>
+              </div>
+            </div>
+          )}
+
           <table style={{tableLayout:'fixed'}}>
             <colgroup>
               <col style={{width:'14%'}}/>
@@ -1440,7 +1541,7 @@ function AlertsPage({ alerts, windowHours }) {
               </tr>
             </thead>
             <tbody>
-              {group.issues.map(issue => (
+              {alert.issues.map(issue => (
                 <tr key={issue.id}>
                   <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>
                     {new Date(issue.created_at).toLocaleString()}
@@ -2477,7 +2578,7 @@ function App() {
   const [connectaAgents, setConnectaAgents] = useState([]);
   const [settings, setSettings] = useState(null);
   const [alerts, setAlerts] = useState([]);
-  const [alertsWindowHours, setAlertsWindowHours] = useState(null);
+  const alertsPendingCount = useMemo(() => alerts.filter(a => a.status === 'pending').length, [alerts]);
   const typeColorMap = useMemo(
     () => Object.fromEntries(issueTypes.map(it => [it.name, it.color])),
     [issueTypes]
@@ -2529,7 +2630,6 @@ function App() {
       setConnectaAgents(agentsRes.connecta_agents || []);
       setSettings(settingsRes.settings);
       setAlerts(alertsRes.alerts || []);
-      setAlertsWindowHours(alertsRes.window_hours ?? null);
     }).catch(ex => {
       if (ex.message.includes('401') || ex.message.toLowerCase().includes('token')) {
         setSession(null); // token expired
@@ -2546,7 +2646,7 @@ function App() {
 
   function logout() {
     setSession(null);
-    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setSettings(null); setAlerts([]); setAlertsWindowHours(null);
+    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setSettings(null); setAlerts([]);
   }
 
   // Called when profile updates come back from API
@@ -2652,7 +2752,13 @@ function App() {
             <div className="sidebar-section-label">{t.menu}</div>
             {nav.map(n=>(
               <button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>setPage(n.id)}>
-                {n.icon}<span>{n.label}</span>
+                {n.id==='alerts' && alertsPendingCount > 0 ? (
+                  <span className="nav-icon-wrap">
+                    {n.icon}
+                    <span className="nav-badge">{alertsPendingCount > 99 ? '99+' : alertsPendingCount}</span>
+                  </span>
+                ) : n.icon}
+                <span>{n.label}</span>
               </button>
             ))}
           </div>
@@ -2698,7 +2804,7 @@ function App() {
             {page==='apt'       && <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} newIssueId={newIssueId} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='dept'      && <IssuesTable issues={dept} tableMode="dept" currentUser={me} newIssueId={newIssueId} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='history'   && <HistoryPage apt={apt} dept={dept} currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
-            {page==='alerts'    && <AlertsPage alerts={alerts} windowHours={alertsWindowHours}/>}
+            {page==='alerts'    && <AlertsPage alerts={alerts} currentUser={me} token={token} onAlertsUpdate={setAlerts} setToast={setToast}/>}
             {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}/>}
             {page==='reports' && <ReportsPage token={token}/>}
             {page==='admin' && me.role==='manager' && <AdminPage

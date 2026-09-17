@@ -59,6 +59,8 @@ func (app *application) routes() http.Handler {
 
 	// Alerts — currently-recurring issue groups, for the Alerts page
 	router.HandlerFunc(http.MethodGet, "/v1/alerts", app.requireAuth(app.listAlertsHandler))
+	router.HandlerFunc(http.MethodPatch, "/v1/alerts/:id/solve", app.requireAuth(app.requireManager(app.solveAlertHandler)))
+	router.HandlerFunc(http.MethodDelete, "/v1/alerts/:id", app.requireAuth(app.requireManager(app.deleteAlertHandler)))
 
 	// Settings — readable by any authenticated user, editable by managers only
 	router.HandlerFunc(http.MethodGet, "/v1/settings", app.requireAuth(app.getSettingsHandler))
