@@ -72,6 +72,7 @@ func (app *application) routes() http.Handler {
 	// Issue types — list for all authenticated users; mutate for managers only
 	router.HandlerFunc(http.MethodGet, "/v1/issue-types", app.requireAuth(app.listIssueTypesHandler))
 	router.HandlerFunc(http.MethodPost, "/v1/issue-types", app.requireAuth(app.requireManager(app.createIssueTypeHandler)))
+	router.HandlerFunc(http.MethodPatch, "/v1/issue-types/:id/color", app.requireAuth(app.requireManager(app.updateIssueTypeColorHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/issue-types/:id", app.requireAuth(app.requireManager(app.deleteIssueTypeHandler)))
 
 	// Departments — list for all authenticated users; mutate for managers only

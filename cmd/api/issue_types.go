@@ -65,6 +65,44 @@ func (app *application) createIssueTypeHandler(w http.ResponseWriter, r *http.Re
 	app.writeJSON(w, http.StatusCreated, envelope{"issue_type": it}, nil)
 }
 
+// updateIssueTypeColorHandler lets a manager permanently override an issue
+// type's color, picked via a native color-picker input on the admin panel.
+func (app *application) updateIssueTypeColorHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := app.readIDParam(r)
+	if err != nil {
+		app.notFoundResponse(w, r)
+		return
+	}
+
+	var input struct {
+		Color string `json:"color"`
+	}
+	if err := app.readJSON(w, r, &input); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	v := validator.New()
+	data.ValidateColorHex(v, "color", input.Color)
+	if !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	it, err := app.models.IssueTypes.UpdateColor(id, input.Color)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	app.writeJSON(w, http.StatusOK, envelope{"issue_type": it}, nil)
+}
+
 func (app *application) deleteIssueTypeHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := app.readIDParam(r)
 	if err != nil {

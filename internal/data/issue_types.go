@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,15 +25,25 @@ func ValidateIssueType(v *validator.Validator, it *IssueType) {
 	v.Check(len(name) <= 50, "name", "must not be more than 50 characters")
 }
 
-// issueTypeColorPalette is the fixed, ordered set of colors an issue type
-// can be assigned. Kept deliberately larger than any realistic number of
-// issue types so uniqueness holds in practice.
+var hexColorPattern = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
+
+// ValidateColorHex checks a "#RRGGBB" hex color string, matching exactly
+// what a native <input type="color"> element produces.
+func ValidateColorHex(v *validator.Validator, field, value string) {
+	v.Check(hexColorPattern.MatchString(value), field, "must be a hex color in #RRGGBB format")
+}
+
+// issueTypeColorPalette is the fixed, ordered set of colors automatically
+// handed out to a newly created issue type. Kept deliberately larger than
+// any realistic number of issue types so uniqueness holds in practice.
+// A manager can always override any type's color afterwards via the color
+// picker in the admin panel, which stores whatever hex value they choose.
 var issueTypeColorPalette = []string{
-	"badge-door", "badge-internet", "badge-hardware", "badge-violet",
-	"badge-sky", "badge-rose", "badge-slate", "badge-orange",
-	"badge-fuchsia", "badge-red", "badge-yellow", "badge-lime",
-	"badge-emerald", "badge-cyan", "badge-blue", "badge-purple",
-	"badge-pink", "badge-brown",
+	"#3730A3", "#1D9E75", "#D88A18", "#6B21A8",
+	"#075985", "#9F1239", "#334155", "#9A3412",
+	"#86198F", "#991B1B", "#854D0E", "#4D7C0F",
+	"#065F46", "#155E75", "#1E40AF", "#5B21B6",
+	"#BE185D", "#78502B",
 }
 
 type IssueTypeModel struct {
@@ -145,6 +156,35 @@ func (m IssueTypeModel) GetByName(name string) (*IssueType, error) {
 	defer cancel()
 
 	err := m.DB.QueryRowContext(ctx, query, strings.TrimSpace(name)).Scan(
+		&it.ID, &it.CreatedAt, &it.Name, &it.Color, &createdBy,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrRecordNotFound
+		}
+		return nil, err
+	}
+	if createdBy.Valid {
+		it.CreatedBy = &createdBy.Int64
+	}
+	return &it, nil
+}
+
+// UpdateColor sets a specific issue type's color to a manager-chosen hex
+// value, permanently overriding whatever it was auto-assigned at creation.
+func (m IssueTypeModel) UpdateColor(id int64, hex string) (*IssueType, error) {
+	query := `
+		UPDATE issue_types
+		SET color = $1
+		WHERE id = $2
+		RETURNING id, created_at, name, color, created_by`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	var it IssueType
+	var createdBy sql.NullInt64
+	err := m.DB.QueryRowContext(ctx, query, hex, id).Scan(
 		&it.ID, &it.CreatedAt, &it.Name, &it.Color, &createdBy,
 	)
 	if err != nil {
