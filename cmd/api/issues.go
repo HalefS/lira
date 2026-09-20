@@ -69,6 +69,22 @@ func (app *application) checkDuplicateIssuesHandler(w http.ResponseWriter, r *ht
 	}, nil)
 }
 
+// syncConsumable keeps a consumable record in lockstep with the issue's
+// toggle state: on when consumableUsed is true and the issue's (canonical)
+// type has an associated item, off (deleted) otherwise. A nil
+// consumableUsed means the field wasn't part of this request, so it's left
+// untouched.
+func (app *application) syncConsumable(issue *data.Issue, consumableUsed *bool, actingUserID int64) error {
+	if consumableUsed == nil {
+		return nil
+	}
+	item, hasItem := consumableItemFor(issue.Type)
+	if *consumableUsed && hasItem {
+		return app.models.Consumables.UpsertForIssue(issue.ID, item, issue.Mode, issue.Location, actingUserID)
+	}
+	return app.models.Consumables.DeleteForIssue(issue.ID)
+}
+
 func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Mode             string  `json:"mode"`
@@ -82,6 +98,7 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		EndTime          *string `json:"end_time"`
 		ReportedByAgent  *string `json:"reported_by_agent"`
 		ConfirmedByAgent *string `json:"confirmed_by_agent"`
+		ConsumableUsed   *bool   `json:"consumable_used"`
 	}
 
 	if err := app.readJSON(w, r, &input); err != nil {
@@ -176,6 +193,11 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if err := app.syncConsumable(issue, input.ConsumableUsed, user.ID); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 	// return issue with user info populated
 	fullIssue, err := app.models.Issues.Get(issue.ID)
 	if err != nil {
@@ -255,6 +277,7 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		EndTime          *string `json:"end_time"`
 		ReportedByAgent  *string `json:"reported_by_agent"`
 		ConfirmedByAgent *string `json:"confirmed_by_agent"`
+		ConsumableUsed   *bool   `json:"consumable_used"`
 	}
 
 	if err := app.readJSON(w, r, &input); err != nil {
@@ -362,6 +385,11 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		default:
 			app.serverErrorResponse(w, r, err)
 		}
+		return
+	}
+
+	if err := app.syncConsumable(issue, input.ConsumableUsed, currentUser.ID); err != nil {
+		app.serverErrorResponse(w, r, err)
 		return
 	}
 

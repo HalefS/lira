@@ -24,6 +24,7 @@ type Models struct {
 	Settings        SettingsModel
 	RecurringAlerts RecurringAlertModel
 	Analytics       AnalyticsModel
+	Consumables     ConsumableModel
 }
 
 func NewModels(db *sql.DB) Models {
@@ -37,5 +38,6 @@ func NewModels(db *sql.DB) Models {
 		Settings:        SettingsModel{DB: db},
 		RecurringAlerts: RecurringAlertModel{DB: db},
 		Analytics:       AnalyticsModel{DB: db},
+		Consumables:     ConsumableModel{DB: db},
 	}
 }

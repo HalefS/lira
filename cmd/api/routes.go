@@ -65,6 +65,9 @@ func (app *application) routes() http.Handler {
 	// Analytics — week/month comparisons, for the Analytics page
 	router.HandlerFunc(http.MethodGet, "/v1/analytics", app.requireAuth(app.getAnalyticsHandler))
 
+	// Consumables — inventory usage tracking (batteries, remotes, phones)
+	router.HandlerFunc(http.MethodGet, "/v1/consumables", app.requireAuth(app.listConsumablesHandler))
+
 	// Settings — readable by any authenticated user, editable by managers only
 	router.HandlerFunc(http.MethodGet, "/v1/settings", app.requireAuth(app.getSettingsHandler))
 	router.HandlerFunc(http.MethodPatch, "/v1/settings", app.requireAuth(app.requireManager(app.updateSettingsHandler)))

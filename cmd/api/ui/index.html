@@ -362,6 +362,25 @@ tbody tr:hover td { background: #F8FAFC; }
 .form-control::placeholder { color: var(--gray-400); }
 select.form-control { cursor: pointer; }
 
+/* ── Toggle switch ── */
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+  padding: 10px 14px;
+}
+.toggle-switch { position: relative; display: inline-block; width: 38px; height: 22px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; cursor: pointer; inset: 0;
+  background: var(--gray-300); border-radius: 999px; transition: background 0.15s;
+}
+.toggle-slider::before {
+  content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px;
+  background: #fff; border-radius: 50%; transition: transform 0.15s;
+}
+.toggle-switch input:checked + .toggle-slider { background: var(--blue); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); }
+
 /* ── Empty ── */
 .empty-state { padding: 48px; text-align: center; color: var(--gray-400); display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .empty-state svg { width: 36px; height: 36px; opacity: 0.25; }
@@ -523,6 +542,7 @@ function mapIssue(i) {
     // any table, history, or dashboard view.
     reportedByAgent:  i.reported_by_agent || undefined,
     confirmedByAgent: i.confirmed_by_agent || undefined,
+    consumableItem: i.consumable_item || undefined,
     status:        i.status,
     loggedBy:      i.logged_by,
     loggedByName:  i.logged_by_name,
@@ -614,6 +634,12 @@ const T = {
     analyticsLoading: 'Loading analytics…',
     analyticsNoData: 'Not enough data yet for this period.',
     bestLabel: 'Best',
+    consumables: 'Consumables',
+    consumablesSubtitle: 'Inventory used while resolving issues — AA batteries, remote controls, and phones.',
+    consumablesEmpty: 'No consumables logged for this date.',
+    consumablesEmptyAll: 'No consumables logged yet.',
+    item: 'Item',
+    location: 'Location',
     you: 'you',
     issues: 'Issues',
     avg: 'Avg',
@@ -786,6 +812,12 @@ const T = {
     analyticsLoading: 'A carregar análises…',
     analyticsNoData: 'Ainda não há dados suficientes para este período.',
     bestLabel: 'Melhor',
+    consumables: 'Consumíveis',
+    consumablesSubtitle: 'Inventário usado ao resolver avarias — pilhas AA, comandos e telefones.',
+    consumablesEmpty: 'Sem consumíveis registados nesta data.',
+    consumablesEmptyAll: 'Ainda não há consumíveis registados.',
+    item: 'Item',
+    location: 'Local',
     you: 'tu',
     issues: 'Avarias',
     avg: 'Méd.',
@@ -910,6 +942,7 @@ const Ic = {
   camera: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 5a1 1 0 011-1h1.5l1-2h5l1 2H13a1 1 0 011 1v7a1 1 0 01-1 1H2a1 1 0 01-1-1z"/><circle cx="8" cy="8.5" r="2.5"/></svg>,
   bell:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2a3 3 0 00-3 3v2c0 1-.5 2-1.3 2.7A.8.8 0 004 11h8a.8.8 0 00.3-1.3C11.5 9 11 8 11 7V5a3 3 0 00-3-3z"/><path d="M6.5 13a1.5 1.5 0 003 0"/></svg>,
   trending: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 11l4-4 2.5 2.5L14 4"/><path d="M10 4h4v4"/></svg>,
+  box: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 5l6-3 6 3-6 3-6-3z"/><path d="M2 5v6l6 3 6-3V5"/><path d="M8 8v6"/></svg>,
   report: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="1" width="12" height="14" rx="1"/><path d="M5 5h6M5 8h6M5 11h4"/></svg>,
   download: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 13h12"/></svg>,
   calendar: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="3" width="14" height="12" rx="1"/><path d="M1 7h14M5 1v4M11 1v4"/></svg>,
@@ -1150,6 +1183,18 @@ function computeDurationMinutes(startTime, endTime) {
   return diff > 0 ? diff : null;
 }
 
+/* Maps an issue type name (case-insensitive) to the consumable item it
+   tracks, and the toggle question shown for it. Only these three types
+   currently have an associated consumable. */
+const CONSUMABLE_RULES = {
+  door:   { item: 'AA Batteries',   question: { en: 'New batteries needed?', pt: 'Foram necessárias pilhas novas?' } },
+  remote: { item: 'Remote Control', question: { en: 'New remote placed?',   pt: 'Foi colocado um comando novo?' } },
+  phone:  { item: 'Phone',          question: { en: 'New phone placed?',    pt: 'Foi colocado um telefone novo?' } },
+};
+function consumableRuleFor(typeName) {
+  return CONSUMABLE_RULES[(typeName||'').trim().toLowerCase()] || null;
+}
+
 function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments, connectaAgents, token, onClose, onSave }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
@@ -1171,8 +1216,8 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
   }
   const firstType = typeNames[0] || '';
   const defaults = issueMode==='apt'
-    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:''}
-    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:''};
+    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', consumableUsed:false}
+    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', consumableUsed:false};
   const [form, setForm] = useState(isEdit ? {
     apt:        editIssue.apt||'',
     dept:       editIssue.dept||'',
@@ -1196,7 +1241,9 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
     status:           editIssue.status,
     reportedByAgent:  editIssue.reportedByAgent || '',
     confirmedByAgent: editIssue.confirmedByAgent || '',
+    consumableUsed:   !!editIssue.consumableItem,
   } : defaults);
+  const consumableRule = consumableRuleFor(form.type);
 
   function set(k,v) { setForm(f=>({...f,[k]:v})); }
   const duration = useMemo(()=>computeDurationMinutes(form.startTime, form.endTime), [form.startTime, form.endTime]);
@@ -1288,6 +1335,15 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
               <option value="Pending">{t.statusPending}</option>
             </select>
           </div>
+          {consumableRule && (
+            <div className="toggle-row">
+              <span style={{fontSize:13,color:'var(--gray-900)'}}>{consumableRule.question[lang]}</span>
+              <label className="toggle-switch">
+                <input type="checkbox" checked={form.consumableUsed} onChange={e=>set('consumableUsed',e.target.checked)}/>
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+          )}
           <div className="form-row">
             <div className="form-group">
               <label>{t.reportedByAgent}</label>
@@ -1823,6 +1879,81 @@ function AnalyticsPage({ token, alertsPendingCount }) {
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+/* ════════════════ CONSUMABLES PAGE ════════════════ */
+function ConsumablesPage({ token }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const todayStr = new Date().toISOString().slice(0,10);
+  const [date, setDate] = useState('');
+  const [items, setItems] = useState([]);
+  const [summary, setSummary] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const qs = date ? `?date=${date}` : '';
+    apiFetch(`/consumables${qs}`, {token})
+      .then(res => {
+        if (cancelled) return;
+        setItems(res.consumables || []);
+        setSummary(res.summary || {});
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [date, token]);
+
+  const summaryEntries = Object.entries(summary);
+
+  return (
+    <div>
+      <div className="table-card" style={{marginBottom:16,padding:'14px 20px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+        <p style={{fontSize:13,color:'var(--gray-400)',margin:0,flex:1,minWidth:200}}>{t.consumablesSubtitle}</p>
+        <input type="date" className="form-control" style={{width:'auto'}} value={date} max={todayStr}
+          onChange={e=>setDate(e.target.value)} />
+        <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate(todayStr)}>{t.historyToday}</button>
+        <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate('')}>{t.historyAllDates}</button>
+      </div>
+
+      {summaryEntries.length > 0 && (
+        <div className="analytics-grid">
+          {summaryEntries.map(([item,count])=>(
+            <div className="stat-card" key={item}>
+              <div className="stat-label">{item}</div>
+              <div className="stat-value">{count}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="empty-state"><p>{t.analyticsLoading}</p></div>
+      ) : items.length === 0 ? (
+        <div className="empty-state">{Ic.box}<p>{date ? t.consumablesEmpty : t.consumablesEmptyAll}</p></div>
+      ) : (
+        <div className="table-card">
+          <table>
+            <thead>
+              <tr><th>{t.date}</th><th>{t.item}</th><th>{t.location}</th><th>{t.loggedBy}</th></tr>
+            </thead>
+            <tbody>
+              {items.map(c=>(
+                <tr key={c.id}>
+                  <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>{new Date(c.created_at).toLocaleString()}</td>
+                  <td>{c.item}</td>
+                  <td>{c.location}</td>
+                  <td>{c.logged_by_name}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
@@ -2947,6 +3078,7 @@ function App() {
         status:       form.status,
         reported_by_agent:  form.reportedByAgent,
         confirmed_by_agent: form.confirmedByAgent,
+        consumable_used: !!form.consumableUsed,
       };
       const res = await apiFetch('/issues', {method:'POST', body, token});
       const issue = mapIssue(res.issue);
@@ -2977,6 +3109,7 @@ function App() {
         status:       form.status,
         reported_by_agent:  form.reportedByAgent,
         confirmed_by_agent: form.confirmedByAgent,
+        consumable_used: !!form.consumableUsed,
       };
       const res = await apiFetch(`/issues/${id}`, {method:'PATCH', body, token});
       const updated = mapIssue(res.issue);
@@ -3012,6 +3145,7 @@ function App() {
     {id:'history',   label:t.history,    icon:Ic.clock},
     {id:'alerts',    label:t.alerts,     icon:Ic.bell },
     {id:'analytics', label:t.analytics,  icon:Ic.trending},
+    {id:'consumables', label:t.consumables, icon:Ic.box},
     {id:'team',      label:t.team,       icon:Ic.users},
     {id:'reports',   label:'Reports',    icon:Ic.report},
     ...(me.role === 'manager' ? [{id:'admin', label:t.admin, icon:Ic.shield}] : []),
@@ -3085,6 +3219,7 @@ function App() {
             {page==='history'   && <HistoryPage apt={apt} dept={dept} currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='alerts'    && <AlertsPage alerts={alerts} currentUser={me} token={token} onAlertsUpdate={setAlerts} setToast={setToast}/>}
             {page==='analytics' && <AnalyticsPage token={token} alertsPendingCount={alertsPendingCount}/>}
+            {page==='consumables' && <ConsumablesPage token={token}/>}
             {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}/>}
             {page==='reports' && <ReportsPage token={token}/>}
             {page==='admin' && me.role==='manager' && <AdminPage
