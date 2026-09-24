@@ -446,6 +446,36 @@ select.form-control { cursor: pointer; }
 .picker-footer-note { margin-right: auto; align-self: center; font-size: 12.5px; color: var(--gray-400); }
 @media (max-width: 640px) { .cpick-grid { grid-template-columns: repeat(2, 1fr); } }
 
+/* False-positive checkbox on the issue form, and its badge in the tables */
+.fp-check {
+  position: relative; display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+  border: 1.5px solid var(--gray-200); border-radius: var(--radius-md); background: var(--gray-50);
+  cursor: pointer; user-select: none; transition: border-color 0.12s, background 0.12s;
+}
+.fp-check:hover { border-color: var(--gray-300); }
+.fp-check input { position: absolute; opacity: 0; pointer-events: none; }
+.fp-check:has(input:focus-visible) { outline: 2px solid var(--blue); outline-offset: 2px; }
+.fp-box {
+  width: 20px; height: 20px; flex-shrink: 0; border-radius: 6px; border: 1.5px solid var(--gray-300);
+  background: var(--gray-50); color: transparent; display: flex; align-items: center; justify-content: center;
+  transition: all 0.12s;
+}
+.fp-box svg { width: 12px; height: 12px; }
+.fp-check.checked { border-color: var(--amber); background: var(--amber-light); }
+.fp-check.checked .fp-box { background: var(--amber); border-color: var(--amber); color: var(--gray-50); }
+.fp-title { display: block; font-size: 13px; font-weight: 600; color: var(--gray-900); }
+.fp-sub { display: block; font-size: 12px; color: var(--gray-400); margin-top: 1px; }
+.fp-badge {
+  display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 2px 8px;
+  border-radius: 999px; background: var(--amber-light); color: var(--amber); font-size: 10.5px; font-weight: 600;
+}
+.fp-badge svg { width: 10px; height: 10px; }
+
+/* Daily report: a false-positive row gets an amber tint and a left accent bar */
+tbody tr.fp-row td { background: color-mix(in srgb, var(--amber-light) 55%, transparent); }
+tbody tr.fp-row:hover td { background: color-mix(in srgb, var(--amber-light) 90%, transparent); }
+tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
+
 /* Tiny icon strip shown under an issue's problem text in the tables */
 .cstrip { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .cstrip-item { position: relative; display: inline-flex; }
@@ -631,6 +661,7 @@ function mapIssue(i) {
     // any table, history, or dashboard view.
     reportedByAgent:  i.reported_by_agent || undefined,
     confirmedByAgent: i.confirmed_by_agent || undefined,
+    falsePositive: !!i.false_positive,
     // Consumables used on the issue: [{itemId, item, icon, quantity}]. itemId is
     // null when the item has since been removed from the catalog.
     consumables: (i.consumables || []).map(c => ({
@@ -734,6 +765,11 @@ const T = {
     item: 'Item',
     location: 'Location',
     quantity: 'Qty',
+    falsePositiveLabel: 'False positive',
+    falsePositiveHint: 'Nothing was actually wrong. Counted separately in the analytics.',
+    falsePositiveBadge: 'False positive',
+    falsePositivesMetric: 'False positives',
+    falsePositiveRateMetric: 'False positive rate',
     consumablesLabel: 'Consumables used',
     addConsumables: 'Add consumables',
     editConsumables: 'Edit',
@@ -936,6 +972,11 @@ const T = {
     item: 'Item',
     location: 'Local',
     quantity: 'Qtd.',
+    falsePositiveLabel: 'Falso positivo',
+    falsePositiveHint: 'Afinal não havia nada de errado. Contado à parte nas análises.',
+    falsePositiveBadge: 'Falso positivo',
+    falsePositivesMetric: 'Falsos positivos',
+    falsePositiveRateMetric: 'Taxa de falsos positivos',
     consumablesLabel: 'Consumíveis usados',
     addConsumables: 'Adicionar consumíveis',
     editConsumables: 'Editar',
@@ -1603,8 +1644,8 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
   const firstType = typeNames[0] || '';
   const catalogById = Object.fromEntries((consumableItems || []).map(ci => [ci.id, ci]));
   const defaults = issueMode==='apt'
-    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', consumables:[]}
-    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', consumables:[]};
+    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[]}
+    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[]};
   const [form, setForm] = useState(isEdit ? {
     apt:        editIssue.apt||'',
     dept:       editIssue.dept||'',
@@ -1628,6 +1669,7 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
     status:           editIssue.status,
     reportedByAgent:  editIssue.reportedByAgent || '',
     confirmedByAgent: editIssue.confirmedByAgent || '',
+    falsePositive: !!editIssue.falsePositive,
     // Only items still in the catalog can be edited here. Usage recorded against
     // an item that has since been removed is kept on the server untouched.
     consumables: (editIssue.consumables || [])
@@ -1730,6 +1772,14 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
               <option value="Pending">{t.statusPending}</option>
             </select>
           </div>
+          <label className={`fp-check ${form.falsePositive ? 'checked' : ''}`}>
+            <input type="checkbox" checked={form.falsePositive} onChange={e=>set('falsePositive', e.target.checked)}/>
+            <span className="fp-box">{Ic.check}</span>
+            <span>
+              <span className="fp-title">{t.falsePositiveLabel}</span>
+              <span className="fp-sub">{t.falsePositiveHint}</span>
+            </span>
+          </label>
           <div className="form-group">
             <label>{t.consumablesLabel}</label>
             <div className={`consumable-box ${selectedConsumables.length ? 'has-items' : ''}`}>
@@ -1902,7 +1952,7 @@ function IssuesTable({ issues, tableMode, currentUser, newIssueId, onDelete, onE
               <tr key={issue.id} className={issue.id===newIssueId ? 'row-enter' : ''}>
                 <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.apt||issue.dept}</strong></td>
                 <td><TypeBadge type={issue.type}/></td>
-                <td style={{maxWidth:150}}>{issue.problem}<ConsumableStrip items={issue.consumables}/></td>
+                <td style={{maxWidth:150}}>{issue.problem}{issue.falsePositive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}<ConsumableStrip items={issue.consumables}/></td>
                 <td style={{maxWidth:190,color:'var(--gray-600)',fontSize:13}}>{issue.resolution}</td>
                 <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.time}m</td>
                 <td><span className={`badge ${issue.status==='Ok'?'badge-ok':'badge-pending'} ${issue.id===newIssueId ? 'status-highlight' : ''}`}>{issue.status}</span></td>
@@ -2223,6 +2273,8 @@ function AnalyticsPage({ token, alertsPendingCount }) {
             <AnalyticsMetricCard t={t} label={t.avgTimeMetric} current={data.avg_time_minutes.current} previous={data.avg_time_minutes.previous} suffix="m" decimals={1} goodDirection="down"/>
             <AnalyticsMetricCard t={t} label={t.fastestTimeMetric} current={data.fastest_time_minutes.current} previous={data.fastest_time_minutes.previous} suffix="m" decimals={0} goodDirection="down"/>
             <AnalyticsMetricCard t={t} label={t.recurringAlertsMetric} current={data.recurring_alerts_opened.current} previous={data.recurring_alerts_opened.previous} goodDirection="down"/>
+            <AnalyticsMetricCard t={t} label={t.falsePositivesMetric} current={data.false_positives.current} previous={data.false_positives.previous} goodDirection="down"/>
+            <AnalyticsMetricCard t={t} label={t.falsePositiveRateMetric} current={data.false_positive_rate.current} previous={data.false_positive_rate.previous} suffix="%" decimals={1} goodDirection="down"/>
           </div>
 
           {bestTech && (
@@ -2274,13 +2326,14 @@ function AnalyticsPage({ token, alertsPendingCount }) {
             <div className="table-card">
               <div className="table-header"><span className="table-title">{t.typeBreakdown}</span></div>
               <table>
-                <thead><tr><th>{t.type}</th><th>{t.thisPeriod}</th><th>{t.previousPeriod}</th></tr></thead>
+                <thead><tr><th>{t.type}</th><th>{t.thisPeriod}</th><th>{t.previousPeriod}</th><th>{t.falsePositivesMetric}</th></tr></thead>
                 <tbody>
                   {data.by_type.map(bt=>(
                     <tr key={bt.type}>
                       <td><TypeBadge type={bt.type}/></td>
                       <td>{bt.current}</td>
                       <td style={{color:'var(--gray-400)'}}>{bt.previous}</td>
+                      <td style={{color: bt.false_positives ? 'var(--amber)' : 'var(--gray-400)', fontWeight: bt.false_positives ? 600 : 400}}>{bt.false_positives || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2448,6 +2501,41 @@ function ReportsPage({ token }) {
 
     let y = 0;
 
+    // False positives are tinted amber, get a left accent bar, and carry a small
+    // "FALSE POSITIVE" pill under the problem text. The pill is drawn over an extra
+    // blank line (added to the problem text below) so it never overlaps the text.
+    const fpFill = [255, 244, 224];
+    const withFalsePositiveMarks = (issues, problemCol, statusHook) => ({
+      didParseCell: (data) => {
+        if (data.section !== 'body') return;
+        if (statusHook) statusHook(data);
+        if (issues[data.row.index]?.false_positive) data.cell.styles.fillColor = fpFill;
+      },
+      didDrawCell: (data) => {
+        if (data.section !== 'body' || !issues[data.row.index]?.false_positive) return;
+        if (data.column.index === 0) {
+          doc.setFillColor(...amber);
+          doc.rect(data.cell.x, data.cell.y, 1.2, data.cell.height, 'F');
+        }
+        if (data.column.index === problemCol) {
+          const pillW = 24, pillH = 3.6;
+          const px = data.cell.x + data.cell.padding('left');
+          const py = data.cell.y + data.cell.height - data.cell.padding('bottom') - pillH;
+          doc.setFillColor(255, 236, 200); doc.setDrawColor(...amber); doc.setLineWidth(0.2);
+          doc.roundedRect(px, py, pillW, pillH, 1.8, 1.8, 'FD');
+          doc.setFont('helvetica','bold'); doc.setFontSize(5.5); doc.setTextColor(...amber);
+          doc.text('FALSE POSITIVE', px + pillW / 2, py + pillH / 2 + 0.9, {align:'center'});
+        }
+      },
+    });
+    const problemText = i => i.false_positive ? `${i.problem}\n\u00A0` : i.problem;
+    const statusColor = data => {
+      if (data.column.index === 5) {
+        data.cell.styles.textColor = data.cell.raw === 'Ok' ? green : amber;
+        data.cell.styles.fontStyle = 'bold';
+      }
+    };
+
     // ── Header banner ──
     doc.setFillColor(...blue);
     doc.rect(0, 0, W, 28, 'F');
@@ -2487,6 +2575,9 @@ function ReportsPage({ token }) {
       {label:'Slowest Fix',     value: `${report.summary.slowest_minutes} min`, color: amber},
       {label:'Apt. Issues',     value: String(report.summary.apt_issues),    color: blue},
       {label:'Dept. Issues',    value: String(report.summary.dept_issues),   color: blue},
+      {label:'False Positives', value: String(fpCount),                      color: amber},
+      {label:'False Positive Rate', value: `${fpRate}%`,                     color: amber},
+      {label:'Real Issues',     value: String(realCount),                    color: green},
     ];
 
     const cw = (W - 20) / 3;
@@ -2550,7 +2641,7 @@ function ReportsPage({ token }) {
         margin: {left: 10, right: 10},
         head: [['Apt.', 'Type', 'Problem', 'Resolution', 'Time', 'Status', 'Technician']],
         body: report.apt_issues.map(i => [
-          i.location, i.type, i.problem,
+          i.location, i.type, problemText(i),
           i.resolution || '—',
           `${i.time_minutes}m`, i.status, i.logged_by_name,
         ]),
@@ -2562,12 +2653,7 @@ function ReportsPage({ token }) {
         },
         alternateRowStyles: {fillColor: [248,248,246]},
         theme: 'grid',
-        didParseCell: (data) => {
-          if (data.section === 'body' && data.column.index === 5) {
-            data.cell.styles.textColor = data.cell.raw === 'Ok' ? green : amber;
-            data.cell.styles.fontStyle = 'bold';
-          }
-        },
+        ...withFalsePositiveMarks(report.apt_issues, 2, statusColor),
       });
       y = doc.lastAutoTable.finalY + 8;
     }
@@ -2582,7 +2668,7 @@ function ReportsPage({ token }) {
         margin: {left: 10, right: 10},
         head: [['Dept.', 'Type', 'Problem', 'Resolution', 'Time', 'Status', 'Technician']],
         body: report.dept_issues.map(i => [
-          i.location, i.type, i.problem,
+          i.location, i.type, problemText(i),
           i.resolution || '—',
           `${i.time_minutes}m`, i.status, i.logged_by_name,
         ]),
@@ -2594,12 +2680,7 @@ function ReportsPage({ token }) {
         },
         alternateRowStyles: {fillColor: [248,248,246]},
         theme: 'grid',
-        didParseCell: (data) => {
-          if (data.section === 'body' && data.column.index === 5) {
-            data.cell.styles.textColor = data.cell.raw === 'Ok' ? green : amber;
-            data.cell.styles.fontStyle = 'bold';
-          }
-        },
+        ...withFalsePositiveMarks(report.dept_issues, 2, statusColor),
       });
     }
 
@@ -2622,6 +2703,10 @@ function ReportsPage({ token }) {
     TV:'#9D174D', AC:'#3730A3', Phone:'#854F0B', Other:'#4B5563',
   };
 
+  const fpCount    = report ? (report.summary.false_positives || 0) : 0;
+  const realCount  = report ? report.summary.total_issues - fpCount : 0;
+  const fpRate     = report && report.summary.total_issues > 0 ? (fpCount / report.summary.total_issues * 100).toFixed(0) : '0';
+
   const summaryCards = report ? [
     {label:'Total issues',     value: report.summary.total_issues,  sub:'Apts + Departments',             color:'#1769AA'},
     {label:'Resolved',         value: report.summary.resolved,      sub:`${report.summary.resolution_rate.toFixed(0)}% rate`, color:'#2E8B57'},
@@ -2632,6 +2717,9 @@ function ReportsPage({ token }) {
     {label:'Slowest fix',      value: report.summary.slowest_minutes+'m', sub:'Longest resolution',      color:'#D88A18'},
     {label:'Apt. issues',      value: report.summary.apt_issues,    sub:'Apartment',                     color:'#1769AA'},
     {label:'Dept. issues',     value: report.summary.dept_issues,   sub:'Department',                    color:'#1D9E75'},
+    {label:'False positives',  value: fpCount,                      sub:'Nothing was wrong',              color:'#D88A18'},
+    {label:'False positive rate', value: fpRate+'%',                sub:'Of all issues',                  color:'#D88A18'},
+    {label:'Real issues',      value: realCount,                    sub:'Something was wrong',            color:'#2E8B57'},
   ] : [];
 
   const maxType = report ? Math.max(...Object.values(report.by_type), 1) : 1;
@@ -2727,10 +2815,10 @@ function ReportsPage({ token }) {
                 </thead>
                 <tbody>
                   {report.apt_issues.map(i=>(
-                    <tr key={i.id}>
+                    <tr key={i.id} className={i.false_positive ? 'fp-row' : ''}>
                       <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.location}</strong></td>
                       <td><TypeBadge type={i.type}/></td>
-                      <td style={{maxWidth:140,fontSize:13}}>{i.problem}</td>
+                      <td style={{maxWidth:140,fontSize:13}}>{i.problem}{i.false_positive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}</td>
                       <td style={{maxWidth:180,fontSize:13,color:'var(--gray-600)'}}>{i.resolution||'—'}</td>
                       <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.time_minutes}m</td>
                       <td><span className={`badge ${i.status==='Ok'?'badge-ok':'badge-pending'}`}>{i.status}</span></td>
@@ -2759,10 +2847,10 @@ function ReportsPage({ token }) {
                 </thead>
                 <tbody>
                   {report.dept_issues.map(i=>(
-                    <tr key={i.id}>
+                    <tr key={i.id} className={i.false_positive ? 'fp-row' : ''}>
                       <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.location}</strong></td>
                       <td><TypeBadge type={i.type}/></td>
-                      <td style={{maxWidth:140,fontSize:13}}>{i.problem}</td>
+                      <td style={{maxWidth:140,fontSize:13}}>{i.problem}{i.false_positive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}</td>
                       <td style={{maxWidth:180,fontSize:13,color:'var(--gray-600)'}}>{i.resolution||'—'}</td>
                       <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.time_minutes}m</td>
                       <td><span className={`badge ${i.status==='Ok'?'badge-ok':'badge-pending'}`}>{i.status}</span></td>
@@ -3606,6 +3694,7 @@ function App() {
         status:       form.status,
         reported_by_agent:  form.reportedByAgent,
         confirmed_by_agent: form.confirmedByAgent,
+        false_positive: !!form.falsePositive,
         consumables: (form.consumables || []).map(c => ({item_id: c.itemId, quantity: c.quantity})),
       };
       const res = await apiFetch('/issues', {method:'POST', body, token});
@@ -3637,6 +3726,7 @@ function App() {
         status:       form.status,
         reported_by_agent:  form.reportedByAgent,
         confirmed_by_agent: form.confirmedByAgent,
+        false_positive: !!form.falsePositive,
         consumables: (form.consumables || []).map(c => ({item_id: c.itemId, quantity: c.quantity})),
       };
       const res = await apiFetch(`/issues/${id}`, {method:'PATCH', body, token});

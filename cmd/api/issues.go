@@ -82,6 +82,7 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		EndTime          *string `json:"end_time"`
 		ReportedByAgent  *string `json:"reported_by_agent"`
 		ConfirmedByAgent *string `json:"confirmed_by_agent"`
+		FalsePositive    bool    `json:"false_positive"`
 		// The consumables used on the issue. Omitted (nil) means "leave as
 		// is"; an empty list clears them.
 		Consumables *[]data.ConsumableUse `json:"consumables"`
@@ -106,6 +107,7 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		ReportedByAgent:  input.ReportedByAgent,
 		ConfirmedByAgent: input.ConfirmedByAgent,
 		Status:           input.Status,
+		FalsePositive:    input.FalsePositive,
 		LoggedBy:         user.ID,
 	}
 
@@ -272,6 +274,7 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		EndTime          *string `json:"end_time"`
 		ReportedByAgent  *string `json:"reported_by_agent"`
 		ConfirmedByAgent *string `json:"confirmed_by_agent"`
+		FalsePositive    *bool   `json:"false_positive"`
 		// The consumables used on the issue. Omitted (nil) means "leave as
 		// is"; an empty list clears them.
 		Consumables *[]data.ConsumableUse `json:"consumables"`
@@ -302,6 +305,9 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 	}
 	if input.Status != nil {
 		issue.Status = *input.Status
+	}
+	if input.FalsePositive != nil {
+		issue.FalsePositive = *input.FalsePositive
 	}
 	if input.StartTime != nil {
 		issue.StartTime = input.StartTime

@@ -34,6 +34,9 @@ type Issue struct {
 	LoggedByName     string  `json:"logged_by_name"`
 	LoggedByIdx      int     `json:"logged_by_idx"`
 	Version          int     `json:"-"`
+	// FalsePositive marks a false alarm: the issue was reported but nothing
+	// was actually wrong. Counted separately in the analytics.
+	FalsePositive bool `json:"false_positive"`
 	// Consumables used while resolving this issue (batteries, remotes,
 	// phones, ...). Always an array in the JSON, empty when none were used.
 	Consumables []*IssueConsumable `json:"consumables"`
@@ -121,14 +124,15 @@ type IssueModel struct {
 
 func (m IssueModel) Insert(issue *Issue) error {
 	query := `
-		INSERT INTO issues (mode, location, type, problem, resolution, time_minutes, status, logged_by, start_time, end_time, reported_by_agent, confirmed_by_agent)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		INSERT INTO issues (mode, location, type, problem, resolution, time_minutes, status, logged_by, start_time, end_time, reported_by_agent, confirmed_by_agent, false_positive)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING id, created_at, version`
 
 	args := []any{
 		issue.Mode, issue.Location, issue.Type, issue.Problem,
 		issue.Resolution, issue.TimeMinutes, issue.Status, issue.LoggedBy,
 		issue.StartTime, issue.EndTime, issue.ReportedByAgent, issue.ConfirmedByAgent,
+		issue.FalsePositive,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -141,7 +145,7 @@ func (m IssueModel) Get(id int64) (*Issue, error) {
 	query := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
 		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
-		       u.name, u.avatar_idx, i.version
+		       u.name, u.avatar_idx, i.version, i.false_positive
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
 		WHERE i.id = $1`
@@ -153,7 +157,7 @@ func (m IssueModel) Get(id int64) (*Issue, error) {
 	err := m.DB.QueryRowContext(ctx, query, id).Scan(
 		&issue.ID, &issue.CreatedAt, &issue.Mode, &issue.Location, &issue.Type,
 		&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.ReportedByAgent, &issue.ConfirmedByAgent, &issue.Status,
-		&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version,
+		&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version, &issue.FalsePositive,
 	)
 	if err != nil {
 		switch {
@@ -208,7 +212,7 @@ func (m IssueModel) GetAll(f IssueFilters) ([]*Issue, error) {
 	query := fmt.Sprintf(`
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
 		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
-		       u.name, u.avatar_idx, i.version
+		       u.name, u.avatar_idx, i.version, i.false_positive
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
 		WHERE %s
@@ -229,7 +233,7 @@ func (m IssueModel) GetAll(f IssueFilters) ([]*Issue, error) {
 		err := rows.Scan(
 			&issue.ID, &issue.CreatedAt, &issue.Mode, &issue.Location, &issue.Type,
 			&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.ReportedByAgent, &issue.ConfirmedByAgent, &issue.Status,
-			&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version,
+			&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version, &issue.FalsePositive,
 		)
 		if err != nil {
 			return nil, err
@@ -251,15 +255,15 @@ func (m IssueModel) Update(issue *Issue) error {
 		UPDATE issues
 		SET mode=$1, location=$2, type=$3, problem=$4, resolution=$5,
 		    time_minutes=$6, status=$7, start_time=$8, end_time=$9,
-		    reported_by_agent=$10, confirmed_by_agent=$11, version=version+1
-		WHERE id=$12 AND version=$13
+		    reported_by_agent=$10, confirmed_by_agent=$11, false_positive=$12, version=version+1
+		WHERE id=$13 AND version=$14
 		RETURNING version`
 
 	args := []any{
 		issue.Mode, issue.Location, issue.Type, issue.Problem,
 		issue.Resolution, issue.TimeMinutes, issue.Status,
 		issue.StartTime, issue.EndTime,
-		issue.ReportedByAgent, issue.ConfirmedByAgent,
+		issue.ReportedByAgent, issue.ConfirmedByAgent, issue.FalsePositive,
 		issue.ID, issue.Version,
 	}
 
@@ -414,7 +418,7 @@ func (m IssueModel) GetByUser(userID int64, limit int) ([]*Issue, error) {
 	query := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
 		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
-		       u.name, u.avatar_idx, i.version
+		       u.name, u.avatar_idx, i.version, i.false_positive
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
 		WHERE i.logged_by = $1
@@ -436,7 +440,7 @@ func (m IssueModel) GetByUser(userID int64, limit int) ([]*Issue, error) {
 		err := rows.Scan(
 			&issue.ID, &issue.CreatedAt, &issue.Mode, &issue.Location, &issue.Type,
 			&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.ReportedByAgent, &issue.ConfirmedByAgent, &issue.Status,
-			&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version,
+			&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version, &issue.FalsePositive,
 		)
 		if err != nil {
 			return nil, err
@@ -535,6 +539,7 @@ type ReportSummary struct {
 	TotalMinutes   int     `json:"total_minutes"`
 	FastestMinutes int     `json:"fastest_minutes"`
 	SlowestMinutes int     `json:"slowest_minutes"`
+	FalsePositives int     `json:"false_positives"`
 }
 
 func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
@@ -564,7 +569,8 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 			COALESCE(AVG(time_minutes), 0)                        AS avg_min,
 			COALESCE(SUM(time_minutes), 0)                        AS total_min,
 			COALESCE(MIN(time_minutes) FILTER (WHERE time_minutes > 0), 0) AS fastest,
-			COALESCE(MAX(time_minutes), 0)                        AS slowest
+			COALESCE(MAX(time_minutes), 0)                        AS slowest,
+			COUNT(*) FILTER (WHERE false_positive)                AS false_positives
 		FROM issues
 		WHERE created_at::date = $1`
 
@@ -572,7 +578,7 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 	err := m.DB.QueryRowContext(ctx, summaryQ, date).Scan(
 		&s.TotalIssues, &s.AptIssues, &s.DeptIssues,
 		&s.Resolved, &s.Pending,
-		&s.AvgMinutes, &s.TotalMinutes, &s.FastestMinutes, &s.SlowestMinutes,
+		&s.AvgMinutes, &s.TotalMinutes, &s.FastestMinutes, &s.SlowestMinutes, &s.FalsePositives,
 	)
 	if err != nil {
 		return nil, err
@@ -586,7 +592,7 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 	issueQ := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
 		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
-		       u.name, u.avatar_idx, i.version
+		       u.name, u.avatar_idx, i.version, i.false_positive
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
 		WHERE i.created_at::date = $1
@@ -604,7 +610,7 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 		if err := rows.Scan(
 			&i.ID, &i.CreatedAt, &i.Mode, &i.Location, &i.Type,
 			&i.Problem, &i.Resolution, &i.TimeMinutes, &i.StartTime, &i.EndTime, &i.ReportedByAgent, &i.ConfirmedByAgent, &i.Status,
-			&i.LoggedBy, &i.LoggedByName, &i.LoggedByIdx, &i.Version,
+			&i.LoggedBy, &i.LoggedByName, &i.LoggedByIdx, &i.Version, &i.FalsePositive,
 		); err != nil {
 			return nil, err
 		}
