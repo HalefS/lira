@@ -12,6 +12,8 @@ var (
 	ErrDuplicateIssueType     = errors.New("duplicate issue type")
 	ErrDuplicateDepartment    = errors.New("duplicate department")
 	ErrDuplicateConnectaAgent = errors.New("duplicate connecta agent")
+
+	ErrDuplicateConsumableItem = errors.New("duplicate consumable item")
 )
 
 type Models struct {
@@ -25,6 +27,7 @@ type Models struct {
 	RecurringAlerts RecurringAlertModel
 	Analytics       AnalyticsModel
 	Consumables     ConsumableModel
+	ConsumableItems ConsumableItemModel
 }
 
 func NewModels(db *sql.DB) Models {
@@ -39,5 +42,6 @@ func NewModels(db *sql.DB) Models {
 		RecurringAlerts: RecurringAlertModel{DB: db},
 		Analytics:       AnalyticsModel{DB: db},
 		Consumables:     ConsumableModel{DB: db},
+		ConsumableItems: ConsumableItemModel{DB: db},
 	}
 }

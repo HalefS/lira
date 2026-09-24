@@ -362,24 +362,113 @@ tbody tr:hover td { background: #F8FAFC; }
 .form-control::placeholder { color: var(--gray-400); }
 select.form-control { cursor: pointer; }
 
-/* ── Toggle switch ── */
-.toggle-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius-md);
-  padding: 10px 14px;
+/* ── Consumables ── */
+/* Icon tile: a tinted rounded square with a duotone drawing inside. Colors come
+   from the theme variables, so it follows light / dark mode automatically. */
+.cicon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.cicon svg { width: 62%; height: 62%; display: block; }
+.cicon.tone-blue  { background: var(--blue-light);  color: var(--blue); }
+.cicon.tone-teal  { background: var(--teal-light);  color: var(--teal); }
+.cicon.tone-amber { background: var(--amber-light); color: var(--amber); }
+.cicon.tone-green { background: var(--green-light); color: var(--green); }
+.cicon.tone-red   { background: var(--red-light);   color: var(--red); }
+.cicon.tone-gray  { background: var(--gray-200);    color: var(--gray-600); }
+
+/* Issue form: the "Add consumables" box and the chips inside it */
+.consumable-box {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 10px; border: 1.5px dashed var(--gray-300); border-radius: var(--radius-md);
+  background: var(--gray-100); transition: border-color 0.12s;
 }
-.toggle-switch { position: relative; display: inline-block; width: 38px; height: 22px; flex-shrink: 0; }
-.toggle-switch input { opacity: 0; width: 0; height: 0; }
-.toggle-slider {
-  position: absolute; cursor: pointer; inset: 0;
-  background: var(--gray-300); border-radius: 999px; transition: background 0.15s;
+.consumable-box.has-items { border-style: solid; border-color: var(--gray-200); }
+.consumable-add-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--gray-300); background: var(--gray-50);
+  color: var(--gray-600); font: 500 12.5px 'DM Sans', sans-serif; cursor: pointer; transition: all 0.12s;
 }
-.toggle-slider::before {
-  content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px;
-  background: #fff; border-radius: 50%; transition: transform 0.15s;
+.consumable-add-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
+.consumable-add-btn svg { width: 13px; height: 13px; }
+.consumable-box:not(.has-items) .consumable-add-btn {
+  flex: 1; padding: 9px 12px; border-color: transparent; background: transparent; font-size: 13px;
 }
-.toggle-switch input:checked + .toggle-slider { background: var(--blue); }
-.toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); }
+.consumable-box:not(.has-items) .consumable-add-btn:hover { border-color: transparent; }
+.consumable-chip {
+  display: inline-flex; align-items: center; gap: 7px; padding: 3px 4px 3px 3px;
+  border: 1px solid var(--gray-200); border-radius: 999px; background: var(--gray-50);
+  font-size: 12.5px; font-weight: 500; color: var(--gray-900); animation: chipIn 0.16s ease;
+}
+.consumable-chip-name { padding-right: 2px; }
+.consumable-chip-qty { font-weight: 600; color: var(--blue); font-variant-numeric: tabular-nums; }
+.consumable-chip-x {
+  width: 18px; height: 18px; padding: 0; border-radius: 50%; border: none; background: none;
+  color: var(--gray-400); cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  transition: all 0.12s;
+}
+.consumable-chip-x:hover { background: var(--red-light); color: var(--red); }
+.consumable-chip-x svg { width: 9px; height: 9px; }
+@keyframes chipIn { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* Picker dialog (opens over the issue form) */
+.picker-overlay { z-index: 110; }
+.picker-modal { max-width: 620px; }
+.picker-sub { font-size: 12.5px; color: var(--gray-400); margin-top: 2px; }
+.cpick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.cpick-card {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 16px 10px 12px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-lg);
+  background: var(--gray-50); color: var(--gray-900); text-align: center; cursor: pointer; user-select: none;
+  transition: border-color 0.12s, background 0.12s, transform 0.12s;
+}
+.cpick-card:hover { border-color: var(--gray-300); background: var(--gray-100); transform: translateY(-1px); }
+.cpick-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.cpick-card.selected, .cpick-card.selected:hover { border-color: var(--blue); background: var(--blue-light); transform: none; }
+.cpick-check {
+  position: absolute; top: 8px; right: 8px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--blue); color: #fff; display: flex; align-items: center; justify-content: center;
+  transform: scale(0); transition: transform 0.18s cubic-bezier(0.3, 1.6, 0.6, 1);
+}
+.cpick-check svg { width: 10px; height: 10px; }
+.cpick-card.selected .cpick-check { transform: scale(1); }
+.cpick-name { font-size: 13px; font-weight: 600; line-height: 1.25; }
+.cpick-hint { height: 28px; display: flex; align-items: center; font-size: 11.5px; color: var(--gray-400); }
+.cpick-stepper {
+  height: 28px; display: inline-flex; align-items: center; gap: 2px; padding: 0 2px;
+  border: 1px solid var(--blue-mid); border-radius: 999px; background: var(--gray-50);
+}
+.cpick-stepper button {
+  width: 24px; height: 24px; padding: 0; border: none; border-radius: 50%; background: none;
+  color: var(--gray-600); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+.cpick-stepper button:hover { background: var(--blue-light); color: var(--blue); }
+.cpick-stepper button svg { width: 12px; height: 12px; }
+.cpick-stepper span { min-width: 24px; text-align: center; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.picker-footer-note { margin-right: auto; align-self: center; font-size: 12.5px; color: var(--gray-400); }
+@media (max-width: 640px) { .cpick-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* Tiny icon strip shown under an issue's problem text in the tables */
+.cstrip { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.cstrip-item { position: relative; display: inline-flex; }
+.cstrip-qty {
+  position: absolute; top: -5px; right: -6px; min-width: 14px; height: 14px; padding: 0 3px;
+  border-radius: 7px; border: 1.5px solid var(--gray-50); background: var(--gray-900); color: var(--gray-50);
+  font-size: 9px; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center;
+}
+
+/* Admin: icon picker grid + list rows */
+.icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 4px; }
+.icon-opt {
+  aspect-ratio: 1; display: flex; align-items: center; justify-content: center; padding: 0;
+  border: 2px solid transparent; border-radius: 12px; background: none; cursor: pointer; transition: all 0.12s;
+}
+.icon-opt:hover { background: var(--gray-100); }
+.icon-opt.selected { border-color: var(--blue); background: var(--blue-light); }
+.cicon-btn { padding: 0; border: none; background: none; border-radius: 10px; cursor: pointer; display: inline-flex; }
+.cicon-btn:hover .cicon { box-shadow: 0 0 0 2px var(--blue-mid); }
+.icon-editor-row td { background: var(--gray-100); padding: 12px 16px; }
+.icon-editor-label { font-size: 11px; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
+.ci-preview { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; font-size: 13px; font-weight: 500; }
+.ci-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Empty ── */
 .empty-state { padding: 48px; text-align: center; color: var(--gray-400); display: flex; flex-direction: column; align-items: center; gap: 10px; }
@@ -542,7 +631,11 @@ function mapIssue(i) {
     // any table, history, or dashboard view.
     reportedByAgent:  i.reported_by_agent || undefined,
     confirmedByAgent: i.confirmed_by_agent || undefined,
-    consumableItem: i.consumable_item || undefined,
+    // Consumables used on the issue: [{itemId, item, icon, quantity}]. itemId is
+    // null when the item has since been removed from the catalog.
+    consumables: (i.consumables || []).map(c => ({
+      itemId: c.item_id ?? null, item: c.item, icon: c.icon, quantity: c.quantity,
+    })),
     status:        i.status,
     loggedBy:      i.logged_by,
     loggedByName:  i.logged_by_name,
@@ -635,11 +728,35 @@ const T = {
     analyticsNoData: 'Not enough data yet for this period.',
     bestLabel: 'Best',
     consumables: 'Consumables',
-    consumablesSubtitle: 'Inventory used while resolving issues — AA batteries, remote controls, and phones.',
+    consumablesSubtitle: 'Inventory used while resolving issues.',
     consumablesEmpty: 'No consumables logged for this date.',
     consumablesEmptyAll: 'No consumables logged yet.',
     item: 'Item',
     location: 'Location',
+    quantity: 'Qty',
+    consumablesLabel: 'Consumables used',
+    addConsumables: 'Add consumables',
+    editConsumables: 'Edit',
+    consumableRemove: 'Remove',
+    consumablePickerTitle: 'Consumables used',
+    consumablePickerSub: 'Tap everything that was used on this issue.',
+    consumableTapToAdd: 'Tap to add',
+    consumableSearch: 'Search consumables…',
+    consumableDone: 'Done',
+    consumableNone: 'No consumables have been set up yet. A manager can add them from the Admin page.',
+    consumableNoMatch: 'No consumables match your search.',
+    adminConsumables: 'Consumables',
+    adminConsumablesSub: "Items technicians can add when logging an issue. Removing one doesn't change past issues.",
+    consumableName: 'Name',
+    consumableNamePlaceholder: 'e.g. HDMI Cable',
+    consumableIconLabel: 'Icon',
+    addConsumable: 'Add consumable',
+    noConsumableItems: 'No consumables yet.',
+    removeConsumable: 'Remove',
+    changeIcon: 'Change icon',
+    toastConsumableAdded: 'Consumable added',
+    toastConsumableDeleted: 'Consumable removed',
+    toastConsumableIconUpdated: 'Icon updated',
     you: 'you',
     issues: 'Issues',
     avg: 'Avg',
@@ -813,11 +930,35 @@ const T = {
     analyticsNoData: 'Ainda não há dados suficientes para este período.',
     bestLabel: 'Melhor',
     consumables: 'Consumíveis',
-    consumablesSubtitle: 'Inventário usado ao resolver avarias — pilhas AA, comandos e telefones.',
+    consumablesSubtitle: 'Inventário usado ao resolver avarias.',
     consumablesEmpty: 'Sem consumíveis registados nesta data.',
     consumablesEmptyAll: 'Ainda não há consumíveis registados.',
     item: 'Item',
     location: 'Local',
+    quantity: 'Qtd.',
+    consumablesLabel: 'Consumíveis usados',
+    addConsumables: 'Adicionar consumíveis',
+    editConsumables: 'Editar',
+    consumableRemove: 'Remover',
+    consumablePickerTitle: 'Consumíveis usados',
+    consumablePickerSub: 'Toque em tudo o que foi usado nesta avaria.',
+    consumableTapToAdd: 'Toque para adicionar',
+    consumableSearch: 'Pesquisar consumíveis…',
+    consumableDone: 'Concluir',
+    consumableNone: 'Ainda não há consumíveis configurados. Um gestor pode adicioná-los na página de Administração.',
+    consumableNoMatch: 'Nenhum consumível corresponde à pesquisa.',
+    adminConsumables: 'Consumíveis',
+    adminConsumablesSub: 'Itens que os técnicos podem adicionar ao registar uma avaria. Remover um não altera avarias anteriores.',
+    consumableName: 'Nome',
+    consumableNamePlaceholder: 'ex. Cabo HDMI',
+    consumableIconLabel: 'Ícone',
+    addConsumable: 'Adicionar consumível',
+    noConsumableItems: 'Ainda não há consumíveis.',
+    removeConsumable: 'Remover',
+    changeIcon: 'Alterar ícone',
+    toastConsumableAdded: 'Consumível adicionado',
+    toastConsumableDeleted: 'Consumível removido',
+    toastConsumableIconUpdated: 'Ícone atualizado',
     you: 'tu',
     issues: 'Avarias',
     avg: 'Méd.',
@@ -926,6 +1067,7 @@ const Ic = {
   clock:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>,
   users:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.8 2.2-5 5-5"/><circle cx="12" cy="7" r="2"/><path d="M10 13c0-2 1.3-3.5 3-4"/></svg>,
   plus:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 2v12M2 8h12"/></svg>,
+  minus:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 8h12"/></svg>,
   search: <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4"><circle cx="6" cy="6" r="4"/><path d="M10 10l2.5 2.5" strokeLinecap="round"/></svg>,
   x:      <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>,
   trash:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 4h12M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1M6 7v5M10 7v5M3 4l1 9h8l1-9"/></svg>,
@@ -1183,19 +1325,263 @@ function computeDurationMinutes(startTime, endTime) {
   return diff > 0 ? diff : null;
 }
 
-/* Maps an issue type name (case-insensitive) to the consumable item it
-   tracks, and the toggle question shown for it. Only these three types
-   currently have an associated consumable. */
-const CONSUMABLE_RULES = {
-  door:   { item: 'AA Batteries',   question: { en: 'New batteries needed?', pt: 'Foram necessárias pilhas novas?' } },
-  remote: { item: 'Remote Control', question: { en: 'New remote placed?',   pt: 'Foi colocado um comando novo?' } },
-  phone:  { item: 'Phone',          question: { en: 'New phone placed?',    pt: 'Foi colocado um telefone novo?' } },
+/* ════════════════ CONSUMABLES: ICONS + PICKER ════════════════ */
+/* Each icon is drawn on a 24x24 grid and rendered by <ConsumableIcon>. The keys
+   must match ConsumableIcons in internal/data/consumable_items.go — that list is
+   what the server accepts, this one is what the UI can draw. To add an icon, add
+   it to both (and to CONSUMABLE_ICON_TONE for its color). */
+const CI_D = 'fill="currentColor" fill-opacity=".16"';           // duotone body fill
+const CI_DOT = 'fill="currentColor" stroke="none"';              // solid dots / text
+const CI_TXT = `${CI_DOT} font-family="'DM Sans',system-ui,sans-serif" font-weight="700" text-anchor="middle" dominant-baseline="central"`;
+
+const CONSUMABLE_ICONS = {
+  'battery-aa': `
+    <rect x="7.5" y="5" width="9" height="17" rx="2.2" ${CI_D}/>
+    <rect x="10.2" y="2" width="3.6" height="3" rx=".8"/>
+    <text x="12" y="13.7" transform="rotate(-90 12 13.7)" font-size="6.2" ${CI_TXT}>AA</text>`,
+  'battery-aaa': `
+    <rect x="8.4" y="5" width="7.2" height="17" rx="2" ${CI_D}/>
+    <rect x="10.4" y="2" width="3.2" height="3" rx=".8"/>
+    <text x="12" y="13.7" transform="rotate(-90 12 13.7)" font-size="5" ${CI_TXT}>AAA</text>`,
+  'battery-9v': `
+    <rect x="6" y="7.5" width="12" height="14.5" rx="2.2" ${CI_D}/>
+    <circle cx="9.6" cy="5" r="1.7"/><circle cx="14.4" cy="5" r="1.7"/>
+    <text x="12" y="15.3" font-size="6.4" ${CI_TXT}>9V</text>`,
+  'battery-coin': `
+    <circle cx="12" cy="12" r="8.6" ${CI_D}/>
+    <circle cx="12" cy="12" r="5.2" stroke-width="1.3"/>
+    <path d="M12 9.6v4.8M9.6 12h4.8" stroke-width="1.5"/>`,
+  'phone': `
+    <path d="M3.5 8.2v-.8C3.5 6.1 4.6 5 5.9 5h12.2c1.3 0 2.4 1.1 2.4 2.4v.8c0 .8-.7 1.5-1.5 1.5h-1.9c-.8 0-1.4-.6-1.4-1.4V7.3H9.5v1c0 .8-.6 1.4-1.4 1.4H5c-.8 0-1.5-.7-1.5-1.5z" ${CI_D}/>
+    <path d="M7.2 12.2h9.6l3.4 7.8H3.8z" ${CI_D}/>
+    <path d="M9.4 15.2h.01M12 15.2h.01M14.6 15.2h.01M9.4 17.5h.01M12 17.5h.01M14.6 17.5h.01" stroke-width="1.9"/>`,
+  'mobile': `
+    <rect x="6.8" y="2.5" width="10.4" height="19" rx="2.6" ${CI_D}/>
+    <path d="M10.4 5.4h3.2"/><path d="M10.6 18.8h2.8"/>`,
+  'tablet': `
+    <rect x="4.5" y="2.5" width="15" height="19" rx="2.6" ${CI_D}/>
+    <circle cx="12" cy="18.6" r=".9" ${CI_DOT}/>`,
+  'remote': `
+    <rect x="8" y="2" width="8" height="20" rx="3.2" ${CI_D}/>
+    <circle cx="12" cy="6.2" r="1.5" stroke-width="1.5"/>
+    <circle cx="10" cy="10.6" r=".95" ${CI_DOT}/><circle cx="14" cy="10.6" r=".95" ${CI_DOT}/>
+    <circle cx="10" cy="13.6" r=".95" ${CI_DOT}/><circle cx="14" cy="13.6" r=".95" ${CI_DOT}/>
+    <path d="M10.2 17.6h3.6"/>`,
+  'tv': `
+    <rect x="2.5" y="4.5" width="19" height="13" rx="2.3" ${CI_D}/>
+    <path d="M10.6 8.6v4.8l4-2.4z" stroke-width="1.5"/>
+    <path d="M7 21l1.2-3.5M17 21l-1.2-3.5"/>`,
+  'monitor': `
+    <rect x="2.5" y="3.5" width="19" height="13" rx="2.3" ${CI_D}/>
+    <path d="M6.5 8h6M6.5 11.2h3.6" stroke-width="1.5"/>
+    <path d="M12 16.5V20M8 20.5h8"/>`,
+  'hdmi': `
+    <path d="M4.5 3.5h15v5.2l-3 3.8h-9l-3-3.8z" ${CI_D}/>
+    <path d="M8.3 6.2v2.4M10.8 6.2v2.4M13.2 6.2v2.4M15.7 6.2v2.4" stroke-width="1.5"/>
+    <path d="M9 12.5v3.5h6v-3.5"/><path d="M12 16v5.5"/>`,
+  'ethernet': `
+    <rect x="6" y="3.5" width="12" height="11.5" rx="1.9" ${CI_D}/>
+    <path d="M9 6.2v3.6M11.2 6.2v3.6M13.4 6.2v3.6M15.6 6.2v3.6" stroke-width="1.4"/>
+    <path d="M9.4 15v3.6h5.2V15"/><path d="M12 18.6v3"/>`,
+  'charger': `
+    <rect x="6" y="8" width="12" height="9.4" rx="2.6" ${CI_D}/>
+    <path d="M9.6 8V4.4M14.4 8V4.4"/>
+    <path d="M12 17.4v4"/>`,
+  'power-strip': `
+    <rect x="2.5" y="7.5" width="19" height="9" rx="2.4" ${CI_D}/>
+    <path d="M6.3 10.6v2.8M8.3 10.6v2.8M11 10.6v2.8M13 10.6v2.8M15.7 10.6v2.8M17.7 10.6v2.8" stroke-width="1.5"/>
+    <path d="M12 16.5v4"/>`,
+  'bulb': `
+    <path d="M12 2.5a6.5 6.5 0 0 0-3.9 11.7c.6.5.9 1.2.9 1.9v.4h6v-.4c0-.7.3-1.4.9-1.9A6.5 6.5 0 0 0 12 2.5z" ${CI_D}/>
+    <path d="M9.5 19.2h5M10.6 21.6h2.8"/>
+    <path d="M10.3 9.6 12 12l1.7-2.4M12 12v4.4" stroke-width="1.4"/>`,
+  'key-card': `
+    <rect x="2.5" y="5.5" width="19" height="13" rx="2.4" ${CI_D}/>
+    <rect x="2.5" y="8.6" width="19" height="2.8" fill="currentColor" fill-opacity=".5" stroke="none"/>
+    <path d="M6 15.2h5.5"/>
+    <path d="M16.3 13.4a2.4 2.4 0 0 1 0 3.2M18.4 12.2a4.2 4.2 0 0 1 0 5.6" stroke-width="1.5"/>`,
+  'lock': `
+    <rect x="5" y="10.5" width="14" height="10.5" rx="2.6" ${CI_D}/>
+    <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>
+    <circle cx="12" cy="15" r="1.4" ${CI_DOT}/><path d="M12 15.6v2"/>`,
+  'router': `
+    <rect x="3" y="14" width="18" height="6.5" rx="2.2" ${CI_D}/>
+    <path d="M9.6 9.6a3.4 3.4 0 0 1 4.8 0M7.2 7.2a6.8 6.8 0 0 1 9.6 0" stroke-width="1.6"/>
+    <circle cx="12" cy="12" r=".9" ${CI_DOT}/>
+    <circle cx="6.8" cy="17.2" r=".85" ${CI_DOT}/><circle cx="9.6" cy="17.2" r=".85" ${CI_DOT}/>
+    <path d="M14.6 17.2h3.8" stroke-width="1.5"/>`,
+  'usb': `
+    <rect x="8" y="2.5" width="8" height="6" rx=".9"/>
+    <circle cx="10.4" cy="5.5" r=".75" ${CI_DOT}/><circle cx="13.6" cy="5.5" r=".75" ${CI_DOT}/>
+    <rect x="6.5" y="8.5" width="11" height="13" rx="2.4" ${CI_D}/>
+    <circle cx="12" cy="17.6" r="1.3"/>`,
+  'mouse': `
+    <rect x="6.5" y="2.5" width="11" height="19" rx="5.5" ${CI_D}/>
+    <path d="M6.5 10.4h11M12 2.5v4"/>
+    <rect x="11" y="5.4" width="2" height="3.4" rx="1" ${CI_DOT}/>`,
+  'keyboard': `
+    <rect x="2" y="6" width="20" height="12" rx="2.4" ${CI_D}/>
+    <path d="M6 9.8h.01M9 9.8h.01M12 9.8h.01M15 9.8h.01M18 9.8h.01M6 12.6h.01M9 12.6h.01M12 12.6h.01M15 12.6h.01M18 12.6h.01" stroke-width="2.2"/>
+    <path d="M7.5 15.4h9" stroke-width="1.6"/>`,
+  'headset': `
+    <path d="M4.5 14v-2a7.5 7.5 0 0 1 15 0v2"/>
+    <rect x="3" y="13" width="4.2" height="6.6" rx="1.7" ${CI_D}/>
+    <rect x="16.8" y="13" width="4.2" height="6.6" rx="1.7" ${CI_D}/>
+    <path d="M19 19.6v.3c0 1.5-1.2 2.6-2.7 2.6H14"/>
+    <circle cx="12.6" cy="22.5" r=".9" ${CI_DOT}/>`,
+  'printer': `
+    <path d="M7 9V3.5h10V9"/>
+    <rect x="3" y="9" width="18" height="8" rx="2.2" ${CI_D}/>
+    <rect x="7" y="14" width="10" height="7" rx=".9" ${CI_D}/>
+    <path d="M9.6 17h4.8M9.6 19h2.6" stroke-width="1.4"/>
+    <circle cx="17.6" cy="11.8" r=".8" ${CI_DOT}/>`,
+  'box': `
+    <path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z" ${CI_D}/>
+    <path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/>`,
 };
-function consumableRuleFor(typeName) {
-  return CONSUMABLE_RULES[(typeName||'').trim().toLowerCase()] || null;
+
+const CONSUMABLE_ICON_TONE = {
+  'battery-aa':'amber','battery-aaa':'amber','battery-9v':'amber','battery-coin':'amber','bulb':'amber',
+  'phone':'blue','mobile':'blue','tablet':'blue','headset':'blue','key-card':'blue','lock':'blue',
+  'remote':'teal','tv':'teal','monitor':'teal','printer':'teal',
+  'hdmi':'green','ethernet':'green','router':'green','usb':'green','mouse':'green','keyboard':'green',
+  'charger':'red','power-strip':'red',
+  'box':'gray',
+};
+const CONSUMABLE_ICON_KEYS = Object.keys(CONSUMABLE_ICONS);
+const MAX_CONSUMABLE_QTY = 99;
+
+function ConsumableIcon({ name, size=36 }) {
+  const key = CONSUMABLE_ICONS[name] ? name : 'box'; // unknown key → generic box
+  return (
+    <span className={`cicon tone-${CONSUMABLE_ICON_TONE[key]}`}
+      style={{width:size, height:size, borderRadius:Math.round(size*0.26)}} aria-hidden="true">
+      {/* trusted static markup from CONSUMABLE_ICONS above, never user input */}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+        strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{__html: CONSUMABLE_ICONS[key]}}/>
+    </span>
+  );
 }
 
-function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments, connectaAgents, token, onClose, onSave }) {
+/* The grid of icons a manager picks from when creating / editing a consumable. */
+function ConsumableIconGrid({ value, onChange }) {
+  return (
+    <div className="icon-grid">
+      {CONSUMABLE_ICON_KEYS.map(k=>(
+        <button type="button" key={k} title={k.replace(/-/g,' ')} aria-pressed={value===k}
+          className={`icon-opt ${value===k?'selected':''}`} onClick={()=>onChange(k)}>
+          <ConsumableIcon name={k} size={30}/>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* Small icons (with a quantity badge) shown in the issue tables. */
+function ConsumableStrip({ items }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="cstrip">
+      {items.map((c,i)=>(
+        <span key={i} className="cstrip-item" title={`${c.item} × ${c.quantity}`}>
+          <ConsumableIcon name={c.icon} size={22}/>
+          {c.quantity > 1 && <span className="cstrip-qty">{c.quantity}</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* The dialog opened by "Add consumables". Works on a draft copy of the selection;
+   nothing changes on the issue until the user presses Done. */
+function ConsumablePicker({ items, value, onCancel, onDone }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const [draft, setDraft] = useState(value);   // [{itemId, quantity}]
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onCancel(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
+  const byId = useMemo(()=>Object.fromEntries(draft.map(d=>[d.itemId,d])), [draft]);
+  const q = query.trim().toLowerCase();
+  const shown = q ? items.filter(it=>it.name.toLowerCase().includes(q)) : items;
+
+  function toggle(id) {
+    setDraft(d => d.some(x=>x.itemId===id) ? d.filter(x=>x.itemId!==id) : [...d, {itemId:id, quantity:1}]);
+  }
+  // Works from the latest state (not the last render), so fast clicks never lose a step.
+  function bump(id, delta) {
+    setDraft(d => d.flatMap(x => {
+      if (x.itemId !== id) return [x];
+      const qty = x.quantity + delta;
+      return qty < 1 ? [] : [{...x, quantity: Math.min(qty, MAX_CONSUMABLE_QTY)}];  // stepping down from 1 un-selects it
+    }));
+  }
+
+  return (
+    <div className="modal-overlay picker-overlay" onClick={e=>e.target===e.currentTarget&&onCancel()}>
+      <div className="modal picker-modal" role="dialog" aria-modal="true" aria-label={t.consumablePickerTitle}>
+        <div className="modal-header">
+          <div>
+            <h2>{t.consumablePickerTitle}</h2>
+            <div className="picker-sub">{t.consumablePickerSub}</div>
+          </div>
+          <button type="button" className="icon-btn" onClick={onCancel}>{Ic.x}</button>
+        </div>
+        <div className="modal-body">
+          {items.length > 8 && (
+            <div className="search-wrap" style={{width:'100%'}}>
+              {Ic.search}
+              <input placeholder={t.consumableSearch} value={query} onChange={e=>setQuery(e.target.value)} autoFocus/>
+            </div>
+          )}
+          {items.length === 0 ? (
+            <div className="empty-state" style={{padding:'28px 12px'}}>{Ic.box}<p>{t.consumableNone}</p></div>
+          ) : shown.length === 0 ? (
+            <div className="empty-state" style={{padding:'28px 12px'}}>{Ic.search}<p>{t.consumableNoMatch}</p></div>
+          ) : (
+            <div className="cpick-grid">
+              {shown.map(it=>{
+                const sel = byId[it.id];
+                return (
+                  <div key={it.id} role="button" tabIndex={0} aria-pressed={!!sel}
+                    className={`cpick-card ${sel?'selected':''}`}
+                    onClick={()=>toggle(it.id)}
+                    onKeyDown={e=>{ if (e.key==='Enter' || e.key===' ') { e.preventDefault(); toggle(it.id); } }}>
+                    <span className="cpick-check">{Ic.check}</span>
+                    <ConsumableIcon name={it.icon} size={48}/>
+                    <span className="cpick-name">{it.name}</span>
+                    {sel ? (
+                      <div className="cpick-stepper" onClick={e=>e.stopPropagation()} onKeyDown={e=>e.stopPropagation()}>
+                        <button type="button" aria-label="−" onClick={()=>bump(it.id, -1)}>{Ic.minus}</button>
+                        <span>{sel.quantity}</span>
+                        <button type="button" aria-label="+" onClick={()=>bump(it.id, +1)}>{Ic.plus}</button>
+                      </div>
+                    ) : (
+                      <span className="cpick-hint">{t.consumableTapToAdd}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-ghost" onClick={onCancel}>{t.cancel}</button>
+          <button type="button" className="btn btn-primary" onClick={()=>onDone(draft)}>
+            {Ic.check} {t.consumableDone}{draft.length > 0 ? ` (${draft.length})` : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments, connectaAgents, consumableItems, token, onClose, onSave }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const isEdit = !!editIssue;
@@ -1215,9 +1601,10 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
     agentNames.unshift(editIssue.confirmedByAgent);
   }
   const firstType = typeNames[0] || '';
+  const catalogById = Object.fromEntries((consumableItems || []).map(ci => [ci.id, ci]));
   const defaults = issueMode==='apt'
-    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', consumableUsed:false}
-    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', consumableUsed:false};
+    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', consumables:[]}
+    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', consumables:[]};
   const [form, setForm] = useState(isEdit ? {
     apt:        editIssue.apt||'',
     dept:       editIssue.dept||'',
@@ -1241,9 +1628,16 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
     status:           editIssue.status,
     reportedByAgent:  editIssue.reportedByAgent || '',
     confirmedByAgent: editIssue.confirmedByAgent || '',
-    consumableUsed:   !!editIssue.consumableItem,
+    // Only items still in the catalog can be edited here. Usage recorded against
+    // an item that has since been removed is kept on the server untouched.
+    consumables: (editIssue.consumables || [])
+      .filter(c => c.itemId != null && catalogById[c.itemId])
+      .map(c => ({ itemId: c.itemId, quantity: c.quantity })),
   } : defaults);
-  const consumableRule = consumableRuleFor(form.type);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const selectedConsumables = form.consumables
+    .map(c => ({ ...c, ...catalogById[c.itemId] }))     // adds name + icon
+    .filter(c => c.name);
 
   function set(k,v) { setForm(f=>({...f,[k]:v})); }
   const duration = useMemo(()=>computeDurationMinutes(form.startTime, form.endTime), [form.startTime, form.endTime]);
@@ -1271,6 +1665,7 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
   }, [location, form.type, issueMode, token, isEdit, editIssue?.id]);
 
   return (
+    <>
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal">
         <div className="modal-header">
@@ -1335,15 +1730,23 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
               <option value="Pending">{t.statusPending}</option>
             </select>
           </div>
-          {consumableRule && (
-            <div className="toggle-row">
-              <span style={{fontSize:13,color:'var(--gray-900)'}}>{consumableRule.question[lang]}</span>
-              <label className="toggle-switch">
-                <input type="checkbox" checked={form.consumableUsed} onChange={e=>set('consumableUsed',e.target.checked)}/>
-                <span className="toggle-slider"></span>
-              </label>
+          <div className="form-group">
+            <label>{t.consumablesLabel}</label>
+            <div className={`consumable-box ${selectedConsumables.length ? 'has-items' : ''}`}>
+              {selectedConsumables.map(c=>(
+                <span className="consumable-chip" key={c.itemId}>
+                  <ConsumableIcon name={c.icon} size={22}/>
+                  <span className="consumable-chip-name">{c.name}</span>
+                  {c.quantity > 1 && <span className="consumable-chip-qty">×{c.quantity}</span>}
+                  <button type="button" className="consumable-chip-x" aria-label={t.consumableRemove}
+                    onClick={()=>set('consumables', form.consumables.filter(x=>x.itemId!==c.itemId))}>{Ic.x}</button>
+                </span>
+              ))}
+              <button type="button" className="consumable-add-btn" onClick={()=>setPickerOpen(true)}>
+                {selectedConsumables.length ? Ic.edit : Ic.plus} {selectedConsumables.length ? t.editConsumables : t.addConsumables}
+              </button>
             </div>
-          )}
+          </div>
           <div className="form-row">
             <div className="form-group">
               <label>{t.reportedByAgent}</label>
@@ -1374,6 +1777,12 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
         </div>
       </div>
     </div>
+    {pickerOpen && (
+      <ConsumablePicker items={consumableItems || []} value={form.consumables}
+        onCancel={()=>setPickerOpen(false)}
+        onDone={sel=>{ set('consumables', sel); setPickerOpen(false); }}/>
+    )}
+    </>
   );
 }
 
@@ -1493,7 +1902,7 @@ function IssuesTable({ issues, tableMode, currentUser, newIssueId, onDelete, onE
               <tr key={issue.id} className={issue.id===newIssueId ? 'row-enter' : ''}>
                 <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.apt||issue.dept}</strong></td>
                 <td><TypeBadge type={issue.type}/></td>
-                <td style={{maxWidth:150}}>{issue.problem}</td>
+                <td style={{maxWidth:150}}>{issue.problem}<ConsumableStrip items={issue.consumables}/></td>
                 <td style={{maxWidth:190,color:'var(--gray-600)',fontSize:13}}>{issue.resolution}</td>
                 <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.time}m</td>
                 <td><span className={`badge ${issue.status==='Ok'?'badge-ok':'badge-pending'} ${issue.id===newIssueId ? 'status-highlight' : ''}`}>{issue.status}</span></td>
@@ -1891,7 +2300,7 @@ function ConsumablesPage({ token }) {
   const todayStr = new Date().toISOString().slice(0,10);
   const [date, setDate] = useState('');
   const [items, setItems] = useState([]);
-  const [summary, setSummary] = useState({});
+  const [summary, setSummary] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1902,14 +2311,12 @@ function ConsumablesPage({ token }) {
       .then(res => {
         if (cancelled) return;
         setItems(res.consumables || []);
-        setSummary(res.summary || {});
+        setSummary(res.summary || []);
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [date, token]);
-
-  const summaryEntries = Object.entries(summary);
 
   return (
     <div>
@@ -1921,12 +2328,15 @@ function ConsumablesPage({ token }) {
         <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate('')}>{t.historyAllDates}</button>
       </div>
 
-      {summaryEntries.length > 0 && (
+      {summary.length > 0 && (
         <div className="analytics-grid">
-          {summaryEntries.map(([item,count])=>(
-            <div className="stat-card" key={item}>
-              <div className="stat-label">{item}</div>
-              <div className="stat-value">{count}</div>
+          {summary.map(s=>(
+            <div className="stat-card" key={s.item} style={{display:'flex',alignItems:'center',gap:12}}>
+              <ConsumableIcon name={s.icon} size={42}/>
+              <div style={{minWidth:0}}>
+                <div className="stat-label" style={{marginBottom:4}}>{s.item}</div>
+                <div className="stat-value">{s.quantity}</div>
+              </div>
             </div>
           ))}
         </div>
@@ -1940,13 +2350,19 @@ function ConsumablesPage({ token }) {
         <div className="table-card">
           <table>
             <thead>
-              <tr><th>{t.date}</th><th>{t.item}</th><th>{t.location}</th><th>{t.loggedBy}</th></tr>
+              <tr><th>{t.date}</th><th>{t.item}</th><th>{t.quantity}</th><th>{t.location}</th><th>{t.loggedBy}</th></tr>
             </thead>
             <tbody>
               {items.map(c=>(
                 <tr key={c.id}>
                   <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>{new Date(c.created_at).toLocaleString()}</td>
-                  <td>{c.item}</td>
+                  <td>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <ConsumableIcon name={c.icon} size={30}/>
+                      <span style={{fontWeight:500}}>{c.item}</span>
+                    </div>
+                  </td>
+                  <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>×{c.quantity}</td>
                   <td>{c.location}</td>
                   <td>{c.logged_by_name}</td>
                 </tr>
@@ -2715,7 +3131,7 @@ function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate
 }
 
 /* ════════════════ ADMIN PAGE (managers only) ════════════════ */
-function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartmentsUpdate, connectaAgents, onConnectaAgentsUpdate, settings, onSettingsUpdate, setToast }) {
+function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartmentsUpdate, connectaAgents, onConnectaAgentsUpdate, consumableItems, onConsumableItemsUpdate, settings, onSettingsUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [name, setName] = useState('');
@@ -2729,6 +3145,12 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
   const [agentName, setAgentName] = useState('');
   const [savingAgent, setSavingAgent] = useState(false);
   const [agentErr, setAgentErr] = useState('');
+
+  const [ciName, setCiName] = useState('');
+  const [ciIcon, setCiIcon] = useState('box');
+  const [savingCi, setSavingCi] = useState(false);
+  const [ciErr, setCiErr] = useState('');
+  const [editingIconId, setEditingIconId] = useState(null);
 
   const [windowHours, setWindowHours] = useState(settings?.duplicate_window_hours ?? 24);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -2818,6 +3240,38 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
       await apiFetch(`/connecta-agents/${id}`, {method:'DELETE', token});
       onConnectaAgentsUpdate(prev => prev.filter(a => a.id !== id));
       setToast(t.toastAgentDeleted);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  async function addConsumableItem(e) {
+    e.preventDefault();
+    const trimmed = ciName.trim();
+    if (!trimmed) return;
+    setSavingCi(true); setCiErr('');
+    try {
+      const res = await apiFetch('/consumable-items', {method:'POST', body:{name: trimmed, icon: ciIcon}, token});
+      onConsumableItemsUpdate(prev => [...prev, res.consumable_item].sort((a,b)=>a.name.localeCompare(b.name)));
+      setCiName(''); setCiIcon('box');
+      setToast(t.toastConsumableAdded);
+    } catch(ex) { setCiErr(ex.message); }
+    finally { setSavingCi(false); }
+  }
+
+  async function removeConsumableItem(id) {
+    try {
+      await apiFetch(`/consumable-items/${id}`, {method:'DELETE', token});
+      onConsumableItemsUpdate(prev => prev.filter(ci => ci.id !== id));
+      if (editingIconId === id) setEditingIconId(null);
+      setToast(t.toastConsumableDeleted);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  async function updateConsumableItemIcon(id, icon) {
+    try {
+      const res = await apiFetch(`/consumable-items/${id}/icon`, {method:'PATCH', body:{icon}, token});
+      onConsumableItemsUpdate(prev => prev.map(ci => ci.id===id ? res.consumable_item : ci));
+      setEditingIconId(null);
+      setToast(t.toastConsumableIconUpdated);
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
@@ -2969,6 +3423,77 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
             }
           </div>
         </div>
+
+        <div>
+          <div className="mini-card" style={{marginBottom:20}}>
+            <div className="mini-card-title" style={{marginBottom:6}}>{t.adminConsumables}</div>
+            <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminConsumablesSub}</p>
+            {ciErr && <div className="auth-error" style={{marginBottom:14}}>{ciErr}</div>}
+            <form onSubmit={addConsumableItem}>
+              <div className="form-group">
+                <label>{t.consumableName}</label>
+                <input className="form-control" placeholder={t.consumableNamePlaceholder} value={ciName}
+                  onChange={e=>setCiName(e.target.value)} maxLength={50}/>
+              </div>
+              <div className="form-group" style={{marginTop:14}}>
+                <label>{t.consumableIconLabel}</label>
+                <ConsumableIconGrid value={ciIcon} onChange={setCiIcon}/>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:12,marginTop:16}}>
+                <div className="ci-preview">
+                  <ConsumableIcon name={ciIcon} size={36}/>
+                  <span style={{color: ciName.trim() ? 'var(--gray-900)' : 'var(--gray-400)'}}>{ciName.trim() || t.consumableNamePlaceholder}</span>
+                </div>
+                <button type="submit" className="btn btn-primary" disabled={savingCi || !ciName.trim()}>
+                  {Ic.plus} {savingCi ? '…' : t.addConsumable}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div className="table-card">
+            <div className="table-header">
+              <span className="table-title">{t.adminConsumables}</span>
+              <span style={{fontSize:12,color:'var(--gray-400)'}}>{consumableItems.length}</span>
+            </div>
+            {consumableItems.length === 0
+              ? <div className="empty-state">{Ic.box}<p>{t.noConsumableItems}</p></div>
+              : <table>
+                  <thead>
+                    <tr><th>{t.consumableName}</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {consumableItems.map(ci=>(
+                      <React.Fragment key={ci.id}>
+                        <tr>
+                          <td>
+                            <div style={{display:'flex',alignItems:'center',gap:10}}>
+                              <button type="button" className="cicon-btn" title={t.changeIcon}
+                                onClick={()=>setEditingIconId(editingIconId===ci.id ? null : ci.id)}>
+                                <ConsumableIcon name={ci.icon} size={34}/>
+                              </button>
+                              <span style={{fontWeight:500}}>{ci.name}</span>
+                            </div>
+                          </td>
+                          <td style={{textAlign:'right'}}>
+                            <button className="icon-btn" title={t.removeConsumable} onClick={()=>removeConsumableItem(ci.id)}>{Ic.trash}</button>
+                          </td>
+                        </tr>
+                        {editingIconId === ci.id && (
+                          <tr className="icon-editor-row">
+                            <td colSpan={2}>
+                              <div className="icon-editor-label">{t.changeIcon}</div>
+                              <ConsumableIconGrid value={ci.icon} onChange={icon=>updateConsumableItemIcon(ci.id, icon)}/>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+            }
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -2985,6 +3510,7 @@ function App() {
   const [issueTypes, setIssueTypes] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [connectaAgents, setConnectaAgents] = useState([]);
+  const [consumableItems, setConsumableItems] = useState([]);
   const [settings, setSettings] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const alertsPendingCount = useMemo(() => alerts.filter(a => a.status === 'pending').length, [alerts]);
@@ -3029,7 +3555,8 @@ function App() {
       apiFetch('/connecta-agents', {token}),
       apiFetch('/settings', {token}),
       apiFetch('/alerts', {token}),
-    ]).then(([aptRes, deptRes, usersRes, statsRes, typesRes, deptsRes, agentsRes, settingsRes, alertsRes]) => {
+      apiFetch('/consumable-items', {token}),
+    ]).then(([aptRes, deptRes, usersRes, statsRes, typesRes, deptsRes, agentsRes, settingsRes, alertsRes, consumableItemsRes]) => {
       setApt((aptRes.issues || []).map(mapIssue));
       setDept((deptRes.issues || []).map(mapIssue));
       setUsers(usersRes.users || []);
@@ -3039,6 +3566,7 @@ function App() {
       setConnectaAgents(agentsRes.connecta_agents || []);
       setSettings(settingsRes.settings);
       setAlerts(alertsRes.alerts || []);
+      setConsumableItems(consumableItemsRes.consumable_items || []);
     }).catch(ex => {
       if (ex.message.includes('401') || ex.message.toLowerCase().includes('token')) {
         setSession(null); // token expired
@@ -3055,7 +3583,7 @@ function App() {
 
   function logout() {
     setSession(null);
-    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setSettings(null); setAlerts([]);
+    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlerts([]);
   }
 
   // Called when profile updates come back from API
@@ -3078,7 +3606,7 @@ function App() {
         status:       form.status,
         reported_by_agent:  form.reportedByAgent,
         confirmed_by_agent: form.confirmedByAgent,
-        consumable_used: !!form.consumableUsed,
+        consumables: (form.consumables || []).map(c => ({item_id: c.itemId, quantity: c.quantity})),
       };
       const res = await apiFetch('/issues', {method:'POST', body, token});
       const issue = mapIssue(res.issue);
@@ -3109,7 +3637,7 @@ function App() {
         status:       form.status,
         reported_by_agent:  form.reportedByAgent,
         confirmed_by_agent: form.confirmedByAgent,
-        consumable_used: !!form.consumableUsed,
+        consumables: (form.consumables || []).map(c => ({item_id: c.itemId, quantity: c.quantity})),
       };
       const res = await apiFetch(`/issues/${id}`, {method:'PATCH', body, token});
       const updated = mapIssue(res.issue);
@@ -3230,6 +3758,8 @@ function App() {
               onDepartmentsUpdate={setDepartments}
               connectaAgents={connectaAgents}
               onConnectaAgentsUpdate={setConnectaAgents}
+              consumableItems={consumableItems}
+              onConsumableItemsUpdate={setConsumableItems}
               settings={settings}
               onSettingsUpdate={setSettings}
               setToast={setToast}
@@ -3248,10 +3778,10 @@ function App() {
         </div>
 
         {modal && (
-          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)}/>
+          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)}/>
         )}
         {editing && (
-          <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} token={token}
+          <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token}
             onClose={()=>setEditing(null)} onSave={form=>saveEdit(form,editing.mode,editing.issue.id)}/>
         )}
         {toast && <Toast msg={toast} onDone={()=>setToast(null)}/>}

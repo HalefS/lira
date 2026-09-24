@@ -29,14 +29,14 @@ type Issue struct {
 	// rendering in the UI — only the add/edit issue form surfaces these.
 	ReportedByAgent  *string `json:"reported_by_agent"`
 	ConfirmedByAgent *string `json:"confirmed_by_agent"`
-	// Set when a tracked consumable (batteries, remote, phone — see
-	// consumableItemForType) was used resolving this issue. Nil means none.
-	ConsumableItem *string `json:"consumable_item"`
-	Status         string  `json:"status"`
-	LoggedBy       int64   `json:"logged_by"`
-	LoggedByName   string  `json:"logged_by_name"`
-	LoggedByIdx    int     `json:"logged_by_idx"`
-	Version        int     `json:"-"`
+	Status           string  `json:"status"`
+	LoggedBy         int64   `json:"logged_by"`
+	LoggedByName     string  `json:"logged_by_name"`
+	LoggedByIdx      int     `json:"logged_by_idx"`
+	Version          int     `json:"-"`
+	// Consumables used while resolving this issue (batteries, remotes,
+	// phones, ...). Always an array in the JSON, empty when none were used.
+	Consumables []*IssueConsumable `json:"consumables"`
 }
 
 type IssueFilters struct {
@@ -141,10 +141,9 @@ func (m IssueModel) Get(id int64) (*Issue, error) {
 	query := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
 		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
-		       u.name, u.avatar_idx, i.version, c.item
+		       u.name, u.avatar_idx, i.version
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
-		LEFT JOIN consumables c ON c.issue_id = i.id
 		WHERE i.id = $1`
 
 	var issue Issue
@@ -154,7 +153,7 @@ func (m IssueModel) Get(id int64) (*Issue, error) {
 	err := m.DB.QueryRowContext(ctx, query, id).Scan(
 		&issue.ID, &issue.CreatedAt, &issue.Mode, &issue.Location, &issue.Type,
 		&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.ReportedByAgent, &issue.ConfirmedByAgent, &issue.Status,
-		&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version, &issue.ConsumableItem,
+		&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version,
 	)
 	if err != nil {
 		switch {
@@ -163,6 +162,10 @@ func (m IssueModel) Get(id int64) (*Issue, error) {
 		default:
 			return nil, err
 		}
+	}
+
+	if err := loadIssueConsumables(ctx, m.DB, []*Issue{&issue}); err != nil {
+		return nil, err
 	}
 	return &issue, nil
 }
@@ -205,10 +208,9 @@ func (m IssueModel) GetAll(f IssueFilters) ([]*Issue, error) {
 	query := fmt.Sprintf(`
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
 		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
-		       u.name, u.avatar_idx, i.version, c.item
+		       u.name, u.avatar_idx, i.version
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
-		LEFT JOIN consumables c ON c.issue_id = i.id
 		WHERE %s
 		ORDER BY i.created_at DESC`, strings.Join(conditions, " AND "))
 
@@ -227,7 +229,7 @@ func (m IssueModel) GetAll(f IssueFilters) ([]*Issue, error) {
 		err := rows.Scan(
 			&issue.ID, &issue.CreatedAt, &issue.Mode, &issue.Location, &issue.Type,
 			&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.ReportedByAgent, &issue.ConfirmedByAgent, &issue.Status,
-			&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version, &issue.ConsumableItem,
+			&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version,
 		)
 		if err != nil {
 			return nil, err
@@ -235,6 +237,10 @@ func (m IssueModel) GetAll(f IssueFilters) ([]*Issue, error) {
 		issues = append(issues, &issue)
 	}
 	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if err = loadIssueConsumables(ctx, m.DB, issues); err != nil {
 		return nil, err
 	}
 	return issues, nil
@@ -408,10 +414,9 @@ func (m IssueModel) GetByUser(userID int64, limit int) ([]*Issue, error) {
 	query := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
 		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
-		       u.name, u.avatar_idx, i.version, c.item
+		       u.name, u.avatar_idx, i.version
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
-		LEFT JOIN consumables c ON c.issue_id = i.id
 		WHERE i.logged_by = $1
 		ORDER BY i.created_at DESC
 		LIMIT $2`
@@ -431,14 +436,21 @@ func (m IssueModel) GetByUser(userID int64, limit int) ([]*Issue, error) {
 		err := rows.Scan(
 			&issue.ID, &issue.CreatedAt, &issue.Mode, &issue.Location, &issue.Type,
 			&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.ReportedByAgent, &issue.ConfirmedByAgent, &issue.Status,
-			&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version, &issue.ConsumableItem,
+			&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version,
 		)
 		if err != nil {
 			return nil, err
 		}
 		issues = append(issues, &issue)
 	}
-	return issues, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if err = loadIssueConsumables(ctx, m.DB, issues); err != nil {
+		return nil, err
+	}
+	return issues, nil
 }
 
 // ── Recurring-issue detection ───────────────────────────────────────────────
@@ -574,10 +586,9 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 	issueQ := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
 		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
-		       u.name, u.avatar_idx, i.version, c.item
+		       u.name, u.avatar_idx, i.version
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
-		LEFT JOIN consumables c ON c.issue_id = i.id
 		WHERE i.created_at::date = $1
 		ORDER BY i.mode, i.created_at`
 
@@ -587,15 +598,17 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 	}
 	defer rows.Close()
 
+	var reportIssues []*Issue
 	for rows.Next() {
 		var i Issue
 		if err := rows.Scan(
 			&i.ID, &i.CreatedAt, &i.Mode, &i.Location, &i.Type,
 			&i.Problem, &i.Resolution, &i.TimeMinutes, &i.StartTime, &i.EndTime, &i.ReportedByAgent, &i.ConfirmedByAgent, &i.Status,
-			&i.LoggedBy, &i.LoggedByName, &i.LoggedByIdx, &i.Version, &i.ConsumableItem,
+			&i.LoggedBy, &i.LoggedByName, &i.LoggedByIdx, &i.Version,
 		); err != nil {
 			return nil, err
 		}
+		reportIssues = append(reportIssues, &i)
 		if i.Mode == "apt" {
 			report.AptIssues = append(report.AptIssues, &i)
 		} else {
@@ -606,6 +619,10 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 		report.ByStatus[i.Status]++
 	}
 	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if err = loadIssueConsumables(ctx, m.DB, reportIssues); err != nil {
 		return nil, err
 	}
 
