@@ -36,10 +36,9 @@ type config struct {
 }
 
 type application struct {
-	config        config
-	logger        *slog.Logger
-	models        data.Models
-	systemSampler *data.SystemSampler
+	config config
+	logger *slog.Logger
+	models data.Models
 }
 
 func main() {
@@ -75,10 +74,9 @@ func main() {
 	logger.Info("database connection pool established")
 
 	app := &application{
-		config:        cfg,
-		logger:        logger,
-		models:        data.NewModels(db),
-		systemSampler: data.NewSystemSampler(),
+		config: cfg,
+		logger: logger,
+		models: data.NewModels(db),
 	}
 
 	if err := app.seedDefaultManager(); err != nil {
