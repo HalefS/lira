@@ -455,6 +455,16 @@ select.form-control { cursor: pointer; }
   animation: sysPulse 2s ease-in-out infinite;
 }
 .sys-live-dot.stale { background: var(--gray-300); animation: none; }
+.sys-refresh-btn {
+  width: 26px; height: 26px; padding: 0; border: 1px solid var(--gray-200); border-radius: 7px;
+  background: var(--gray-50); color: var(--gray-600); display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: border-color 0.12s, color 0.12s;
+}
+.sys-refresh-btn:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+.sys-refresh-btn:disabled { cursor: default; opacity: 0.7; }
+.sys-refresh-btn svg { width: 13px; height: 13px; }
+.sys-refresh-btn.spinning svg { animation: sysSpin 0.7s linear infinite; }
+@keyframes sysSpin { to { transform: rotate(360deg); } }
 @keyframes sysPulse {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 45%, transparent); }
   50%      { box-shadow: 0 0 0 4px transparent; }
@@ -820,6 +830,7 @@ const T = {
     sysCpuUnavailable: 'Not available on {os}.',
     sysCores: 'cores',
     sysAutoRefresh: 'Refreshes every minute',
+    sysRefreshNow: 'Refresh now',
     sysUpdatedJustNow: 'Updated just now',
     sysUpdatedAgo: 'Updated {n}s ago',
     sysRefreshing: 'Refreshing…',
@@ -1048,6 +1059,7 @@ const T = {
     sysCpuUnavailable: 'Não disponível em {os}.',
     sysCores: 'núcleos',
     sysAutoRefresh: 'Atualiza a cada minuto',
+    sysRefreshNow: 'Atualizar agora',
     sysUpdatedJustNow: 'Atualizado agora mesmo',
     sysUpdatedAgo: 'Atualizado há {n}s',
     sysRefreshing: 'A atualizar…',
@@ -1212,7 +1224,8 @@ const Ic = {
   camera: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 5a1 1 0 011-1h1.5l1-2h5l1 2H13a1 1 0 011 1v7a1 1 0 01-1 1H2a1 1 0 01-1-1z"/><circle cx="8" cy="8.5" r="2.5"/></svg>,
   bell:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2a3 3 0 00-3 3v2c0 1-.5 2-1.3 2.7A.8.8 0 004 11h8a.8.8 0 00.3-1.3C11.5 9 11 8 11 7V5a3 3 0 00-3-3z"/><path d="M6.5 13a1.5 1.5 0 003 0"/></svg>,
   trending: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 11l4-4 2.5 2.5L14 4"/><path d="M10 4h4v4"/></svg>,
-  server: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2.5" width="12" height="4.2" rx="1"/><rect x="2" y="9.3" width="12" height="4.2" rx="1"/><path d="M4.3 4.6h.01M4.3 11.4h.01" strokeWidth="2"/></svg>,
+  refresh: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13.7 8a5.7 5.7 0 10-1.7 4.1"/><path d="M13.7 4.3V8h-3.7"/></svg>,
+  server: <svg viewBox="0 0 16 16"  fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2.5" width="12" height="4.2" rx="1"/><rect x="2" y="9.3" width="12" height="4.2" rx="1"/><path d="M4.3 4.6h.01M4.3 11.4h.01" strokeWidth="2"/></svg>,
   cpu: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="4.5" y="4.5" width="7" height="7" rx="1"/><rect x="6.5" y="6.5" width="3" height="3"/><path d="M8 1.2v2M8 12.8v2M1.2 8h2M12.8 8h2M4.9 1.2l.7 1.9M11.1 1.2l-.7 1.9M4.9 14.8l.7-1.9M11.1 14.8l-.7-1.9"/></svg>,
   database: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><ellipse cx="8" cy="3.3" rx="5.5" ry="2"/><path d="M2.5 3.3v9.4c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V3.3"/><path d="M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2"/></svg>,
   activity: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"><path d="M1.5 8.5h3l1.6-4.8 2.8 9.6L10.8 8.5h3.7"/></svg>,
@@ -3364,9 +3377,13 @@ function SystemStatusPage({ token }) {
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(true);
   const [secondsAgo, setSecondsAgo] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const lastFetchedAt = useRef(null);
 
-  const load = useCallback(async () => {
+  // manual: true for the on-demand button, so it can show its own spinner
+  // without disturbing the (much less frequent) full-page loading state.
+  const load = useCallback(async (manual) => {
+    if (manual) setRefreshing(true);
     const start = performance.now();
     try {
       const res = await apiFetch('/system/status', { token });
@@ -3379,11 +3396,14 @@ function SystemStatusPage({ token }) {
       lastFetchedAt.current = Date.now();
       setSecondsAgo(0);
       setLoading(false);
+      if (manual) setRefreshing(false);
     }
   }, [token]);
 
   useEffect(() => {
-    load();
+    load(false);
+    // The interval keeps its own fixed 60s cadence regardless of manual refreshes —
+    // clicking "refresh now" gets you fresh data immediately without resetting the clock.
     const refresh = setInterval(load, SYS_REFRESH_MS);
     const tick = setInterval(() => {
       if (lastFetchedAt.current) setSecondsAgo(Math.round((Date.now() - lastFetchedAt.current) / 1000));
@@ -3410,6 +3430,10 @@ function SystemStatusPage({ token }) {
           <span className={`sys-live-dot ${stale ? 'stale' : ''}`}/>
           {stale ? t.sysStale : (secondsAgo < 2 ? t.sysUpdatedJustNow : t.sysUpdatedAgo.replace('{n}', secondsAgo))}
           <span style={{opacity:0.6}}>· {t.sysAutoRefresh}</span>
+          <button type="button" className={`sys-refresh-btn ${refreshing ? 'spinning' : ''}`}
+            onClick={()=>load(true)} disabled={refreshing} title={t.sysRefreshNow} aria-label={t.sysRefreshNow}>
+            {Ic.refresh}
+          </button>
         </div>
       </div>
 

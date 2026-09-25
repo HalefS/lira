@@ -14,7 +14,7 @@ import (
 // manager-only (see routes.go) since it's operational/infra information
 // rather than something technicians need day to day.
 func (app *application) systemStatusHandler(w http.ResponseWriter, r *http.Request) {
-	cpu := app.systemSampler.ReadCPU()
+	cpu := data.ReadCPU()
 	mem := data.ReadMemory()
 
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)

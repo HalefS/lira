@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -38,36 +37,30 @@ type cpuSample struct {
 	idle, total uint64
 }
 
-// SystemSampler takes CPU readings. CPU usage only means something as a
-// delta between two points in time, so it keeps the previous /proc/stat
-// reading between calls — the first call after the process starts has
-// nothing to compare against, so it reports unavailable just for that call.
-type SystemSampler struct {
-	mu   sync.Mutex
-	prev *cpuSample
-}
+// cpuSampleGap is how far apart the two /proc/stat reads are, within a
+// single ReadCPU call. CPU usage only means anything as a delta between two
+// points in time, so ReadCPU takes both samples itself (like `top` does)
+// instead of comparing against a reading saved from a previous, unrelated
+// request — that earlier approach meant the very first call after the
+// server started always came back "unavailable", with no way to tell that
+// apart from CPU stats being genuinely unsupported on the host. Blocking for
+// this long is fine here: the caller is a status page refreshed at most once
+// a minute, or on a manual click, never a hot path.
+const cpuSampleGap = 200 * time.Millisecond
 
-func NewSystemSampler() *SystemSampler {
-	return &SystemSampler{}
-}
-
-func (s *SystemSampler) ReadCPU() CPUReading {
-	cur, ok := readProcStat()
+func ReadCPU() CPUReading {
+	first, ok := readProcStat()
+	if !ok {
+		return CPUReading{Available: false, Cores: runtime.NumCPU()}
+	}
+	time.Sleep(cpuSampleGap)
+	second, ok := readProcStat()
 	if !ok {
 		return CPUReading{Available: false, Cores: runtime.NumCPU()}
 	}
 
-	s.mu.Lock()
-	prev := s.prev
-	s.prev = &cur
-	s.mu.Unlock()
-
-	if prev == nil {
-		return CPUReading{Available: false, Cores: runtime.NumCPU()}
-	}
-
-	totalDelta := float64(cur.total - prev.total)
-	idleDelta := float64(cur.idle - prev.idle)
+	totalDelta := float64(second.total - first.total)
+	idleDelta := float64(second.idle - first.idle)
 	if totalDelta <= 0 {
 		return CPUReading{Available: false, Cores: runtime.NumCPU()}
 	}
