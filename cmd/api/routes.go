@@ -29,6 +29,9 @@ func (app *application) routes() http.Handler {
 	// Health
 	router.HandlerFunc(http.MethodGet, "/v1/healthcheck", app.healthcheckHandler)
 
+	// System status — CPU/RAM/DB latency for the System page (manager only)
+	router.HandlerFunc(http.MethodGet, "/v1/system/status", app.requireAuth(app.requireManager(app.systemStatusHandler)))
+
 	// Auth
 	router.HandlerFunc(http.MethodPost, "/v1/users", app.registerUserHandler)
 	router.HandlerFunc(http.MethodPost, "/v1/tokens/authentication", app.createAuthTokenHandler)
