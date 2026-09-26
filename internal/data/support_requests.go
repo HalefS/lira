@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"database/sql"
+	"regexp"
 	"strings"
 	"time"
 
@@ -32,6 +33,31 @@ const (
 	maxSupportNameLength       = 100
 )
 
+// supportTimeLayout is the format an <input type="datetime-local"> produces.
+// It carries no zone, so it is parsed in the server's local time — the same
+// clock that created_at's NOW() default uses, which keeps a typed time and a
+// defaulted time meaning the same thing.
+const supportTimeLayout = "2006-01-02T15:04"
+
+// ParseSupportTime parses a "YYYY-MM-DDTHH:MM" value from the client into a
+// timestamp in the server's local time. It reports ok=false for an empty or
+// malformed value, which callers treat as "not provided" rather than an error,
+// the same way the other optional fields in this file behave.
+func ParseSupportTime(s string) (time.Time, bool) {
+	if s == "" {
+		return time.Time{}, false
+	}
+	t, err := time.ParseInLocation(supportTimeLayout, s, time.Local)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
+// supportTimeLayoutPattern is the same value as a regular expression, used to
+// tell "malformed" apart from "absent" so the message can say which.
+var supportTimeLayoutPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$`)
+
 // SupportRequest is one handover of an issue to an external company, with the
 // company's own tracking reference attached.
 type SupportRequest struct {
@@ -52,6 +78,14 @@ type SupportRequest struct {
 	// technician, so there is no name to record for them.
 	TelefonicaTicketID *string `json:"telefonica_ticket_id"`
 
+	// How long the company took: the wall-clock moment we reported the problem,
+	// the moment they gave us a solution, and the derived duration. These are
+	// the company's turnaround, not our technicians' working time, and are
+	// deliberately kept out of every issue statistic.
+	StartedAt       *time.Time `json:"started_at"`
+	ResolvedAt      *time.Time `json:"resolved_at"`
+	DurationMinutes *int       `json:"duration_minutes"`
+
 	Notes     string `json:"notes"`
 	CreatedBy int64  `json:"created_by"`
 	Version   int    `json:"-"`
@@ -68,6 +102,12 @@ type SupportRequestUse struct {
 	TelnetConfirmedBy  *string `json:"telnet_confirmed_by"`
 	TelefonicaTicketID *string `json:"telefonica_ticket_id"`
 	Notes              string  `json:"notes"`
+
+	// "YYYY-MM-DDTHH:MM", the value an <input type="datetime-local"> produces.
+	// Empty means "not provided". Parsed and validated by the handler before
+	// they reach the model, which stores real timestamps.
+	StartedAt  string `json:"started_at"`
+	ResolvedAt string `json:"resolved_at"`
 }
 
 // trimmed returns the field's value with surrounding whitespace removed, and
@@ -130,7 +170,78 @@ func ValidateSupportRequests(v *validator.Validator, uses []SupportRequestUse) {
 			"status", "must be 'pending' or 'solved'")
 		v.Check(len(u.Notes) <= maxSupportNotesLength, "notes",
 			"must not be more than 500 characters")
+
+		// When the problem was reported to the company. Required for every
+		// handover: a turnaround cannot be measured without a starting point.
+		if u.StartedAt == "" {
+			v.AddError(field, "must record when the problem was reported to the company")
+		} else {
+			v.Check(supportTimeLayoutPattern.MatchString(u.StartedAt), field,
+				"the reported time must be a date and time")
+		}
+		if u.ResolvedAt != "" {
+			v.Check(supportTimeLayoutPattern.MatchString(u.ResolvedAt), field,
+				"the solution time must be a date and time")
+		}
+		// Marked solved without a solution time would leave a row that silently
+		// drops out of the per-company averages, so it is refused instead.
+		if u.Status == SupportStatusSolved && u.ResolvedAt == "" {
+			v.AddError(field, "a solved handover must record when the company gave us a solution")
+		}
 	}
+}
+
+// SupportRequestRecord is a handover that has passed validation and had its
+// timestamps parsed, ready to be written. The client never sends a duration:
+// it is derived here from the two moments, the same way a technician's working
+// time is derived on the issue itself, so the stored number is always the
+// authoritative one the statistics read.
+type SupportRequestRecord struct {
+	ID                 int64
+	Company            string
+	Status             string
+	TelnetTechnician   *string
+	TelnetConfirmedBy  *string
+	TelefonicaTicketID *string
+	Notes              string
+	StartedAt          *time.Time
+	ResolvedAt         *time.Time
+	DurationMinutes    *int
+}
+
+// BuildSupportRequestRecord parses a client's handover into a record. It reports
+// ok=false when a supplied timestamp is present but malformed; an absent one is
+// not an error, it is simply nil.
+func BuildSupportRequestRecord(u SupportRequestUse) (SupportRequestRecord, bool) {
+	rec := SupportRequestRecord{
+		ID:                 u.ID,
+		Company:            u.Company,
+		Status:             u.Status,
+		TelnetTechnician:   u.TelnetTechnician,
+		TelnetConfirmedBy:  u.TelnetConfirmedBy,
+		TelefonicaTicketID: u.TelefonicaTicketID,
+		Notes:              u.Notes,
+	}
+
+	if u.StartedAt != "" {
+		t, ok := ParseSupportTime(u.StartedAt)
+		if !ok {
+			return rec, false
+		}
+		rec.StartedAt = &t
+	}
+	if u.ResolvedAt != "" {
+		t, ok := ParseSupportTime(u.ResolvedAt)
+		if !ok {
+			return rec, false
+		}
+		rec.ResolvedAt = &t
+	}
+	if rec.StartedAt != nil && rec.ResolvedAt != nil {
+		minutes := int(rec.ResolvedAt.Sub(*rec.StartedAt).Minutes())
+		rec.DurationMinutes = &minutes
+	}
+	return rec, true
 }
 
 type SupportRequestModel struct {
@@ -151,6 +262,7 @@ func isDuplicateTelefonicaTicket(err error) bool {
 const supportRequestColumns = `
 	s.id, s.created_at, s.updated_at, s.issue_id, s.company, s.status,
 	s.telnet_technician, s.telnet_confirmed_by, s.telefonica_ticket_id,
+	s.started_at, s.resolved_at, s.duration_minutes,
 	s.notes, s.created_by, s.version`
 
 func scanSupportRequest(scan func(dest ...any) error) (*SupportRequest, error) {
@@ -158,6 +270,7 @@ func scanSupportRequest(scan func(dest ...any) error) (*SupportRequest, error) {
 	err := scan(
 		&s.ID, &s.CreatedAt, &s.UpdatedAt, &s.IssueID, &s.Company, &s.Status,
 		&s.TelnetTechnician, &s.TelnetConfirmedBy, &s.TelefonicaTicketID,
+		&s.StartedAt, &s.ResolvedAt, &s.DurationMinutes,
 		&s.Notes, &s.CreatedBy, &s.Version,
 	)
 	if err != nil {
@@ -173,7 +286,7 @@ func scanSupportRequest(scan func(dest ...any) error) (*SupportRequest, error) {
 // The whole thing runs in one transaction so the issue is never left with half
 // the handovers the form showed. Rows are matched on id *and* issue_id, so a
 // client cannot claim (or overwrite) a handover belonging to another issue.
-func (m SupportRequestModel) SetForIssue(issueID int64, uses []SupportRequestUse, loggedBy int64) error {
+func (m SupportRequestModel) SetForIssue(issueID int64, uses []SupportRequestRecord, loggedBy int64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -206,10 +319,12 @@ func (m SupportRequestModel) SetForIssue(issueID int64, uses []SupportRequestUse
 				UPDATE issue_support_requests
 				SET company=$3, status=$4, telnet_technician=$5,
 				    telnet_confirmed_by=$6, telefonica_ticket_id=$7,
-				    notes=$8, updated_at=NOW(), version=version+1
+				    started_at=$8, resolved_at=$9, duration_minutes=$10,
+				    notes=$11, updated_at=NOW(), version=version+1
 				WHERE id=$1 AND issue_id=$2`,
 				u.ID, issueID, u.Company, u.Status, u.TelnetTechnician,
-				u.TelnetConfirmedBy, u.TelefonicaTicketID, u.Notes,
+				u.TelnetConfirmedBy, u.TelefonicaTicketID,
+				u.StartedAt, u.ResolvedAt, u.DurationMinutes, u.Notes,
 			)
 			if err != nil {
 				return err
@@ -229,10 +344,12 @@ func (m SupportRequestModel) SetForIssue(issueID int64, uses []SupportRequestUse
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO issue_support_requests
 				(issue_id, company, status, telnet_technician,
-				 telnet_confirmed_by, telefonica_ticket_id, notes, created_by)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+				 telnet_confirmed_by, telefonica_ticket_id,
+				 started_at, resolved_at, duration_minutes, notes, created_by)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 			issueID, u.Company, u.Status, u.TelnetTechnician,
-			u.TelnetConfirmedBy, u.TelefonicaTicketID, u.Notes, loggedBy,
+			u.TelnetConfirmedBy, u.TelefonicaTicketID,
+			u.StartedAt, u.ResolvedAt, u.DurationMinutes, u.Notes, loggedBy,
 		); err != nil {
 			// The Telefónica ticket is already logged on this issue — the
 			// duplicate the form's own validation cannot see, because it does

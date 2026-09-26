@@ -181,7 +181,7 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	var supportRequests []data.SupportRequestUse
+	var supportRequests []data.SupportRequestRecord
 	if input.SupportRequests != nil {
 		supportRequests, err = app.validateSupportRequests(v, *input.SupportRequests)
 		if err != nil {
@@ -404,7 +404,7 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	var supportRequests []data.SupportRequestUse
+	var supportRequests []data.SupportRequestRecord
 	if input.SupportRequests != nil {
 		supportRequests, err = app.validateSupportRequests(v, *input.SupportRequests)
 		if err != nil {

@@ -78,6 +78,11 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPatch, "/v1/consumable-items/:id/icon", app.requireAuth(app.requireManager(app.updateConsumableItemIconHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/consumable-items/:id", app.requireAuth(app.requireManager(app.deleteConsumableItemHandler)))
 
+	// Third-party support — how long Telnet / Telefonica took on each handover,
+	// with per-company statistics. Read-only here: handovers are edited through
+	// the issue they belong to, so the owner-or-manager check lives in one place.
+	router.HandlerFunc(http.MethodGet, "/v1/support-requests", app.requireAuth(app.listSupportRequestsHandler))
+
 	// Settings — readable by any authenticated user, editable by managers only
 	router.HandlerFunc(http.MethodGet, "/v1/settings", app.requireAuth(app.getSettingsHandler))
 	router.HandlerFunc(http.MethodPatch, "/v1/settings", app.requireAuth(app.requireManager(app.updateSettingsHandler)))

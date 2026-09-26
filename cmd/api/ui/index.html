@@ -330,6 +330,24 @@ tbody tr.row-clickable { cursor: pointer; }
 /* ── Bottom grid ── */
 .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+
+/* The "add" row shared by every admin card: a labelled input with its submit
+   button. The button sits on its own line, right-aligned, because these cards
+   are only ~300px wide inside. Side by side, a translated button label eats the
+   field: "Adicionar departamento" left the department name just 89px, and in
+   English the same row wrapped the label onto two lines and made the button
+   50px tall. Stacked, the field always gets the full card width in any
+   language. Both controls are pinned to one height so their edges line up. */
+.admin-form { display: grid; gap: 10px; }
+.admin-form .form-control { height: 36px; }
+.admin-form .btn { height: 36px; white-space: nowrap; justify-self: end; }
+
+/* The consumables card pairs a live name+icon preview with its button instead
+   of a text field, so that row stays on one line — the preview ellipsizes
+   rather than competing for width. */
+.admin-form-inline { display: flex; align-items: center; gap: 12px; }
+.admin-form-inline .ci-preview { flex: 1 1 auto; min-width: 0; }
+.admin-form-inline .btn { flex: 0 0 auto; height: 36px; white-space: nowrap; }
 .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
 .mini-card { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: 18px 20px; }
 .mini-card-title { font-size: 13px; font-weight: 600; margin-bottom: 14px; }
@@ -481,6 +499,26 @@ select.form-control { cursor: pointer; }
 .tp-row-main { min-width: 0; flex: 1; }
 .tp-row-company { font-size: 13.5px; font-weight: 700; color: var(--gray-900); display: flex; align-items: center; gap: 7px; }
 .tp-row-detail { font-size: 12.5px; color: var(--gray-500); margin-top: 2px; }
+.tp-row-detail strong { color: var(--gray-600); }
+
+/* The support page: one stat card per company */
+.support-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 8px; }
+.support-stat-card { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: 16px 18px; }
+.support-stat-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.support-stat-name { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700; color: var(--gray-900); }
+.support-stat-figures { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 14px; }
+.support-figure-label { font-size: 10.5px; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.06em; }
+.support-figure-value { font-size: 17px; font-weight: 700; color: var(--gray-900); font-variant-numeric: tabular-nums; margin-top: 1px; }
+.support-figure-note { font-size: 11.5px; color: var(--gray-400); margin-top: 1px; }
+.support-stat-empty { font-size: 12.5px; color: var(--gray-400); padding: 6px 0 2px; }
+.support-counts { display: flex; gap: 14px; margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--gray-100); }
+.support-count { font-size: 12px; color: var(--gray-500); }
+.support-count b { color: var(--gray-900); font-variant-numeric: tabular-nums; }
+.support-note { font-size: 12.5px; color: var(--gray-400); margin: 0 0 18px; }
+
+/* Duration cells in the handovers table: tabular so the column reads as a scale. */
+.support-dur { font-family: 'DM Mono', monospace; font-size: 12.5px; font-weight: 600; color: var(--gray-900); white-space: nowrap; }
+.support-dur.pending { color: var(--gray-400); font-weight: 400; }
 .tp-row-status {
   font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
 }
@@ -679,6 +717,7 @@ html.dark .topbar,
 html.dark .stat-card,
 html.dark .table-card,
 html.dark .mini-card,
+html.dark .support-stat-card,
 html.dark .modal,
 html.dark .auth-card,
 html.dark .btn-ghost,
@@ -689,7 +728,9 @@ html.dark .sidebar { border-color: var(--gray-200) !important; }
 html.dark .topbar  { border-color: var(--gray-200) !important; }
 html.dark .stat-card,
 html.dark .table-card,
-html.dark .mini-card { border-color: var(--gray-200) !important; }
+html.dark .mini-card,
+html.dark .support-stat-card { border-color: var(--gray-200) !important; }
+html.dark .support-counts { border-color: var(--gray-200) !important; }
 
 html.dark thead th { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
 html.dark tbody td { border-color: var(--gray-200) !important; }
@@ -815,6 +856,12 @@ function mapIssue(i) {
       technician:    s.telnet_technician || '',
       confirmedBy:   s.telnet_confirmed_by || '',
       ticketId:      s.telefonica_ticket_id || '',
+      // The company's turnaround, kept separate from the issue's own time.
+      // Sliced to "YYYY-MM-DDTHH:MM" for the datetime-local inputs, which is
+      // the format the API takes them back in.
+      startedAt:     s.started_at  ? s.started_at.slice(0,16)  : '',
+      resolvedAt:    s.resolved_at ? s.resolved_at.slice(0,16) : '',
+      durationMinutes: s.duration_minutes,
       notes:         s.notes || '',
     })),
     status:        i.status,
@@ -979,6 +1026,39 @@ const T = {
     telnetTechPlaceholder: 'e.g. Rui Marques',
     telnetConfirmPlaceholder: 'e.g. Rui Marques',
     supportLoggedBy: 'Added by',
+    supportReportedAt: 'Reported to company',
+    supportResolvedAt: 'Solution received',
+    supportNeedsReported: 'Record when this was reported to the company.',
+    supportNeedsResolved: 'A handover marked OK needs the moment the company gave you a solution.',
+    supportResolvedBefore: 'The solution time cannot be before the reported time.',
+    supportDuration: 'Time taken',
+    supportStatAvg: 'Average',
+    supportStatMedian: 'Median',
+    supportStatFastest: 'Fastest',
+    supportStatSlowest: 'Slowest',
+    supportStatHandovers: 'Handovers',
+    supportStatPending: 'Still waiting',
+    supportStatResolved: 'Resolved',
+    supportStatTimed: 'timed',
+    supportStatNoData: 'No resolved handovers in this range yet.',
+    supportOverall: 'Both companies',
+    supportListTitle: 'Handovers',
+    supportListEmpty: 'No handovers logged in this range.',
+    supportListColumnIssue: 'Issue',
+    supportListColumnCompany: 'Company',
+    supportListColumnReference: 'Reference',
+    supportListColumnReported: 'Reported',
+    supportListColumnSolution: 'Solution',
+    supportListColumnDuration: 'Time taken',
+    supportListColumnStatus: 'Status',
+    supportRange: 'Date range',
+    supportRangeAll: 'All time',
+    supportRange7: 'Last 7 days',
+    supportRange30: 'Last 30 days',
+    supportRange90: 'Last 90 days',
+    supportSubtitle: 'How long each external company took to come back with a solution. This is their turnaround, not our technicians’ working time.',
+    supportPage: 'Third-party support',
+    supportExcluded: 'Handovers still waiting on the company are counted here but not in the time figures — there is no answer yet.',
     adminConsumables: 'Consumables',
     adminConsumablesSub: "Items technicians can add when logging an issue. Removing one doesn't change past issues.",
     consumableName: 'Name',
@@ -1238,6 +1318,39 @@ const T = {
     telnetTechPlaceholder: 'ex. Rui Marques',
     telnetConfirmPlaceholder: 'ex. Rui Marques',
     supportLoggedBy: 'Adicionado por',
+    supportReportedAt: 'Comunicado à empresa',
+    supportResolvedAt: 'Solução recebida',
+    supportNeedsReported: 'Indique quando isto foi comunicado à empresa.',
+    supportNeedsResolved: 'Um encaminhamento marcado como OK precisa do momento em que a empresa deu a solução.',
+    supportResolvedBefore: 'A hora da solução não pode ser anterior à do reporte.',
+    supportDuration: 'Tempo demorado',
+    supportStatAvg: 'Média',
+    supportStatMedian: 'Mediana',
+    supportStatFastest: 'Mais rápido',
+    supportStatSlowest: 'Mais lento',
+    supportStatHandovers: 'Encaminhamentos',
+    supportStatPending: 'Ainda à espera',
+    supportStatResolved: 'Resolvidos',
+    supportStatTimed: 'com tempo',
+    supportStatNoData: 'Ainda não há encaminhamentos resolvidos neste período.',
+    supportOverall: 'Ambas as empresas',
+    supportListTitle: 'Encaminhamentos',
+    supportListEmpty: 'Nenhum encaminhamento registado neste período.',
+    supportListColumnIssue: 'Avaria',
+    supportListColumnCompany: 'Empresa',
+    supportListColumnReference: 'Referência',
+    supportListColumnReported: 'Comunicado',
+    supportListColumnSolution: 'Solução',
+    supportListColumnDuration: 'Tempo demorado',
+    supportListColumnStatus: 'Estado',
+    supportRange: 'Período',
+    supportRangeAll: 'Sempre',
+    supportRange7: 'Últimos 7 dias',
+    supportRange30: 'Últimos 30 dias',
+    supportRange90: 'Últimos 90 dias',
+    supportSubtitle: 'Quanto tempo cada empresa externa demorou a dar uma solução. É o tempo de resposta delas, não o tempo de trabalho dos nossos técnicos.',
+    supportPage: 'Apoio de terceiros',
+    supportExcluded: 'Encaminhamentos ainda à espera da empresa são contados aqui mas não nas médias — ainda não há resposta.',
     adminConsumables: 'Consumíveis',
     adminConsumablesSub: 'Itens que os técnicos podem adicionar ao registar uma avaria. Remover um não altera avarias anteriores.',
     consumableName: 'Nome',
@@ -1915,15 +2028,35 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
   const [draft, setDraft] = useState(null);   // null = list view, otherwise the handover being added/edited
   const [err, setErr] = useState('');
 
+  // A "YYYY-MM-DDTHH:MM" value in the browser's own timezone, matching the
+  // format the datetime-local inputs and the API use.
+  function localDateTimeValue(d) {
+    const pad = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   function blank() {
+    // We know when we are reporting it — it is now — so the start is prefilled
+    // rather than left as one more empty field to discover.
     return {key: `new-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, id: 0,
             company: 'telnet', status: 'pending',
-            technician: '', confirmedBy: '', ticketId: '', notes: ''};
+            technician: '', confirmedBy: '', ticketId: '',
+            startedAt: localDateTimeValue(new Date()), resolvedAt: '', notes: ''};
   }
   function startAdd()   { setDraft(blank());            setErr(''); }
   function startEdit(s) { setDraft({...s});             setErr(''); }
   function cancelEdit() { setDraft(null);               setErr(''); }
   function patch(k,v)   { setDraft(d=>({...d,[k]:v})); setErr(''); }
+
+  // Whole minutes between the two moments, or null when either is missing.
+  const elapsed = useMemo(()=>{
+    if (!draft || !draft.startedAt) return null;
+    const start = new Date(draft.startedAt).getTime();
+    const end   = draft.resolvedAt ? new Date(draft.resolvedAt).getTime() : Date.now();
+    if (isNaN(start) || isNaN(end)) return null;
+    const mins = Math.round((end - start) / 60000);
+    return mins < 0 ? null : mins;
+  }, [draft]);
 
   // Mirrors ValidateSupportRequests on the server, so the user is told here
   // rather than after a round-trip.
@@ -1938,6 +2071,11 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
       if (!ticket) return setErr(t.telefonicaNeedsTicket);
       if (items.some(s=>s.key!==draft.key && (s.ticketId||'').trim().toLowerCase()===ticket.toLowerCase()))
         return setErr(t.telefonicaNeedsTicket);
+    }
+    if (!draft.startedAt) return setErr(t.supportNeedsReported);
+    if (draft.status==='solved' && !draft.resolvedAt) return setErr(t.supportNeedsResolved);
+    if (draft.startedAt && draft.resolvedAt && draft.resolvedAt < draft.startedAt) {
+      return setErr(t.supportResolvedBefore);
     }
     const saved = {
       ...draft,
@@ -1965,6 +2103,13 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
       confirmedBy: company==='telnet' ? d.confirmedBy : '',
     }));
     setErr('');
+  }
+
+  // Marking a handover OK is the moment a solution arrived, so offer "now" as
+  // the answer rather than making it be looked up.
+  function markSolvedNow() {
+    patch('status', 'solved');
+    patch('resolvedAt', localDateTimeValue(new Date()));
   }
 
   // The second line of a handover row. The company line already names the
@@ -2035,6 +2180,30 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
                 </select>
               </div>
 
+              {/* When we reported the problem, and when the company answered.
+                  This is the company's turnaround, so it is wall-clock across
+                  days rather than a shift length. */}
+              <div className="form-row">
+                <div className="form-group">
+                  <label>{t.supportReportedAt}</label>
+                  <input type="datetime-local" className="form-control" value={draft.startedAt}
+                    onChange={e=>patch('startedAt', e.target.value)}/>
+                </div>
+                <div className="form-group">
+                  <label>{t.supportResolvedAt}</label>
+                  <input type="datetime-local" className="form-control" value={draft.resolvedAt}
+                    onChange={e=>patch('resolvedAt', e.target.value)}/>
+                </div>
+              </div>
+
+              {/* Live duration, so the effect of the two times above is
+                  visible before saving. */}
+              {elapsed != null && (
+                <div style={{fontSize:12.5,color:'var(--gray-400)',marginTop:-8}}>
+                  {t.supportDuration}: <strong style={{color:'var(--gray-600)'}}>{formatSupportDuration(elapsed)}</strong>
+                </div>
+              )}
+
               <div className="form-group">
                 <label>{t.supportNotes}</label>
                 <input className="form-control" placeholder={t.supportNotesPlaceholder} value={draft.notes}
@@ -2058,6 +2227,11 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
                       )}
                     </div>
                     {detail(s) && <div className="tp-row-detail">{detail(s)}</div>}
+                    {s.durationMinutes != null && (
+                      <div className="tp-row-detail">
+                        {t.supportDuration}: <strong>{formatSupportDuration(s.durationMinutes)}</strong>
+                      </div>
+                    )}
                   </div>
                   <span className={`tp-row-status ${s.status}`}>{s.status==='solved' ? t.supportSolved : t.supportPending}</span>
                   <button type="button" className="icon-btn" title={t.editThirdParty} onClick={()=>startEdit(s)}>{Ic.edit}</button>
@@ -2725,6 +2899,217 @@ function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/* ── Third-party support: how long the company took ── */
+/* Renders a number of minutes the way the support page shows it: days first
+   once a handover runs past a day, then hours and minutes. Returns null for a
+   missing duration, so callers can show a dash rather than a misleading "0m". */
+function formatSupportDuration(minutes) {
+  if (minutes == null) return null;
+  const total = Math.round(minutes);
+  if (total <= 0) return '0m';
+  const days   = Math.floor(total / 1440);
+  const hours  = Math.floor((total % 1440) / 60);
+  const mins   = total % 60;
+  const unit = (n, u) => `${n}${u}${n === 1 ? '' : 's'}`;
+  if (days > 0 && hours > 0) return `${unit(days,'d')} ${unit(hours,'h')}`;
+  if (days > 0)             return unit(days, 'd');
+  if (hours > 0 && mins > 0) return `${unit(hours,'h')} ${unit(mins,'m')}`;
+  if (hours > 0)             return unit(hours, 'h');
+  return unit(mins, 'm');
+}
+
+/* Formats a timestamp for the "Reported" / "Solution" columns. Shows just the
+   date when the range spans more than a day, and the time as well when it does
+   not, which is what makes a same-day turnaround readable. */
+function formatSupportMoment(iso, withTime) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d)) return null;
+  return withTime
+    ? d.toLocaleString(undefined, {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})
+    : d.toLocaleDateString(undefined, {day:'2-digit', month:'short', year:'numeric'});
+}
+
+/* ════════════════ THIRD-PARTY SUPPORT PAGE ════════════════ */
+/* How long each external company took. The figures come from
+   /v1/support-requests, which computes them from the handovers alone — they are
+   never folded into the team's own average resolution time, because "how slow
+   is the vendor" and "how fast are we" are different questions. */
+const SUPPORT_RANGES = [
+  {id:'all',  days:0},
+  {id:'7',    days:7},
+  {id:'30',   days:30},
+  {id:'90',   days:90},
+];
+
+function SupportStatCard({ stats, label, t, isOverall }) {
+  const hasData = stats.timed > 0;
+  const name = isOverall ? t.supportOverall
+            : stats.company === 'telnet' ? t.companyTelnet : t.companyTelefonica;
+  return (
+    <div className="support-stat-card">
+      <div className="support-stat-head">
+        <span className="support-stat-name">
+          {!isOverall && <span className={`tp-company-dot ${stats.company}`}/>}
+          {name}
+        </span>
+        {isOverall && <span className="badge" style={{background:'var(--gray-100)',color:'var(--gray-500)'}}>{t.supportOverall}</span>}
+      </div>
+
+      {hasData ? (
+        <div className="support-stat-figures">
+          <div>
+            <div className="support-figure-label">{t.supportStatAvg}</div>
+            <div className="support-figure-value">{formatSupportDuration(stats.avg_minutes)}</div>
+          </div>
+          <div>
+            <div className="support-figure-label">{t.supportStatMedian}</div>
+            <div className="support-figure-value">{formatSupportDuration(stats.median_minutes)}</div>
+            <div className="support-figure-note">{stats.timed} {t.supportStatTimed}</div>
+          </div>
+          <div>
+            <div className="support-figure-label">{t.supportStatFastest}</div>
+            <div className="support-figure-value" style={{color:'var(--green)'}}>{formatSupportDuration(stats.fastest_minutes)}</div>
+          </div>
+          <div>
+            <div className="support-figure-label">{t.supportStatSlowest}</div>
+            <div className="support-figure-value" style={{color:'var(--red)'}}>{formatSupportDuration(stats.slowest_minutes)}</div>
+          </div>
+        </div>
+      ) : (
+        <div className="support-stat-empty">{t.supportStatNoData}</div>
+      )}
+
+      <div className="support-counts">
+        <span className="support-count"><b>{stats.total}</b> {t.supportStatHandovers}</span>
+        <span className="support-count"><b>{stats.resolved}</b> {t.supportStatResolved}</span>
+        {stats.pending > 0 && <span className="support-count" style={{color:'var(--amber)'}}><b style={{color:'var(--amber)'}}>{stats.pending}</b> {t.supportStatPending}</span>}
+      </div>
+    </div>
+  );
+}
+
+function SupportPage({ token }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const [range, setRange] = useState('all');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const days = SUPPORT_RANGES.find(r=>r.id===range).days;
+    const params = new URLSearchParams();
+    if (days > 0) {
+      // Inclusive of today, so "last 30 days" is 30 days wide rather than 29.
+      const from = new Date(); from.setDate(from.getDate() - (days - 1));
+      params.set('from', from.toISOString().slice(0,10));
+      params.set('to', new Date().toISOString().slice(0,10));
+    }
+    const qs = params.toString();
+    apiFetch(`/support-requests${qs ? '?'+qs : ''}`, {token})
+      .then(res => { if (!cancelled) setData(res); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [range, token]);
+
+  const stats  = data && data.stats;
+  const rows   = (data && data.requests) || [];
+  // The same window is either a same-day turnaround or a multi-day one, so show
+  // the time of day only when every row fits inside a single day.
+  const withTime = rows.some(r => {
+    if (!r.started_at || !r.resolved_at) return false;
+    return new Date(r.started_at).toDateString() === new Date(r.resolved_at).toDateString();
+  });
+
+  return (
+    <>
+      <p style={{fontSize:13,color:'var(--gray-400)',margin:'-6px 0 18px',maxWidth:760}}>{t.supportSubtitle}</p>
+
+      <div className="table-card" style={{marginBottom:18}}>
+        <div className="table-header">
+          <span className="table-title">{t.supportRange}</span>
+          <div className="filter-chips">
+            {SUPPORT_RANGES.map(r=>(
+              <button key={r.id} className={`chip ${range===r.id?'active':''}`} onClick={()=>setRange(r.id)}>
+                {t[`supportRange${r.id==='all'?'All':r.id}`]}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {stats && (
+        <>
+          <div className="support-grid">
+            {stats.by_company.map(s => <SupportStatCard key={s.company} stats={s} t={t}/>)}
+          </div>
+          <SupportStatCard stats={stats.overall} t={t} isOverall/>
+        </>
+      )}
+
+      <p className="support-note" style={{marginTop:18}}>{t.supportExcluded}</p>
+
+      <div className="table-card">
+        <div className="table-header">
+          <span className="table-title">{t.supportListTitle}</span>
+          <span style={{fontSize:12,color:'var(--gray-400)'}}>{rows.length}</span>
+        </div>
+        {loading ? (
+          <div className="empty-state"><p>…</p></div>
+        ) : rows.length === 0 ? (
+          <div className="empty-state">{Ic.clock}<p>{t.supportListEmpty}</p></div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>{t.supportListColumnIssue}</th><th>{t.supportListColumnCompany}</th>
+                <th>{t.supportListColumnReference}</th><th>{t.supportListColumnReported}</th>
+                <th>{t.supportListColumnSolution}</th><th>{t.supportListColumnDuration}</th>
+                <th>{t.supportListColumnStatus}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r=>(
+                <tr key={r.id}>
+                  <td>
+                    <strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{r.issue_location}</strong>
+                    <div style={{fontSize:12.5,color:'var(--gray-500)',marginTop:2}}>{r.issue_problem}</div>
+                  </td>
+                  <td>
+                    <span className={`tp-strip-item ${r.company}`} style={{fontSize:11}}>
+                      {r.company==='telnet' ? t.companyTelnet : t.companyTelefonica}
+                    </span>
+                  </td>
+                  <td style={{fontSize:12.5,color:'var(--gray-600)'}}>{r.reference || '—'}</td>
+                  <td style={{fontSize:12.5,color:'var(--gray-500)',whiteSpace:'nowrap'}}>
+                    {formatSupportMoment(r.started_at, withTime) || '—'}
+                  </td>
+                  <td style={{fontSize:12.5,color:'var(--gray-500)',whiteSpace:'nowrap'}}>
+                    {formatSupportMoment(r.resolved_at, withTime) || '—'}
+                  </td>
+                  <td>
+                    <span className={`support-dur ${r.duration_minutes==null ? 'pending' : ''}`}>
+                      {formatSupportDuration(r.duration_minutes) || '—'}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`badge ${r.status==='solved'?'badge-ok':'badge-pending'}`}>
+                      {r.status==='solved' ? t.supportSolved : t.supportPending}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -4086,13 +4471,13 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
       <div className="mini-card" style={{marginBottom:20}}>
         <div className="mini-card-title" style={{marginBottom:6}}>{t.adminAlerts}</div>
         <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminAlertsSub}</p>
-        <form onSubmit={saveSettings} style={{display:'flex',gap:10,alignItems:'flex-end'}}>
-          <div className="form-group" style={{flex:1,marginBottom:0,maxWidth:180}}>
+        <form onSubmit={saveSettings} className="admin-form">
+          <div className="form-group" style={{maxWidth:180}}>
             <label>{t.duplicateWindowLabel}</label>
             <input className="form-control" type="number" min="1" max="720" value={windowHours}
               onChange={e=>setWindowHours(e.target.value)} />
           </div>
-          <button type="submit" className="btn btn-primary" disabled={savingSettings || !windowHours} style={{marginBottom:1}}>
+          <button type="submit" className="btn btn-primary" disabled={savingSettings || !windowHours}>
             {Ic.check} {savingSettings ? '…' : t.saveChanges}
           </button>
         </form>
@@ -4104,13 +4489,13 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
             <div className="mini-card-title" style={{marginBottom:6}}>{t.adminIssueTypes}</div>
             <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminIssueTypesSub}</p>
             {err && <div className="auth-error" style={{marginBottom:14}}>{err}</div>}
-            <form onSubmit={addType} style={{display:'flex',gap:10,alignItems:'flex-end'}}>
-              <div className="form-group" style={{flex:1,marginBottom:0}}>
+            <form onSubmit={addType} className="admin-form">
+              <div className="form-group">
                 <label>{t.issueType}</label>
                 <input className="form-control" placeholder={t.issueTypePlaceholder} value={name}
                   onChange={e=>setName(e.target.value)} maxLength={50}/>
               </div>
-              <button type="submit" className="btn btn-primary" disabled={saving || !name.trim()} style={{marginBottom:1}}>
+              <button type="submit" className="btn btn-primary" disabled={saving || !name.trim()}>
                 {Ic.plus} {saving ? '…' : t.addIssueType}
               </button>
             </form>
@@ -4149,13 +4534,13 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
             <div className="mini-card-title" style={{marginBottom:6}}>{t.adminDepartments}</div>
             <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminDepartmentsSub}</p>
             {deptErr && <div className="auth-error" style={{marginBottom:14}}>{deptErr}</div>}
-            <form onSubmit={addDept} style={{display:'flex',gap:10,alignItems:'flex-end'}}>
-              <div className="form-group" style={{flex:1,marginBottom:0}}>
+            <form onSubmit={addDept} className="admin-form">
+              <div className="form-group">
                 <label>{t.department}</label>
                 <input className="form-control" placeholder={t.departmentPlaceholder} value={deptName}
                   onChange={e=>setDeptName(e.target.value)} maxLength={50}/>
               </div>
-              <button type="submit" className="btn btn-primary" disabled={savingDept || !deptName.trim()} style={{marginBottom:1}}>
+              <button type="submit" className="btn btn-primary" disabled={savingDept || !deptName.trim()}>
                 {Ic.plus} {savingDept ? '…' : t.addDepartment}
               </button>
             </form>
@@ -4192,13 +4577,13 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
             <div className="mini-card-title" style={{marginBottom:6}}>{t.adminAgents}</div>
             <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminAgentsSub}</p>
             {agentErr && <div className="auth-error" style={{marginBottom:14}}>{agentErr}</div>}
-            <form onSubmit={addAgent} style={{display:'flex',gap:10,alignItems:'flex-end'}}>
-              <div className="form-group" style={{flex:1,marginBottom:0}}>
+            <form onSubmit={addAgent} className="admin-form">
+              <div className="form-group">
                 <label>{t.connectaAgent}</label>
                 <input className="form-control" placeholder={t.agentPlaceholder} value={agentName}
                   onChange={e=>setAgentName(e.target.value)} maxLength={100}/>
               </div>
-              <button type="submit" className="btn btn-primary" disabled={savingAgent || !agentName.trim()} style={{marginBottom:1}}>
+              <button type="submit" className="btn btn-primary" disabled={savingAgent || !agentName.trim()}>
                 {Ic.plus} {savingAgent ? '…' : t.addAgent}
               </button>
             </form>
@@ -4245,7 +4630,7 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
                 <label>{t.consumableIconLabel}</label>
                 <ConsumableIconGrid value={ciIcon} onChange={setCiIcon}/>
               </div>
-              <div style={{display:'flex',alignItems:'center',gap:12,marginTop:16}}>
+              <div className="admin-form-inline" style={{marginTop:16}}>
                 <div className="ci-preview">
                   <ConsumableIcon name={ciIcon} size={36}/>
                   <span style={{color: ciName.trim() ? 'var(--gray-900)' : 'var(--gray-400)'}}>{ciName.trim() || t.consumableNamePlaceholder}</span>
@@ -4410,7 +4795,10 @@ function App() {
       telnet_technician:   s.company === 'telnet'    ? (s.technician  || null) : null,
       telnet_confirmed_by: s.company === 'telnet'    ? (s.confirmedBy || null) : null,
       telefonica_ticket_id:s.company === 'telefonica' ? (s.ticketId    || null) : null,
-      notes:               s.notes || '',
+      // "YYYY-MM-DDTHH:MM" is exactly what the datetime-local inputs produce.
+      started_at:  s.startedAt  || null,
+      resolved_at: s.resolvedAt || null,
+      notes:       s.notes || '',
     }));
   }
 
@@ -4514,6 +4902,7 @@ function App() {
     {id:'alerts',    label:t.alerts,     icon:Ic.bell },
     {id:'analytics', label:t.analytics,  icon:Ic.trending},
     {id:'consumables', label:t.consumables, icon:Ic.box},
+    {id:'support',    label:t.supportPage,  icon:Ic.tool},
     {id:'team',      label:t.team,       icon:Ic.users},
     {id:'reports',   label:'Reports',    icon:Ic.report},
     ...(me.role === 'manager' ? [{id:'system', label:t.systemStatus, icon:Ic.server}] : []),
@@ -4589,6 +4978,7 @@ function App() {
             {page==='alerts'    && <AlertsPage alerts={alerts} currentUser={me} token={token} onAlertsUpdate={setAlerts} setToast={setToast}/>}
             {page==='analytics' && <AnalyticsPage token={token} alertsPendingCount={alertsPendingCount}/>}
             {page==='consumables' && <ConsumablesPage token={token}/>}
+            {page==='support' && <SupportPage token={token}/>}
             {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}/>}
             {page==='reports' && <ReportsPage token={token}/>}
             {page==='system' && me.role==='manager' && <SystemStatusPage token={token}/>}
