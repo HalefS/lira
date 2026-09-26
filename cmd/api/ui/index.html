@@ -400,6 +400,30 @@ html.dark .team-you { background: var(--blue-light) !important; color: var(--blu
   font-size: 10px; padding: 2px 7px; border-radius: 10px; flex-shrink: 0;
 }
 
+/* Switches the Team page between the member cards and the manager-only
+   management table. */
+.team-viewbar { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+.team-segmented {
+  display: inline-flex; gap: 2px;
+  background: var(--gray-100); border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md); padding: 3px;
+}
+.team-segmented button {
+  border: none; background: none; cursor: pointer;
+  padding: 6px 14px; border-radius: 6px;
+  font: 500 13px 'DM Sans', sans-serif; color: var(--gray-600);
+  display: flex; align-items: center; gap: 6px;
+}
+.team-segmented button:hover { color: var(--gray-900); }
+.team-segmented button.active {
+  background: #fff; color: var(--blue);
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+html.dark .team-segmented button.active { background: var(--gray-50); }
+/* Sized here rather than left to the flex default, which stretches an unsized
+   svg to hundreds of pixels. */
+.team-segmented button svg { width: 14px; height: 14px; flex-shrink: 0; }
+
 /* ── Modal ── */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(28,28,26,0.45);
@@ -1153,6 +1177,18 @@ const T = {
     techRole: 'Technician',
     managerRole: 'Manager',
     inactive: 'Inactive',
+    // Team page
+    name: 'Name',
+    role: 'Role',
+    actions: 'Actions',
+    activeStatus: 'Active',
+    deactivate: 'Deactivate',
+    reactivate: 'Reactivate',
+    members: 'Members',
+    manage: 'Manage',
+    teamMembers: 'Team members',
+    makeManager: 'Make manager',
+    makeTechnician: 'Make technician',
     signInBtn: 'Sign in',
     createBtn: 'Create account',
     noAccount: "Don't have an account?",
@@ -1446,6 +1482,18 @@ const T = {
     techRole: 'Técnico',
     managerRole: 'Gestor',
     inactive: 'Inativo',
+    // Team page
+    name: 'Nome',
+    role: 'Função',
+    actions: 'Ações',
+    activeStatus: 'Ativo',
+    deactivate: 'Desativar',
+    reactivate: 'Reativar',
+    members: 'Membros',
+    manage: 'Gerir',
+    teamMembers: 'Membros da equipa',
+    makeManager: 'Tornar gestor',
+    makeTechnician: 'Tornar técnico',
     signInBtn: 'Iniciar sessão',
     createBtn: 'Criar conta',
     demoAccounts: 'Contas de demonstração',
@@ -3436,9 +3484,20 @@ function ConsumablesPage({ token }) {
 }
 
 /* ════════════════ TEAM PAGE ════════════════ */
-function TeamPage({ users, apt, dept, currentUser }) {
+/* Two views over the same roster: the member cards everyone can see, and the
+   management table (promote/demote, deactivate/reactivate) that managers only
+   get. The management table used to live as a tab on the Profile page, which
+   was a strange home for it — administering the team belongs with the team. */
+function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
+  const canManage = currentUser?.role === 'manager';
+  const [view, setView] = useState('members');
+
+  // If the signed-in user stops being a manager while the management view is
+  // open, drop back to the cards rather than showing controls the API will
+  // reject anyway.
+  useEffect(() => { if (!canManage) setView('members'); }, [canManage]);
 
   // One pass over the issues instead of re-filtering the whole list per user,
   // which was O(users x issues) on every render.
@@ -3454,6 +3513,22 @@ function TeamPage({ users, apt, dept, currentUser }) {
     return byUser;
   }, [apt, dept]);
 
+  async function changeRole(userId, newRole) {
+    try {
+      const res = await apiFetch(`/users/${userId}/role`, {method:'PATCH', body:{role: newRole}, token});
+      onUsersUpdate(prev => prev.map(u => u.id === userId ? {...u, role: res.user.role} : u));
+      setToast('Role updated');
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  async function toggleActive(userId, active) {
+    try {
+      const res = await apiFetch(`/users/${userId}/deactivate`, {method:'PATCH', body:{active}, token});
+      onUsersUpdate(prev => prev.map(u => u.id === userId ? {...u, active: res.user.active} : u));
+      setToast(active ? 'Account reactivated' : 'Account deactivated');
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
   if (!users.length) {
     return (
       <div className="table-card">
@@ -3465,7 +3540,81 @@ function TeamPage({ users, apt, dept, currentUser }) {
     );
   }
 
+  // ── Management view (managers only) ──
+  const manageTable = (
+    <div className="table-card">
+      <div className="table-header">
+        <span className="table-title">{t.teamMembers}</span>
+      </div>
+      <div style={{overflowX:'auto'}}>
+        <table>
+          <thead>
+            <tr>
+              <th>{t.name}</th><th>{t.email}</th><th>{t.role}</th>
+              <th>{t.status}</th><th>{t.actions}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map(u=>(
+              <tr key={u.id} className={u.active ? '' : 'fp-row'}>
+                <td style={{minWidth:170}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <Avatar name={u.name} idx={u.avatar_idx} size="sm" src={u.avatar_data}/>
+                    <span style={{fontWeight:500,whiteSpace:'nowrap'}}>{u.name}</span>
+                    {u.id===currentUser.id && <span className="team-you">{t.you}</span>}
+                  </div>
+                </td>
+                <td style={{fontSize:13,color:'var(--gray-600)'}}>{u.email}</td>
+                <td>
+                  <span className={`badge ${u.role==='manager'?'badge-internet':'badge-type'}`}>{u.role}</span>
+                </td>
+                <td>
+                  <span className={`badge ${u.active?'badge-ok':'badge-pending'}`}>
+                    {u.active ? t.activeStatus : t.inactive}
+                  </span>
+                </td>
+                {/* 250px keeps "Make technician" + "Deactivate" on one line;
+                    at 190 they wrapped and made the rows uneven. */}
+                <td style={{minWidth:250}}>
+                  {/* You cannot demote or deactivate yourself — that is how an
+                      account used to lock its manager out of the page. */}
+                  {u.id !== currentUser.id ? (
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12,whiteSpace:'nowrap'}}
+                        onClick={()=>changeRole(u.id, u.role==='manager'?'technician':'manager')}>
+                        {u.role==='manager' ? t.makeTechnician : t.makeManager}
+                      </button>
+                      <button className={`btn ${u.active?'btn-ghost':'btn-primary'}`} style={{padding:'4px 10px',fontSize:12,whiteSpace:'nowrap'}}
+                        onClick={()=>toggleActive(u.id, !u.active)}>
+                        {u.active ? t.deactivate : t.reactivate}
+                      </button>
+                    </div>
+                  ) : <span style={{fontSize:12,color:'var(--gray-300)'}}>—</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
   return (
+    <>
+      <div className="team-viewbar">
+        <div className="team-segmented">
+          <button className={view==='members'?'active':''} onClick={()=>setView('members')}>
+            {Ic.users}{t.members}
+          </button>
+          {canManage && (
+            <button className={view==='manage'?'active':''} onClick={()=>setView('manage')}>
+              {Ic.shield}{t.manage}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {view==='manage' && canManage ? manageTable : (
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:16}}>
       {users.map(u=>{
         const s = stats.get(u.id) || { total: 0, resolved: 0, minutes: 0 };
@@ -3503,6 +3652,8 @@ function TeamPage({ users, apt, dept, currentUser }) {
         );
       })}
     </div>
+      )}
+    </>
   );
 }
 
@@ -3743,7 +3894,7 @@ function ReportsPage({ token }) {
 }
 
 /* ════════════════ PROFILE PAGE ════════════════ */
-function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate, setToast, lang, onLangChange }) {
+function ProfilePage({ currentUser, token, onSessionUpdate, setToast, lang, onLangChange }) {
   const t = T[lang];
   const [myStats,  setMyStats]  = useState(null);
   const [myIssues, setMyIssues] = useState([]);
@@ -3825,28 +3976,11 @@ function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate
     } catch(ex) {}
   }
 
-  async function changeRole(userId, newRole) {
-    try {
-      const res = await apiFetch(`/users/${userId}/role`, {method:'PATCH', body:{role: newRole}, token});
-      onUsersUpdate(prev => prev.map(u => u.id === userId ? {...u, role: res.user.role} : u));
-      setToast('Role updated');
-    } catch(ex) { setToast('Error: ' + ex.message); }
-  }
-
-  async function toggleActive(userId, active) {
-    try {
-      const res = await apiFetch(`/users/${userId}/deactivate`, {method:'PATCH', body:{active}, token});
-      onUsersUpdate(prev => prev.map(u => u.id === userId ? {...u, active: res.user.active} : u));
-      setToast(active ? 'Account reactivated' : 'Account deactivated');
-    } catch(ex) { setToast('Error: ' + ex.message); }
-  }
-
   const sections = [
     {id:'identity',    label:'Identity'},
     {id:'avatar',      label:'Avatar'},
     {id:'preferences', label:'Preferences'},
     {id:'activity',    label:'My Activity'},
-    ...(currentUser.role === 'manager' ? [{id:'team', label:'Team Management'}] : []),
   ];
 
   const statCards = myStats ? [
@@ -4020,57 +4154,6 @@ function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate
         </div>
       )}
 
-      {/* ── Team Management (manager only) ── */}
-      {section==='team' && currentUser.role==='manager' && (
-        <div className="table-card">
-          <div className="table-header">
-            <span className="table-title">Team members</span>
-          </div>
-          <div style={{overflowX:'auto'}}>
-          <table>
-            <thead>
-              <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              {users.map(u=>(
-                <tr key={u.id}>
-                  <td>
-                    <div style={{display:'flex',alignItems:'center',gap:8}}>
-                      <Avatar name={u.name} idx={u.avatar_idx} size="sm" src={u.avatar_data}/>
-                      <span style={{fontWeight:500}}>{u.name}</span>
-                      {u.id===currentUser.id && <span className="badge" style={{background:'var(--blue-light)',color:'var(--blue)',fontSize:10,padding:'1px 6px'}}>you</span>}
-                    </div>
-                  </td>
-                  <td style={{fontSize:13,color:'var(--gray-600)'}}>{u.email}</td>
-                  <td>
-                    <span className={`badge ${u.role==='manager'?'badge-internet':'badge-type'}`}>{u.role}</span>
-                  </td>
-                  <td>
-                    <span className={`badge ${u.active?'badge-ok':'badge-pending'}`}>
-                      {u.active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td style={{minWidth:190}}>
-                    {u.id !== currentUser.id ? (
-                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                        <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12,whiteSpace:'nowrap'}}
-                          onClick={()=>changeRole(u.id, u.role==='manager'?'technician':'manager')}>
-                          {u.role==='manager' ? 'Make technician' : 'Make manager'}
-                        </button>
-                        <button className={`btn ${u.active?'btn-ghost':'btn-primary'}`} style={{padding:'4px 10px',fontSize:12,whiteSpace:'nowrap'}}
-                          onClick={()=>toggleActive(u.id, !u.active)}>
-                          {u.active ? 'Deactivate' : 'Reactivate'}
-                        </button>
-                      </div>
-                    ) : <span style={{fontSize:12,color:'var(--gray-300)'}}>—</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -4881,7 +4964,8 @@ function App() {
             {page==='analytics' && <AnalyticsPage token={token} alertsPendingCount={alertsPendingCount}/>}
             {page==='consumables' && <ConsumablesPage token={token}/>}
             {page==='support' && <SupportPage token={token}/>}
-            {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}/>}
+            {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}
+              token={token} onUsersUpdate={setUsers} setToast={setToast}/>}
             {page==='reports' && <ReportsPage token={token}/>}
             {page==='system' && me.role==='manager' && <SystemStatusPage token={token}/>}
             {page==='admin' && me.role==='manager' && <AdminPage
@@ -4901,9 +4985,7 @@ function App() {
             {page==='profile' && <ProfilePage
               currentUser={me}
               token={token}
-              users={users}
               onSessionUpdate={onSessionUpdate}
-              onUsersUpdate={setUsers}
               setToast={setToast}
               lang={lang}
               onLangChange={setLang}
