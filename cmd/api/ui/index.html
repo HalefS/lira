@@ -229,6 +229,10 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
 .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-ghost { background: #fff; color: var(--gray-600); border-color: var(--gray-200); }
 .btn-ghost:hover { background: var(--gray-100); color: var(--gray-900); }
+/* Destructive action that needs a deliberate click (the delete confirmation). */
+.btn-danger { background: var(--red); color: #fff; }
+.btn-danger:hover { background: var(--red-mid); }
+.btn-danger:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-full { width: 100%; justify-content: center; padding: 10px 14px; font-size: 14px; }
 .btn svg { width: 14px; height: 14px; }
 
@@ -275,6 +279,11 @@ thead th {
 tbody td { padding: 11px 18px; border-bottom: 1px solid var(--gray-100); vertical-align: middle; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: #F8FAFC; }
+/* Rows the current user is allowed to edit open the issue form when clicked
+   anywhere, so they advertise it with a pointer. Rows belonging to another
+   technician (visible to managers only) deliberately get no pointer and no
+   click handler — the "—" in the actions cell still explains why. */
+tbody tr.row-clickable { cursor: pointer; }
 
 /* ── New-row entrance + status highlight ── */
 @keyframes rowFadeSlide {
@@ -350,6 +359,22 @@ tbody tr:hover td { background: #F8FAFC; }
 .modal-header h2 { font-size: 15px; font-weight: 600; }
 .modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
 .modal-footer { padding: 14px 24px 20px; border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ── Delete confirmation ── */
+.confirm-modal { max-width: 420px; }
+.confirm-body { display: flex; gap: 14px; align-items: flex-start; }
+.confirm-icon {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%;
+  background: var(--red-light); color: var(--red);
+  display: flex; align-items: center; justify-content: center;
+}
+.confirm-icon svg { width: 17px; height: 17px; }
+.confirm-text { font-size: 13.5px; color: var(--gray-600); line-height: 1.5; }
+.confirm-subject {
+  display: block; margin-top: 6px; font-weight: 600; color: var(--gray-900);
+  font-family: 'DM Mono', monospace; font-size: 12.5px;
+  word-break: break-word;
+}
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .form-group { display: flex; flex-direction: column; gap: 5px; }
 .form-group label { font-size: 11px; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.07em; }
@@ -407,6 +432,60 @@ select.form-control { cursor: pointer; }
 .consumable-chip-x:hover { background: var(--red-light); color: var(--red); }
 .consumable-chip-x svg { width: 9px; height: 9px; }
 @keyframes chipIn { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* Issue form: the "Third-party support" box and the handover chips inside it.
+   Reuses the consumable box/chip visuals — same dashed placeholder when empty,
+   same pill per entry — with the company colour as the accent. */
+.tp-box { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 10px; border: 1.5px dashed var(--gray-300); border-radius: var(--radius-md);
+  background: var(--gray-100); transition: border-color 0.12s; }
+.tp-box.has-items { border-style: solid; border-color: var(--gray-200); }
+.tp-chip {
+  display: inline-flex; align-items: center; gap: 7px; padding: 3px 4px 3px 8px;
+  border: 1px solid var(--gray-200); border-radius: 999px; background: var(--gray-50);
+  font-size: 12.5px; font-weight: 500; color: var(--gray-900); animation: chipIn 0.16s ease;
+}
+.tp-chip-company { font-weight: 700; }
+.tp-chip-detail  { color: var(--gray-500); font-weight: 400; }
+.tp-chip-telnet     { border-left: 3px solid var(--blue); }
+.tp-chip-telefonica { border-left: 3px solid var(--amber); }
+
+/* Compact per-issue markers shown in the issue tables. */
+.tp-strip { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.tp-strip-item {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px;
+  border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.tp-strip-item.telnet     { background: var(--blue-light);   color: var(--blue); }
+.tp-strip-item.telefonica { background: var(--amber-light);  color: var(--amber); }
+.tp-strip-item svg { width: 11px; height: 11px; }
+
+/* The company picker inside the third-party support dialog. */
+.tp-company { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tp-company-opt {
+  display: flex; align-items: center; gap: 10px; padding: 13px 14px;
+  border: 1.5px solid var(--gray-200); border-radius: var(--radius-md);
+  background: var(--gray-50); color: var(--gray-600); cursor: pointer;
+  text-align: left; font: 600 13.5px 'DM Sans', sans-serif; transition: all 0.12s;
+}
+.tp-company-opt:hover { border-color: var(--gray-300); }
+.tp-company-opt.active { border-color: var(--blue); background: var(--blue-light); color: var(--blue); }
+.tp-company-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.tp-company-dot.telnet     { background: var(--blue); }
+.tp-company-dot.telefonica { background: var(--amber); }
+.tp-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.tp-row {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  border: 1.5px solid var(--gray-200); border-radius: var(--radius-md); background: var(--gray-50);
+}
+.tp-row-main { min-width: 0; flex: 1; }
+.tp-row-company { font-size: 13.5px; font-weight: 700; color: var(--gray-900); display: flex; align-items: center; gap: 7px; }
+.tp-row-detail { font-size: 12.5px; color: var(--gray-500); margin-top: 2px; }
+.tp-row-status {
+  font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+}
+.tp-row-status.pending { background: var(--amber-light); color: var(--amber); }
+.tp-row-status.solved  { background: var(--green-light); color: var(--green); }
 
 /* Picker dialog (opens over the issue form) */
 .picker-overlay { z-index: 110; }
@@ -625,6 +704,11 @@ html.dark .btn-ghost {
   border-color: var(--gray-300) !important;
 }
 html.dark .btn-ghost:hover { background: var(--gray-200) !important; color: var(--gray-900) !important; }
+/* In dark mode --red is a light salmon, so white text on it would be barely
+   legible. Flip the pairing to a dark red fill with the light red as the text,
+   the same way .icon-btn.danger:hover does it. */
+html.dark .btn-danger        { background: var(--red-light) !important; color: var(--red) !important; }
+html.dark .btn-danger:hover  { background: var(--red-mid) !important; }
 
 html.dark .nav-item.active { background: var(--blue-light) !important; color: var(--blue) !important; }
 html.dark .nav-item:hover  { background: var(--gray-200) !important; }
@@ -721,6 +805,17 @@ function mapIssue(i) {
     // null when the item has since been removed from the catalog.
     consumables: (i.consumables || []).map(c => ({
       itemId: c.item_id ?? null, item: c.item, icon: c.icon, quantity: c.quantity,
+    })),
+    // Handovers to Telnet / Telefonica. The Telnet names are free text — they
+    // are whoever we spoke to on the other side, not users of this app.
+    supportRequests: (i.support_requests || []).map(s => ({
+      id:            s.id,
+      company:       s.company,
+      status:        s.status,
+      technician:    s.telnet_technician || '',
+      confirmedBy:   s.telnet_confirmed_by || '',
+      ticketId:      s.telefonica_ticket_id || '',
+      notes:         s.notes || '',
     })),
     status:        i.status,
     loggedBy:      i.logged_by,
@@ -858,6 +953,32 @@ const T = {
     consumableDone: 'Done',
     consumableNone: 'No consumables have been set up yet. A manager can add them from the Admin page.',
     consumableNoMatch: 'No consumables match your search.',
+    thirdPartyLabel: 'Third-party support',
+    addThirdParty: 'Add handover',
+    editThirdParty: 'Edit',
+    thirdPartyRemove: 'Remove handover',
+    thirdPartyTitle: 'Third-party support',
+    thirdPartySub: 'Hand this issue over to an external company, and keep track of who is handling it.',
+    thirdPartyEmpty: 'No handovers to Telnet or Telefonica on this issue.',
+    thirdPartyNoneLogged: 'Nothing was handed over to Telnet or Telefonica.',
+    company: 'Company',
+    companyTelnet: 'Telnet',
+    companyTelefonica: 'Telefónica',
+    telnetTechnician: 'Reported to (Telnet technician)',
+    telnetConfirmedBy: 'Reported fixed by',
+    telefonicaTicket: 'Telefónica ticket id',
+    ticketIdPlaceholder: 'e.g. 2024-88123',
+    supportStatus: 'Handover status',
+    supportPending: 'Pending',
+    supportSolved: 'OK',
+    supportNotes: 'Notes for this handover',
+    supportNotesPlaceholder: 'What was agreed, who to chase…',
+    telnetNeedsTechnician: 'Enter the Telnet technician this was reported to.',
+    telnetNeedsConfirmation: 'A Telnet handover marked OK needs to say who reported it was fixed.',
+    telefonicaNeedsTicket: 'A Telefónica handover needs their ticket id.',
+    telnetTechPlaceholder: 'e.g. Rui Marques',
+    telnetConfirmPlaceholder: 'e.g. Rui Marques',
+    supportLoggedBy: 'Added by',
     adminConsumables: 'Consumables',
     adminConsumablesSub: "Items technicians can add when logging an issue. Removing one doesn't change past issues.",
     consumableName: 'Name',
@@ -925,6 +1046,10 @@ const T = {
     toastLogged: 'Issue logged successfully',
     toastUpdated: 'Issue updated',
     toastDeleted: 'Issue deleted',
+    deleteIssueTitle: 'Delete this issue?',
+    deleteIssueBody: 'This permanently deletes the issue and everything logged against it:',
+    deleteIssueConfirm: 'Delete issue',
+    deleting: 'Deleting…',
     managerLabel: 'Manager',
     adminView: 'Admin view',
     language: 'Language',
@@ -1087,6 +1212,32 @@ const T = {
     consumableDone: 'Concluir',
     consumableNone: 'Ainda não há consumíveis configurados. Um gestor pode adicioná-los na página de Administração.',
     consumableNoMatch: 'Nenhum consumível corresponde à pesquisa.',
+    thirdPartyLabel: 'Apoio de terceiros',
+    addThirdParty: 'Adicionar encaminhamento',
+    editThirdParty: 'Editar',
+    thirdPartyRemove: 'Remover encaminhamento',
+    thirdPartyTitle: 'Apoio de terceiros',
+    thirdPartySub: 'Encaminhe esta avaria para uma empresa externa e acompanhe quem está a tratar.',
+    thirdPartyEmpty: 'Nenhum encaminhamento para a Telnet ou Telefónica nesta avaria.',
+    thirdPartyNoneLogged: 'Nada foi encaminhado para a Telnet ou Telefónica.',
+    company: 'Empresa',
+    companyTelnet: 'Telnet',
+    companyTelefonica: 'Telefónica',
+    telnetTechnician: 'Comunicado a (técnico Telnet)',
+    telnetConfirmedBy: 'Comunicado como resolvido por',
+    telefonicaTicket: 'Nº de ticket da Telefónica',
+    ticketIdPlaceholder: 'ex. 2024-88123',
+    supportStatus: 'Estado do encaminhamento',
+    supportPending: 'Pendente',
+    supportSolved: 'OK',
+    supportNotes: 'Notas sobre este encaminhamento',
+    supportNotesPlaceholder: 'O que ficou combinado, a quem cobrar…',
+    telnetNeedsTechnician: 'Indique o técnico da Telnet a quem foi comunicado.',
+    telnetNeedsConfirmation: 'Um encaminhamento Telnet marcado como OK tem de indicar quem comunicou que ficou resolvido.',
+    telefonicaNeedsTicket: 'Um encaminhamento Telefónica tem de indicar o nº de ticket.',
+    telnetTechPlaceholder: 'ex. Rui Marques',
+    telnetConfirmPlaceholder: 'ex. Rui Marques',
+    supportLoggedBy: 'Adicionado por',
     adminConsumables: 'Consumíveis',
     adminConsumablesSub: 'Itens que os técnicos podem adicionar ao registar uma avaria. Remover um não altera avarias anteriores.',
     consumableName: 'Nome',
@@ -1155,6 +1306,10 @@ const T = {
     toastLogged: 'Avaria registada com sucesso',
     toastUpdated: 'Avaria actualizada',
     toastDeleted: 'Avaria eliminada',
+    deleteIssueTitle: 'Eliminar esta avaria?',
+    deleteIssueBody: 'Isto elimina a avaria e tudo o que foi registado nela:',
+    deleteIssueConfirm: 'Eliminar avaria',
+    deleting: 'A eliminar…',
     managerLabel: 'Gestor',
     adminView: 'Vista de administrador',
     language: 'Idioma',
@@ -1637,6 +1792,29 @@ function ConsumableStrip({ items }) {
   );
 }
 
+/* The handovers to Telnet / Telefonica, shown read-only under an issue in the
+   tables. One pill per handover, so a support call that is still outstanding
+   is visible without opening the issue. */
+function SupportRequestStrip({ requests, t }) {
+  if (!requests || requests.length === 0) return null;
+  return (
+    <div className="tp-strip">
+      {requests.map(s=>{
+        const label = s.company==='telnet' ? t.companyTelnet : t.companyTelefonica;
+        const detail = s.company==='telnet'
+          ? s.technician || '—'
+          : s.ticketId;
+        const state  = s.status==='solved' ? t.supportSolved : t.supportPending;
+        return (
+          <span key={s.id} className={`tp-strip-item ${s.company}`} title={`${label} · ${detail} · ${state}`}>
+            {s.status==='solved' ? Ic.check : Ic.clock} {label}{detail ? ` ${detail}` : ''}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 /* The dialog opened by "Add consumables". Works on a draft copy of the selection;
    nothing changes on the issue until the user presses Done. */
 function ConsumablePicker({ items, value, onCancel, onDone }) {
@@ -1726,6 +1904,239 @@ function ConsumablePicker({ items, value, onCancel, onDone }) {
   );
 }
 
+/* The dialog opened by "Third-party support" in the issue form. Works on a
+   draft copy of the handovers; nothing changes on the issue until Done.
+   `key` is client-only and identifies a handover that doesn't exist on the
+   server yet, so `id` stays the server's own row id (0 for a new one). */
+function SupportRequestModal({ requests, onCancel, onDone }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const [items, setItems] = useState(requests);
+  const [draft, setDraft] = useState(null);   // null = list view, otherwise the handover being added/edited
+  const [err, setErr] = useState('');
+
+  function blank() {
+    return {key: `new-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, id: 0,
+            company: 'telnet', status: 'pending',
+            technician: '', confirmedBy: '', ticketId: '', notes: ''};
+  }
+  function startAdd()   { setDraft(blank());            setErr(''); }
+  function startEdit(s) { setDraft({...s});             setErr(''); }
+  function cancelEdit() { setDraft(null);               setErr(''); }
+  function patch(k,v)   { setDraft(d=>({...d,[k]:v})); setErr(''); }
+
+  // Mirrors ValidateSupportRequests on the server, so the user is told here
+  // rather than after a round-trip.
+  function commit() {
+    const technician  = (draft.technician ||'').trim();
+    const confirmedBy = (draft.confirmedBy||'').trim();
+    if (draft.company === 'telnet') {
+      if (!technician) return setErr(t.telnetNeedsTechnician);
+      if (draft.status==='solved' && !confirmedBy) return setErr(t.telnetNeedsConfirmation);
+    } else {
+      const ticket = (draft.ticketId||'').trim();
+      if (!ticket) return setErr(t.telefonicaNeedsTicket);
+      if (items.some(s=>s.key!==draft.key && (s.ticketId||'').trim().toLowerCase()===ticket.toLowerCase()))
+        return setErr(t.telefonicaNeedsTicket);
+    }
+    const saved = {
+      ...draft,
+      // Fields that don't belong to the chosen company are dropped here as
+      // well as on the server, so a draft can't carry stale values around.
+      ticketId:      draft.company==='telefonica' ? (draft.ticketId||'').trim() : '',
+      technician:    draft.company==='telnet' ? technician  : '',
+      confirmedBy:   draft.company==='telnet' ? confirmedBy : '',
+      notes: (draft.notes||'').trim(),
+    };
+    setItems(list=> list.some(s=>s.key===draft.key) ? list.map(s=>s.key===draft.key?saved:s) : [...list, saved]);
+    cancelEdit();
+  }
+
+  function remove(s) {
+    setItems(list=>list.filter(x=>x.key!==s.key));
+  }
+
+  // Switching company on an existing draft can strand a half-filled field
+  // (e.g. a Telnet technician with no Telefónica ticket id), so start it clean.
+  function setCompany(company) {
+    setDraft(d=>({...d, company,
+      ticketId:    company==='telefonica' ? d.ticketId : '',
+      technician:  company==='telnet' ? d.technician  : '',
+      confirmedBy: company==='telnet' ? d.confirmedBy : '',
+    }));
+    setErr('');
+  }
+
+  // The second line of a handover row. The company line already names the
+  // Telnet technician, so this carries whatever it doesn't: Telefonica's ticket
+  // id, or who confirmed the Telnet fix. Returns null when there is genuinely
+  // nothing to add, so the row collapses instead of repeating the status badge.
+  function detail(s) {
+    if (s.company === 'telnet') {
+      if (s.confirmedBy) return `${t.telnetConfirmedBy}: ${s.confirmedBy}`;
+      return s.notes || null;
+    }
+    return `${t.telefonicaTicket}: ${s.ticketId}`;
+  }
+
+  return (
+    <div className="modal-overlay picker-overlay" onClick={e=>e.target===e.currentTarget&&(draft?cancelEdit():onCancel())}>
+      <div className="modal picker-modal" role="dialog" aria-modal="true" aria-label={t.thirdPartyTitle}>
+        <div className="modal-header">
+          <div>
+            <h2>{t.thirdPartyTitle}</h2>
+            <div className="picker-sub">{t.thirdPartySub}</div>
+          </div>
+          <button type="button" className="icon-btn" onClick={()=>draft?cancelEdit():onCancel()}>{Ic.x}</button>
+        </div>
+        <div className="modal-body">
+          {draft ? (
+            <>
+              <div className="form-group">
+                <label>{t.company}</label>
+                <div className="tp-company">
+                  <button type="button" className={`tp-company-opt ${draft.company==='telnet'?'active':''}`}
+                    aria-pressed={draft.company==='telnet'} onClick={()=>setCompany('telnet')}>
+                    <span className="tp-company-dot telnet"/>{t.companyTelnet}
+                  </button>
+                  <button type="button" className={`tp-company-opt ${draft.company==='telefonica'?'active':''}`}
+                    aria-pressed={draft.company==='telefonica'} onClick={()=>setCompany('telefonica')}>
+                    <span className="tp-company-dot telefonica"/>{t.companyTelefonica}
+                  </button>
+                </div>
+              </div>
+
+              {draft.company==='telnet' ? (
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>{t.telnetTechnician}</label>
+                    <input className="form-control" placeholder={t.telnetTechPlaceholder} value={draft.technician}
+                      onChange={e=>patch('technician', e.target.value)}/>
+                  </div>
+                  <div className="form-group">
+                    <label>{t.telnetConfirmedBy}</label>
+                    <input className="form-control" placeholder={t.telnetConfirmPlaceholder} value={draft.confirmedBy}
+                      onChange={e=>patch('confirmedBy', e.target.value)}/>
+                  </div>
+                </div>
+              ) : (
+                <div className="form-group">
+                  <label>{t.telefonicaTicket}</label>
+                  <input className="form-control" placeholder={t.ticketIdPlaceholder} value={draft.ticketId}
+                    onChange={e=>patch('ticketId', e.target.value)}/>
+                </div>
+              )}
+
+              <div className="form-group">
+                <label>{t.supportStatus}</label>
+                <select className="form-control" value={draft.status} onChange={e=>patch('status', e.target.value)}>
+                  <option value="pending">{t.supportPending}</option>
+                  <option value="solved">{t.supportSolved}</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>{t.supportNotes}</label>
+                <input className="form-control" placeholder={t.supportNotesPlaceholder} value={draft.notes}
+                  onChange={e=>patch('notes', e.target.value)}/>
+              </div>
+
+              {err && <div style={{fontSize:12.5,color:'var(--red)'}}>{err}</div>}
+            </>
+          ) : items.length === 0 ? (
+            <div className="empty-state" style={{padding:'24px 12px'}}>{Ic.users}<p>{t.thirdPartyNoneLogged}</p></div>
+          ) : (
+            <div className="tp-list">
+              {items.map(s=>(
+                <div className="tp-row" key={s.key}>
+                  <div className="tp-row-main">
+                    <div className="tp-row-company">
+                      <span className={`tp-company-dot ${s.company}`}/>
+                      {s.company==='telnet' ? t.companyTelnet : t.companyTelefonica}
+                      {s.company==='telnet' && s.technician && (
+                        <span style={{fontWeight:400,color:'var(--gray-500)'}}>— {s.technician}</span>
+                      )}
+                    </div>
+                    {detail(s) && <div className="tp-row-detail">{detail(s)}</div>}
+                  </div>
+                  <span className={`tp-row-status ${s.status}`}>{s.status==='solved' ? t.supportSolved : t.supportPending}</span>
+                  <button type="button" className="icon-btn" title={t.editThirdParty} onClick={()=>startEdit(s)}>{Ic.edit}</button>
+                  <button type="button" className="icon-btn danger" title={t.thirdPartyRemove} onClick={()=>remove(s)}>{Ic.trash}</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!draft && (
+            <button type="button" className="consumable-add-btn" onClick={startAdd} style={{width:'100%',padding:'9px 12px',fontSize:13}}>
+              {Ic.plus} {items.length ? t.editThirdParty : t.addThirdParty}
+            </button>
+          )}
+        </div>
+        <div className="modal-footer">
+          {draft ? (
+            <>
+              <button type="button" className="btn btn-ghost" onClick={cancelEdit}>{t.cancel}</button>
+              <button type="button" className="btn btn-primary" onClick={commit}>{Ic.check} {t.saveChanges}</button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="btn btn-ghost" onClick={onCancel}>{t.cancel}</button>
+              <button type="button" className="btn btn-primary" onClick={()=>onDone(items)}>
+                {Ic.check} {t.consumableDone}{items.length > 0 ? ` (${items.length})` : ''}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Asks before deleting an issue. Deleting takes the issue's consumables and its
+   third-party handovers with it, so it is not something to do on a stray click.
+   The subject line repeats which issue is about to go, because the confirm can
+   be triggered from a row the user is looking at rather than at. */
+function ConfirmDeleteIssue({ issue, onCancel, onConfirm, deleting }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape' && !deleting) onCancel(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel, deleting]);
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && !deleting && onCancel()}>
+      <div className="modal confirm-modal" role="dialog" aria-modal="true" aria-label={t.deleteIssueTitle}>
+        <div className="modal-header">
+          <h2>{t.deleteIssueTitle}</h2>
+          <button type="button" className="icon-btn" onClick={onCancel} disabled={deleting}>{Ic.x}</button>
+        </div>
+        <div className="modal-body confirm-body">
+          <span className="confirm-icon">{Ic.trash}</span>
+          <div className="confirm-text">
+            {t.deleteIssueBody}
+            <span className="confirm-subject">
+              {issue.apt||issue.dept} · {issue.type} — {issue.problem}
+            </span>
+          </div>
+        </div>
+        <div className="modal-footer">
+          {/* Cancel takes the initial focus, not the delete button: Enter is
+              often still held over from whatever the user did before, and a
+              reflexive Enter should not destroy an issue. */}
+          <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={deleting} autoFocus>{t.cancel}</button>
+          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={deleting}>
+            {deleting ? t.deleting : <>{Ic.trash} {t.deleteIssueConfirm}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments, connectaAgents, consumableItems, token, onClose, onSave }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
@@ -1748,8 +2159,8 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
   const firstType = typeNames[0] || '';
   const catalogById = Object.fromEntries((consumableItems || []).map(ci => [ci.id, ci]));
   const defaults = issueMode==='apt'
-    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[]}
-    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[]};
+    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[], supportRequests:[]}
+    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[], supportRequests:[]};
   const [form, setForm] = useState(isEdit ? {
     apt:        editIssue.apt||'',
     dept:       editIssue.dept||'',
@@ -1779,8 +2190,13 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
     consumables: (editIssue.consumables || [])
       .filter(c => c.itemId != null && catalogById[c.itemId])
       .map(c => ({ itemId: c.itemId, quantity: c.quantity })),
+    // Handovers to Telnet / Telefonica, as they are on the issue. The `key`
+    // is client-only and derived from the server's row id, so the list can be
+    // edited in place without an extra round-trip.
+    supportRequests: (editIssue.supportRequests || []).map(s => ({...s, key: `srv-${s.id}`})),
   } : defaults);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
   const selectedConsumables = form.consumables
     .map(c => ({ ...c, ...catalogById[c.itemId] }))     // adds name + icon
     .filter(c => c.name);
@@ -1917,6 +2333,25 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
               </select>
             </div>
           </div>
+          <div className="form-group">
+            <label>{t.thirdPartyLabel}</label>
+            <div className={`tp-box ${form.supportRequests.length ? 'has-items' : ''}`}>
+              {form.supportRequests.map(s=>(
+                <span className={`tp-chip tp-chip-${s.company}`} key={s.key}>
+                  <span className="tp-chip-company">{s.company==='telnet' ? t.companyTelnet : t.companyTelefonica}</span>
+                  <span className="tp-chip-detail">
+                    {s.company==='telnet' ? (s.technician || '—') : s.ticketId}
+                  </span>
+                  {s.status==='solved' && <span style={{color:'var(--green)'}}>{Ic.check}</span>}
+                  <button type="button" className="consumable-chip-x" aria-label={t.thirdPartyRemove}
+                    onClick={()=>set('supportRequests', form.supportRequests.filter(x=>x.key!==s.key))}>{Ic.x}</button>
+                </span>
+              ))}
+              <button type="button" className="consumable-add-btn" onClick={()=>setSupportOpen(true)}>
+                {form.supportRequests.length ? Ic.edit : Ic.plus} {form.supportRequests.length ? t.editThirdParty : t.addThirdParty}
+              </button>
+            </div>
+          </div>
           {timeRangeInvalid ? (
             <div style={{fontSize:12.5,color:'var(--red)',marginTop:-8}}>{t.invalidTimeRange}</div>
           ) : duration !== null ? (
@@ -1935,6 +2370,11 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
       <ConsumablePicker items={consumableItems || []} value={form.consumables}
         onCancel={()=>setPickerOpen(false)}
         onDone={sel=>{ set('consumables', sel); setPickerOpen(false); }}/>
+    )}
+    {supportOpen && (
+      <SupportRequestModal requests={form.supportRequests}
+        onCancel={()=>setSupportOpen(false)}
+        onDone={sel=>{ set('supportRequests', sel); setSupportOpen(false); }}/>
     )}
     </>
   );
@@ -2015,17 +2455,34 @@ function Dashboard({ apt, dept, users, stats }) {
 function IssuesTable({ issues, tableMode, currentUser, newIssueId, onDelete, onEdit }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
-  const [filter, setFilter] = useState('All');
+  // `null` means "no type filter", rather than the translated word for "All".
+  // Comparing against t.all left the table empty in any language whose word
+  // for "All" isn't literally "All" (Portuguese: "Todas"), and an issue type
+  // could also be *named* All/Todas, which the old check couldn't tell apart
+  // from the catch-all chip.
+  const [filter, setFilter] = useState(null);
   const [search, setSearch] = useState('');
-  const types    = [t.all,...Array.from(new Set(issues.map(i=>i.type)))];
+  // The catch-all chip is labelled with t.all but filters on null; the rest
+  // filter on the type name itself. Keyed separately so an issue type that
+  // happens to be called "All" still gets its own working chip.
+  const chips   = [{label:t.all, value:null}, ...Array.from(new Set(issues.map(i=>i.type))).map(ty=>({label:ty, value:ty}))];
   const filtered = useMemo(()=>issues.filter(i=>{
-    const ok1 = filter===t.all||i.type===filter;
+    const ok1 = filter===null||i.type===filter;
     const q   = search.toLowerCase();
     const ok2 = !q||(i.apt||i.dept||'').toLowerCase().includes(q)||i.problem.toLowerCase().includes(q)||i.loggedByName.toLowerCase().includes(q)||i.type.toLowerCase().includes(q);
     return ok1&&ok2;
-  }),[issues,filter,search,t.all]);
+  }),[issues,filter,search]);
 
   const canAct = issue => currentUser.role==='manager' || issue.loggedBy===currentUser.id;
+
+  // Clicking anywhere in a row opens it for editing, but only for the user who
+  // logged it (or a manager) — the same rule the edit button and the API enforce.
+  function openFromRow(e, issue) {
+    // A click that ends with text selected is someone trying to copy
+    // something out of the row, not someone trying to edit the issue.
+    if (window.getSelection()?.toString()) return;
+    onEdit(issue, tableMode);
+  }
 
   return (
     <div className="table-card">
@@ -2033,7 +2490,7 @@ function IssuesTable({ issues, tableMode, currentUser, newIssueId, onDelete, onE
         <span className="table-title">{tableMode==='apt' ? t.aptIssuesTitle : t.deptIssuesTitle}</span>
         <div className="table-actions">
           <div className="filter-chips">
-            {types.map(tp=><button key={tp} className={`chip ${filter===tp?'active':''}`} onClick={()=>setFilter(tp)}>{tp}</button>)}
+            {chips.map(c=><button key={c.value ?? '__all__'} className={`chip ${filter===c.value?'active':''}`} onClick={()=>setFilter(c.value)}>{c.label}</button>)}
           </div>
           <div className="search-wrap">
             {Ic.search}
@@ -2053,10 +2510,13 @@ function IssuesTable({ issues, tableMode, currentUser, newIssueId, onDelete, onE
           </thead>
           <tbody>
             {filtered.map(issue=>(
-              <tr key={issue.id} className={issue.id===newIssueId ? 'row-enter' : ''}>
+              <tr key={issue.id}
+                  className={`${issue.id===newIssueId ? 'row-enter' : ''}${canAct(issue) ? ' row-clickable' : ''}`}
+                  onClick={canAct(issue) ? e=>openFromRow(e,issue) : undefined}
+                  title={canAct(issue) ? t.editIssue : undefined}>
                 <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.apt||issue.dept}</strong></td>
                 <td><TypeBadge type={issue.type}/></td>
-                <td style={{maxWidth:150}}>{issue.problem}{issue.falsePositive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}<ConsumableStrip items={issue.consumables}/></td>
+                <td style={{maxWidth:150}}>{issue.problem}{issue.falsePositive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}<ConsumableStrip items={issue.consumables}/><SupportRequestStrip requests={issue.supportRequests} t={t}/></td>
                 <td style={{maxWidth:190,color:'var(--gray-600)',fontSize:13}}>{issue.resolution}</td>
                 <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.time}m</td>
                 <td><span className={`badge ${issue.status==='Ok'?'badge-ok':'badge-pending'} ${issue.id===newIssueId ? 'status-highlight' : ''}`}>{issue.status}</span></td>
@@ -2073,8 +2533,11 @@ function IssuesTable({ issues, tableMode, currentUser, newIssueId, onDelete, onE
                   <div className="action-cell">
                     {canAct(issue) ? (
                       <>
-                        <button className="icon-btn" title={t.saveChanges} onClick={()=>onEdit(issue,tableMode)}>{Ic.edit}</button>
-                        <button className="icon-btn danger" title={t.toastDeleted} onClick={()=>onDelete(issue.id,tableMode)}>{Ic.trash}</button>
+                        {/* stopPropagation: these sit inside a clickable row, and
+                            without it a click on the bin would delete the issue
+                            and then open it for editing. */}
+                        <button className="icon-btn" title={t.saveChanges} onClick={e=>{e.stopPropagation();onEdit(issue,tableMode);}}>{Ic.edit}</button>
+                        <button className="icon-btn danger" title={t.toastDeleted} onClick={e=>{e.stopPropagation();onDelete(issue,tableMode);}}>{Ic.trash}</button>
                       </>
                     ) : (
                       <span style={{fontSize:11,color:'var(--gray-300)',padding:'0 8px',userSelect:'none'}} title="Only the owner or a manager can edit this">—</span>
@@ -3865,6 +4328,7 @@ function App() {
   const [page,    setPage]    = useState('dashboard');
   const [modal,   setModal]   = useState(null);
   const [editing, setEditing] = useState(null);
+  const [pending, setPending] = useState(null);   // issue awaiting delete confirmation
   const [toast,   setToast]   = useState(null);
   const [newIssueId, setNewIssueId] = useState(null);
   const [apiErr,  setApiErr]  = useState('');
@@ -3935,6 +4399,21 @@ function App() {
     saveLS('lira_session', {...session, user: updatedUser});
   }
 
+  // The third-party handovers as the issue endpoint expects them. Fields that
+  // don't belong to a handover's company are dropped here so the server never
+  // has to reject the request.
+  function supportRequestBody(list) {
+    return (list || []).map(s => ({
+      id:                  s.id || undefined,
+      company:             s.company,
+      status:              s.status,
+      telnet_technician:   s.company === 'telnet'    ? (s.technician  || null) : null,
+      telnet_confirmed_by: s.company === 'telnet'    ? (s.confirmedBy || null) : null,
+      telefonica_ticket_id:s.company === 'telefonica' ? (s.ticketId    || null) : null,
+      notes:               s.notes || '',
+    }));
+  }
+
   async function addIssue(form, mode) {
     try {
       const body = {
@@ -3951,6 +4430,7 @@ function App() {
         confirmed_by_agent: form.confirmedByAgent,
         false_positive: !!form.falsePositive,
         consumables: (form.consumables || []).map(c => ({item_id: c.itemId, quantity: c.quantity})),
+        support_requests: supportRequestBody(form.supportRequests),
       };
       const res = await apiFetch('/issues', {method:'POST', body, token});
       const issue = mapIssue(res.issue);
@@ -3983,6 +4463,7 @@ function App() {
         confirmed_by_agent: form.confirmedByAgent,
         false_positive: !!form.falsePositive,
         consumables: (form.consumables || []).map(c => ({item_id: c.itemId, quantity: c.quantity})),
+        support_requests: supportRequestBody(form.supportRequests),
       };
       const res = await apiFetch(`/issues/${id}`, {method:'PATCH', body, token});
       const updated = mapIssue(res.issue);
@@ -3994,15 +4475,29 @@ function App() {
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
-  async function delIssue(id, mode) {
+  // Deleting is two-step: the row's bin button only asks, and the confirmation
+  // dialog calls delIssue. `pending` holds {issue, mode} — and busy:true once
+  // the request is in flight, so the dialog can't be double-submitted.
+  function askDelete(issue, mode) {
+    setPending({issue, mode});
+  }
+
+  async function delIssue() {
+    if (!pending || pending.busy) return;
+    const {issue, mode} = pending;
+    setPending({issue, mode, busy:true});
     try {
-      await apiFetch(`/issues/${id}`, {method:'DELETE', token});
-      if (mode==='apt') setApt(p=>p.filter(i=>i.id!==id));
-      else              setDept(p=>p.filter(i=>i.id!==id));
+      await apiFetch(`/issues/${issue.id}`, {method:'DELETE', token});
+      if (mode==='apt') setApt(p=>p.filter(i=>i.id!==issue.id));
+      else              setDept(p=>p.filter(i=>i.id!==issue.id));
       const todayStr = new Date().toISOString().slice(0,10);
       apiFetch(`/stats?date=${todayStr}`, {token}).then(r=>setStats(r.stats)).catch(()=>{});
       setToast(t.toastDeleted);
-    } catch(ex) { setToast('Error: ' + ex.message); }
+      setPending(null);
+    } catch(ex) {
+      setToast('Error: ' + ex.message);
+      setPending(null);
+    }
   }
 
   if (!session) return (
@@ -4088,9 +4583,9 @@ function App() {
 
           <div className="content">
             {page==='dashboard' && <Dashboard apt={apt} dept={dept} users={users} stats={stats}/>}
-            {page==='apt'       && <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} newIssueId={newIssueId} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
-            {page==='dept'      && <IssuesTable issues={dept} tableMode="dept" currentUser={me} newIssueId={newIssueId} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
-            {page==='history'   && <HistoryPage apt={apt} dept={dept} currentUser={me} onDelete={delIssue} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='apt'       && <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='dept'      && <IssuesTable issues={dept} tableMode="dept" currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='history'   && <HistoryPage apt={apt} dept={dept} currentUser={me} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='alerts'    && <AlertsPage alerts={alerts} currentUser={me} token={token} onAlertsUpdate={setAlerts} setToast={setToast}/>}
             {page==='analytics' && <AnalyticsPage token={token} alertsPendingCount={alertsPendingCount}/>}
             {page==='consumables' && <ConsumablesPage token={token}/>}
@@ -4130,6 +4625,10 @@ function App() {
         {editing && (
           <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token}
             onClose={()=>setEditing(null)} onSave={form=>saveEdit(form,editing.mode,editing.issue.id)}/>
+        )}
+        {pending && (
+          <ConfirmDeleteIssue issue={pending.issue} deleting={!!pending.busy}
+            onCancel={()=>setPending(null)} onConfirm={delIssue}/>
         )}
         {toast && <Toast msg={toast} onDone={()=>setToast(null)}/>}
       </div>

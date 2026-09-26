@@ -14,6 +14,9 @@ var (
 	ErrDuplicateConnectaAgent = errors.New("duplicate connecta agent")
 
 	ErrDuplicateConsumableItem = errors.New("duplicate consumable item")
+	// ErrDuplicateSupportTicket: this Telefónica ticket id is already logged
+	// against this issue.
+	ErrDuplicateSupportTicket = errors.New("duplicate third-party support ticket")
 )
 
 type Models struct {
@@ -28,6 +31,7 @@ type Models struct {
 	Analytics       AnalyticsModel
 	Consumables     ConsumableModel
 	ConsumableItems ConsumableItemModel
+	SupportRequests SupportRequestModel
 }
 
 func NewModels(db *sql.DB) Models {
@@ -43,5 +47,6 @@ func NewModels(db *sql.DB) Models {
 		Analytics:       AnalyticsModel{DB: db},
 		Consumables:     ConsumableModel{DB: db},
 		ConsumableItems: ConsumableItemModel{DB: db},
+		SupportRequests: SupportRequestModel{DB: db},
 	}
 }

@@ -40,6 +40,10 @@ type Issue struct {
 	// Consumables used while resolving this issue (batteries, remotes,
 	// phones, ...). Always an array in the JSON, empty when none were used.
 	Consumables []*IssueConsumable `json:"consumables"`
+	// Handovers of this issue to Telnet or Telefonica, each with the
+	// reference that company gave us. Always an array in the JSON, empty when
+	// the issue was handled entirely in-house.
+	SupportRequests []*SupportRequest `json:"support_requests"`
 }
 
 type IssueFilters struct {
@@ -122,6 +126,17 @@ type IssueModel struct {
 	DB *sql.DB
 }
 
+// loadIssueChildren fills in the child collections attached to every issue —
+// the consumables used on it and the handovers to Telnet / Telefonica — with
+// one query each, so a whole list of issues costs two extra round-trips rather
+// than two per issue.
+func loadIssueChildren(ctx context.Context, db *sql.DB, issues []*Issue) error {
+	if err := loadIssueConsumables(ctx, db, issues); err != nil {
+		return err
+	}
+	return loadIssueSupportRequests(ctx, db, issues)
+}
+
 func (m IssueModel) Insert(issue *Issue) error {
 	query := `
 		INSERT INTO issues (mode, location, type, problem, resolution, time_minutes, status, logged_by, start_time, end_time, reported_by_agent, confirmed_by_agent, false_positive)
@@ -168,7 +183,7 @@ func (m IssueModel) Get(id int64) (*Issue, error) {
 		}
 	}
 
-	if err := loadIssueConsumables(ctx, m.DB, []*Issue{&issue}); err != nil {
+	if err := loadIssueChildren(ctx, m.DB, []*Issue{&issue}); err != nil {
 		return nil, err
 	}
 	return &issue, nil
@@ -244,7 +259,7 @@ func (m IssueModel) GetAll(f IssueFilters) ([]*Issue, error) {
 		return nil, err
 	}
 
-	if err = loadIssueConsumables(ctx, m.DB, issues); err != nil {
+	if err = loadIssueChildren(ctx, m.DB, issues); err != nil {
 		return nil, err
 	}
 	return issues, nil
@@ -451,7 +466,7 @@ func (m IssueModel) GetByUser(userID int64, limit int) ([]*Issue, error) {
 		return nil, err
 	}
 
-	if err = loadIssueConsumables(ctx, m.DB, issues); err != nil {
+	if err = loadIssueChildren(ctx, m.DB, issues); err != nil {
 		return nil, err
 	}
 	return issues, nil
@@ -628,7 +643,7 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 		return nil, err
 	}
 
-	if err = loadIssueConsumables(ctx, m.DB, reportIssues); err != nil {
+	if err = loadIssueChildren(ctx, m.DB, reportIssues); err != nil {
 		return nil, err
 	}
 

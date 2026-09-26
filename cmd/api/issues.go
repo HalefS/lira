@@ -86,6 +86,9 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		// The consumables used on the issue. Omitted (nil) means "leave as
 		// is"; an empty list clears them.
 		Consumables *[]data.ConsumableUse `json:"consumables"`
+		// The handovers of the issue to Telnet / Telefonica. Same nil-means-
+		// leave-as-is rule as the consumables.
+		SupportRequests *[]data.SupportRequestUse `json:"support_requests"`
 	}
 
 	if err := app.readJSON(w, r, &input); err != nil {
@@ -178,6 +181,15 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	var supportRequests []data.SupportRequestUse
+	if input.SupportRequests != nil {
+		supportRequests, err = app.validateSupportRequests(v, *input.SupportRequests)
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
 	if data.ValidateIssue(v, issue); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
@@ -191,6 +203,12 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 	if input.Consumables != nil {
 		if err := app.models.Consumables.SetForIssue(issue.ID, *input.Consumables, user.ID); err != nil {
 			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
+	if input.SupportRequests != nil {
+		if err := app.setIssueSupportRequests(w, r, issue.ID, supportRequests, user.ID); err != nil {
 			return
 		}
 	}
@@ -278,6 +296,9 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		// The consumables used on the issue. Omitted (nil) means "leave as
 		// is"; an empty list clears them.
 		Consumables *[]data.ConsumableUse `json:"consumables"`
+		// The handovers of the issue to Telnet / Telefonica. Same nil-means-
+		// leave-as-is rule as the consumables.
+		SupportRequests *[]data.SupportRequestUse `json:"support_requests"`
 	}
 
 	if err := app.readJSON(w, r, &input); err != nil {
@@ -383,6 +404,15 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	var supportRequests []data.SupportRequestUse
+	if input.SupportRequests != nil {
+		supportRequests, err = app.validateSupportRequests(v, *input.SupportRequests)
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
 	if data.ValidateIssue(v, issue); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
@@ -401,6 +431,12 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 	if input.Consumables != nil {
 		if err := app.models.Consumables.SetForIssue(issue.ID, *input.Consumables, currentUser.ID); err != nil {
 			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
+	if input.SupportRequests != nil {
+		if err := app.setIssueSupportRequests(w, r, issue.ID, supportRequests, currentUser.ID); err != nil {
 			return
 		}
 	}
