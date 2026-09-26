@@ -356,6 +356,47 @@ tbody tr.row-clickable { cursor: pointer; }
 .bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
 .bar-count { font-size: 13px; font-weight: 600; min-width: 20px; text-align: right; }
 
+/* ── Team page ── */
+/* The role icon is an inline <svg> with a viewBox and no width/height. Without
+   a rule like this one it has no intrinsic size and flex stretches it to
+   hundreds of pixels — and to a *different* size per icon, so manager and
+   technician cards ended up different heights. Every other icon in the app is
+   sized the same way; see .nav-item svg, .btn svg and friends. */
+.team-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; min-width: 0; }
+/* min-width:0 lets the name shrink inside the flex row so it can ellipsis
+   instead of forcing the card wider than its grid track. */
+.team-card-id { min-width: 0; }
+.team-card-name {
+  font-size: 15px; font-weight: 600;
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+}
+.team-card-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-card-role {
+  font-size: 12px; color: var(--gray-400); margin-top: 2px;
+  display: flex; align-items: center; gap: 5px;
+}
+.team-role-icon { display: flex; align-items: center; flex-shrink: 0; }
+.team-role-icon svg { width: 13px; height: 13px; flex-shrink: 0; }
+.team-card-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.team-stat {
+  background: var(--gray-50); border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md); padding: 10px 12px; min-width: 0;
+}
+.team-stat-label { font-size: 11px; color: var(--gray-400); margin-bottom: 3px; }
+.team-stat-value { font-size: 18px; font-weight: 600; }
+.team-you {
+  background: var(--blue-light); color: var(--blue);
+  font-size: 10px; padding: 2px 7px; border-radius: 10px; flex-shrink: 0;
+}
+html.dark .team-you { background: var(--blue-light) !important; color: var(--blue) !important; }
+/* A deactivated account cannot log in, so it is dimmed and labelled rather
+   than presented like a working member of the team. */
+.team-card-inactive { opacity: 0.6; }
+.team-inactive-badge {
+  background: var(--gray-100); color: var(--gray-400);
+  font-size: 10px; padding: 2px 7px; border-radius: 10px; flex-shrink: 0;
+}
+
 /* ── Modal ── */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(28,28,26,0.45);
@@ -1108,6 +1149,7 @@ const T = {
     passwordPlaceholder: 'Min. 6 characters',
     techRole: 'Technician',
     managerRole: 'Manager',
+    inactive: 'Inactive',
     signInBtn: 'Sign in',
     createBtn: 'Create account',
     noAccount: "Don't have an account?",
@@ -1400,6 +1442,7 @@ const T = {
     passwordPlaceholder: 'Mín. 6 caracteres',
     techRole: 'Técnico',
     managerRole: 'Gestor',
+    inactive: 'Inativo',
     signInBtn: 'Iniciar sessão',
     createBtn: 'Criar conta',
     demoAccounts: 'Contas de demonstração',
@@ -3382,32 +3425,63 @@ function ConsumablesPage({ token }) {
 function TeamPage({ users, apt, dept, currentUser }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
-  const all = [...apt,...dept];
+
+  // One pass over the issues instead of re-filtering the whole list per user,
+  // which was O(users x issues) on every render.
+  const stats = useMemo(() => {
+    const byUser = new Map();
+    for (const i of [...apt, ...dept]) {
+      let s = byUser.get(i.loggedBy);
+      if (!s) { s = { total: 0, resolved: 0, minutes: 0 }; byUser.set(i.loggedBy, s); }
+      s.total++;
+      if (i.status === 'Ok') s.resolved++;
+      s.minutes += Number(i.time) || 0;
+    }
+    return byUser;
+  }, [apt, dept]);
+
+  if (!users.length) {
+    return (
+      <div className="table-card">
+        <div className="empty-state">
+          {Ic.users}
+          <p>No team members yet.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:16}}>
       {users.map(u=>{
-        const mine    = all.filter(i=>i.loggedBy===u.id);
-        const resolved = mine.filter(i=>i.status==='Ok').length;
-        const avgT    = mine.length ? (mine.reduce((s,i)=>s+Number(i.time),0)/mine.length).toFixed(1) : '—';
+        const s = stats.get(u.id) || { total: 0, resolved: 0, minutes: 0 };
+        // No issues means there is no average to report. Appending "m" to the
+        // em dash unconditionally rendered "—m".
+        const avg = s.total ? (s.minutes / s.total).toFixed(1) + 'm' : '—';
+        const isManager = u.role === 'manager';
+        const inactive = u.active === false;
+
         return (
-          <div className="mini-card" key={u.id}>
-            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
-              <Avatar name={u.name} idx={u.avatarIdx} size="lg"/>
-              <div>
-                <div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:7}}>
-                  {u.name}
-                  {u.id===currentUser.id && <span className="badge" style={{background:'var(--blue-light)',color:'var(--blue)',fontSize:10,padding:'2px 7px'}}>{t.you}</span>}
+          <div className={`mini-card${inactive ? ' team-card-inactive' : ''}`} key={u.id}>
+            <div className="team-card-head">
+              <Avatar name={u.name} idx={u.avatar_idx} size="lg"/>
+              <div className="team-card-id">
+                <div className="team-card-name">
+                  <span>{u.name}</span>
+                  {u.id===currentUser.id && <span className="team-you">{t.you}</span>}
+                  {inactive && <span className="team-inactive-badge">{t.inactive}</span>}
                 </div>
-                <div style={{fontSize:12,color:'var(--gray-400)',marginTop:2,display:'flex',alignItems:'center',gap:5,textTransform:'capitalize'}}>
-                  {u.role==='manager'?Ic.shield:Ic.tool} {u.role==='manager' ? t.managerRole : t.techRole}
+                <div className="team-card-role">
+                  <span className="team-role-icon">{isManager ? Ic.shield : Ic.tool}</span>
+                  <span>{isManager ? t.managerRole : t.techRole}</span>
                 </div>
               </div>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-              {[[t.issues,mine.length],[t.resolved,resolved],[t.avg,avgT+'m']].map(([l,v])=>(
-                <div key={l} style={{background:'var(--gray-50)',borderRadius:8,padding:'10px 12px',border:'1px solid var(--gray-200)'}}>
-                  <div style={{fontSize:11,color:'var(--gray-400)',marginBottom:3}}>{l}</div>
-                  <div style={{fontSize:18,fontWeight:600}}>{v}</div>
+            <div className="team-card-stats">
+              {[[t.issues, s.total], [t.resolved, s.resolved], [t.avg, avg]].map(([l,v])=>(
+                <div className="team-stat" key={l}>
+                  <div className="team-stat-label">{l}</div>
+                  <div className="team-stat-value">{v}</div>
                 </div>
               ))}
             </div>
