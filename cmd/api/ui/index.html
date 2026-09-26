@@ -207,6 +207,9 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
   display: flex; align-items: center; justify-content: center;
   font-size: 11px; font-weight: 600; flex-shrink: 0;
 }
+/* An uploaded photo occupies the same circle as the initials, cropped to fill
+   it. The neutral background shows through while the image decodes. */
+img.avatar-circle { object-fit: cover; background: var(--gray-100); }
 .av-0 { background: var(--blue-light); color: var(--blue); }
 .av-1 { background: var(--teal-light); color: var(--teal); }
 .av-2 { background: #EEF2FF; color: #3730A3; }
@@ -1544,10 +1547,21 @@ const Ic = {
   calendar: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="3" width="14" height="12" rx="1"/><path d="M1 7h14M5 1v4M11 1v4"/></svg>,
 };
 
-/* ── Avatar ── */
-function Avatar({ name, idx, size='md' }) {
+/* ── Avatar ──
+   Shows the member's uploaded photo when they have one, and their initials on
+   a colour derived from avatar_idx when they don't. Previously this only ever
+   drew initials, so every call site that wanted a photo had to hand-roll an
+   img-or-initials ternary — the logic now lives here once.
+   `src` and `style` are optional: call sites that only know a name and an index
+   (issue lists, the stats charts) keep the initials behaviour. */
+function Avatar({ name, idx, size='md', src, style }) {
   const dims = size==='sm' ? {width:24,height:24,fontSize:9} : size==='lg' ? {width:40,height:40,fontSize:15} : {};
-  return <div className={`avatar-circle av-${(idx??0)%5}`} style={dims}>{initials(name)}</div>;
+  const box  = { ...dims, ...style };
+  // alt="" because every current call site already shows the name beside the
+  // avatar, and naming it again would have screen readers announce it twice.
+  return src
+    ? <img className="avatar-circle" src={src} style={box} alt=""/>
+    : <div className={`avatar-circle av-${(idx??0)%5}`} style={box}>{initials(name)}</div>;
 }
 
 /* ── TypeBadge ── */
@@ -3464,7 +3478,7 @@ function TeamPage({ users, apt, dept, currentUser }) {
         return (
           <div className={`mini-card${inactive ? ' team-card-inactive' : ''}`} key={u.id}>
             <div className="team-card-head">
-              <Avatar name={u.name} idx={u.avatar_idx} size="lg"/>
+              <Avatar name={u.name} idx={u.avatar_idx} size="lg" src={u.avatar_data}/>
               <div className="team-card-id">
                 <div className="team-card-name">
                   <span>{u.name}</span>
@@ -3848,10 +3862,9 @@ function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate
       {/* Profile header */}
       <div className="mini-card" style={{display:'flex',alignItems:'center',gap:20,marginBottom:20,padding:'20px 24px'}}>
         <div style={{position:'relative',flexShrink:0}}>
-          {avatarData
-            ? <img src={avatarData} style={{width:64,height:64,borderRadius:'50%',objectFit:'cover',border:'2px solid var(--gray-200)'}}/>
-            : <Avatar name={currentUser.name} idx={currentUser.avatar_idx} size="lg" style={{width:64,height:64,fontSize:22}}/>
-          }
+          <Avatar name={currentUser.name} idx={currentUser.avatar_idx} size="lg"
+            src={avatarData || currentUser.avatar_data}
+            style={{width:64,height:64,fontSize:22,border:'2px solid var(--gray-200)'}}/>
           <button onClick={()=>fileRef.current.click()}
             style={{position:'absolute',bottom:0,right:0,width:22,height:22,borderRadius:'50%',
               background:'var(--blue)',border:'2px solid #fff',cursor:'pointer',
@@ -4023,10 +4036,7 @@ function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate
                 <tr key={u.id}>
                   <td>
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
-                      {u.avatar_data
-                        ? <img src={u.avatar_data} style={{width:28,height:28,borderRadius:'50%',objectFit:'cover'}}/>
-                        : <Avatar name={u.name} idx={u.avatar_idx} size="sm"/>
-                      }
+                      <Avatar name={u.name} idx={u.avatar_idx} size="sm" src={u.avatar_data}/>
                       <span style={{fontWeight:500}}>{u.name}</span>
                       {u.id===currentUser.id && <span className="badge" style={{background:'var(--blue-light)',color:'var(--blue)',fontSize:10,padding:'1px 6px'}}>you</span>}
                     </div>
@@ -4830,10 +4840,7 @@ function App() {
           </div>
           <div className="sidebar-footer">
             <div className="sidebar-user" style={{cursor:'pointer'}} onClick={()=>setPage('profile')}>
-              {me.avatar_data
-                ? <img src={me.avatar_data} style={{width:30,height:30,borderRadius:'50%',objectFit:'cover',flexShrink:0}}/>
-                : <Avatar name={me.name} idx={me.avatar_idx}/>
-              }
+              <Avatar name={me.name} idx={me.avatar_idx} src={me.avatar_data}/>
               <div>
                 <div className="sidebar-user-name">{me.name}</div>
                 <div className="sidebar-user-role">{me.role==='manager' ? t.managerRole : t.techRole}</div>

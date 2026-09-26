@@ -16,6 +16,11 @@ confirm:
 # ==================================================================================== #
 # DEVELOPMENT
 # ==================================================================================== #
+#
+# PDF reports are printed by a headless Chromium (Chrome, Chromium or Edge). The
+# binary is auto-detected on startup; override it with -report-chrome-bin=... or
+# the LIRA_CHROME_BIN environment variable if it is installed somewhere unusual.
+# Without one, the server still starts and only the PDF endpoint is disabled.
 
 ## run/api: run the cmd/api application
 .PHONY: run/api
