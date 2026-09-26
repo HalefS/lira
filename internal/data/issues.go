@@ -541,6 +541,11 @@ type DailyReport struct {
 	ByMode       map[string]int `json:"by_mode"`
 	ByStatus     map[string]int `json:"by_status"`
 	ByTechnician []TechStat     `json:"by_technician"`
+	// TypeColors maps an issue type's name to the hex color a manager picked
+	// for it, so anything drawing a type (the report page, the printed PDF)
+	// can colour it the same way instead of falling back to a hardcoded
+	// palette that drifts out of sync with the admin panel.
+	TypeColors map[string]string `json:"type_colors"`
 }
 
 type ReportSummary struct {
@@ -571,7 +576,30 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 		ByType:      make(map[string]int),
 		ByMode:      make(map[string]int),
 		ByStatus:    make(map[string]int),
+		TypeColors:  make(map[string]string),
 	}
+
+	// ── Issue type colors ──
+	// Fetched up front and unconditionally: a type that logged no issues today
+	// can still be drawn in the type breakdown of a previous day, and a type
+	// deleted from the catalog keeps whatever color it had.
+	colorRows, err := m.DB.QueryContext(ctx, `SELECT name, color FROM issue_types`)
+	if err != nil {
+		return nil, err
+	}
+	for colorRows.Next() {
+		var name, color string
+		if err := colorRows.Scan(&name, &color); err != nil {
+			colorRows.Close()
+			return nil, err
+		}
+		report.TypeColors[name] = color
+	}
+	if err := colorRows.Err(); err != nil {
+		colorRows.Close()
+		return nil, err
+	}
+	colorRows.Close()
 
 	// ── Summary ──
 	summaryQ := `
@@ -590,7 +618,7 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 		WHERE created_at::date = $1`
 
 	var s ReportSummary
-	err := m.DB.QueryRowContext(ctx, summaryQ, date).Scan(
+	err = m.DB.QueryRowContext(ctx, summaryQ, date).Scan(
 		&s.TotalIssues, &s.AptIssues, &s.DeptIssues,
 		&s.Resolved, &s.Pending,
 		&s.AvgMinutes, &s.TotalMinutes, &s.FastestMinutes, &s.SlowestMinutes, &s.FalsePositives,

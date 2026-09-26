@@ -27,11 +27,11 @@ func (app *application) systemStatusHandler(w http.ResponseWriter, r *http.Reque
 	poolStats := app.models.Users.DB.Stats()
 
 	database := envelope{
-		"reachable":           dbErr == nil,
-		"latency_ms":          round1ms(dbLatencyMs),
-		"open_connections":    poolStats.OpenConnections,
-		"in_use":              poolStats.InUse,
-		"idle":                poolStats.Idle,
+		"reachable":            dbErr == nil,
+		"latency_ms":           round1ms(dbLatencyMs),
+		"open_connections":     poolStats.OpenConnections,
+		"in_use":               poolStats.InUse,
+		"idle":                 poolStats.Idle,
 		"max_open_connections": poolStats.MaxOpenConnections,
 	}
 	if dbErr != nil {

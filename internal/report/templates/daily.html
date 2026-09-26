@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>LIRA Daily Report — {{.Date}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+/*
+  Print stylesheet for the LIRA daily report.
+
+  Page geometry is declared with @page and the browser is invoked with
+  --no-pdf-header-footer, so this document owns its own margins.
+
+  The margins are real, not zero-with-padding: a repeated <thead> is placed at
+  the top of the page's *content box*, so with a zero margin it would land at
+  y=0 underneath the fixed header band and be invisible. Declaring the inset
+  here puts both the first page and every continuation page in the same place.
+
+  The two bands are position:fixed, which Chromium re-paints on every printed
+  page — that is what gives every page a header and footer, not just the first.
+  Being page-anchored, they ignore @page margins and still run full-bleed.
+*/
+@page {
+  size: A4;
+  margin: 26mm 12mm 16mm;
+}
+
+:root {
+  --blue:    #1769AA;
+  --blue-lt: #E8F2FC;
+  --teal:    #1D9E75;
+  --teal-lt: #E1F5EE;
+  --amber:   #D88A18;
+  --amber-lt:#FFF4DF;
+  --green:   #2E8B57;
+  --green-lt:#EAF6EE;
+  --gray-50: #FAFAF8;
+  --gray-100:#F5F4F0;
+  --gray-200:#E4E5E7;
+  --gray-300:#D2D4D7;
+  --gray-400:#7A8490;
+  --gray-600:#4B5563;
+  --gray-900:#17202A;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 9pt;
+  line-height: 1.45;
+  color: var(--gray-900);
+  background: #fff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── Full-bleed bands, repeated on every page ─────────────────────────── */
+
+/*
+  The bands are page-anchored, but their offsets are relative to the *content
+  box* — which starts 26mm in, because that is the @page margin. The negative
+  offsets pull each band back out into the margin so it runs to the paper edge
+  while the text inside stays aligned to the same 12mm inset as the body.
+  These four values must track the @page margin above.
+*/
+.band-top {
+  position: fixed; top: -26mm; left: -12mm; right: -12mm; height: 24mm;
+  background: var(--blue);
+  display: flex; align-items: center;
+  padding: 0 12mm;
+  z-index: 2;
+}
+.band-bottom {
+  position: fixed; bottom: -16mm; left: -12mm; right: -12mm; height: 12mm;
+  background: var(--gray-50);
+  border-top: 0.3mm solid var(--gray-200);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 12mm;
+  font-size: 7.5pt; color: var(--gray-400);
+  z-index: 2;
+}
+
+.logo-mark {
+  width: 11mm; height: 11mm; border-radius: 1.6mm;
+  background: #fff; color: var(--blue);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 12pt; letter-spacing: -0.3pt;
+  flex-shrink: 0;
+}
+.band-top .title { font-size: 15pt; font-weight: 700; color: #fff; line-height: 1.1; }
+.band-top .subtitle { font-size: 8pt; color: rgba(255,255,255,0.78); }
+.band-top .right { text-align: right; }
+.band-top .right .date { font-size: 11pt; font-weight: 600; color: #fff; }
+.band-top .right .gen { font-size: 7.5pt; color: rgba(255,255,255,0.78); }
+
+/* The printable inset is @page's margin, so the sheet needs no padding of its
+   own — adding any would double it up on the first page. */
+.sheet { padding: 0; }
+
+/* ── Sections ─────────────────────────────────────────────────────────── */
+
+/*
+  Sections are deliberately NOT break-inside:avoid. Two of them wrap a table of
+  arbitrary length, and an unbreakable box taller than the page makes Chromium
+  split rows mid-cell and drop the repeated <thead> on the continuation pages.
+  Only the blocks that are always short enough to fit are kept together.
+*/
+.section { margin-bottom: 7mm; }
+.section > h2 {
+  font-size: 10.5pt; font-weight: 700; color: var(--gray-900);
+  padding-bottom: 1.6mm; margin-bottom: 3.5mm;
+  border-bottom: 0.4mm solid var(--gray-200);
+  display: flex; align-items: baseline; gap: 2.5mm;
+  break-after: avoid;   /* never strand a heading at the foot of a page */
+}
+.section > h2 .count {
+  font-size: 8pt; font-weight: 400; color: var(--gray-400);
+}
+
+/* ── Summary cards: a real 3-column grid, so every card lines up ───────── */
+
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; break-inside: avoid; }
+.card {
+  border: 0.25mm solid var(--gray-200);
+  border-left: 1.1mm solid var(--accent, var(--blue));
+  border-radius: 1.4mm;
+  padding: 2.6mm 3mm;
+  break-inside: avoid;
+}
+.card .label {
+  font-size: 7pt; font-weight: 600; letter-spacing: 0.35pt;
+  text-transform: uppercase; color: var(--gray-400);
+}
+.card .value {
+  font-size: 15pt; font-weight: 700; color: var(--accent);
+  line-height: 1.15; margin: 0.8mm 0 0.4mm;
+}
+.card .sub { font-size: 7.5pt; color: var(--gray-400); }
+
+/* ── The two breakdowns share one grid, so their headings and first rows
+      are on the same baselines regardless of how many rows each has ────── */
+
+.breakdowns { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; align-items: start; }
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 34mm 1fr 7mm;
+  align-items: center;
+  gap: 2.5mm;
+  padding: 0.9mm 0;
+}
+.bar-label {
+  display: flex; align-items: center; gap: 1.8mm;
+  font-size: 8pt; color: var(--gray-600);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.swatch { width: 2.6mm; height: 2.6mm; border-radius: 0.7mm; flex-shrink: 0; }
+.avatar-circle {
+  width: 5mm; height: 5mm; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 6pt; font-weight: 600; flex-shrink: 0;
+}
+.bar-track { height: 2.2mm; background: var(--gray-100); border-radius: 1.1mm; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 1.1mm; }
+.bar-count {
+  font-family: 'DM Mono', ui-monospace, Consolas, monospace;
+  font-size: 8pt; text-align: right; color: var(--gray-600);
+}
+.bar-more { font-size: 7.5pt; color: var(--gray-400); padding-top: 1.2mm; }
+
+/* ── Issue tables ─────────────────────────────────────────────────────── */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;   /* honour the colgroup so columns never drift */
+}
+thead { display: table-header-group; }  /* repeat the header on every page */
+tr    { break-inside: avoid; }          /* never split a row across pages */
+
+th {
+  background: var(--blue); color: #fff;
+  font-size: 7pt; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.3pt;
+  text-align: left; padding: 1.8mm 2mm;
+}
+th:first-child { border-top-left-radius: 1.2mm; }
+th:last-child  { border-top-right-radius: 1.2mm; }
+
+td {
+  font-size: 8pt; padding: 1.8mm 2mm;
+  border-bottom: 0.25mm solid var(--gray-200);
+  vertical-align: top;
+  overflow-wrap: break-word; word-break: break-word;
+}
+tbody tr:nth-child(even) td { background: var(--gray-50); }
+
+/* A false alarm, marked exactly as the app marks it: a warm row tint with an
+   amber rule down the leading edge. The `tbody tr` prefix is required — the
+   zebra striping above is `tbody tr:nth-child(even) td`, which is equally
+   specific, so without it the tint would lose on even-numbered rows. */
+tbody tr.fp td { background: var(--amber-lt); }
+tbody tr.fp td:first-child { box-shadow: inset 0.8mm 0 0 var(--amber); }
+
+.cell-loc {
+  font-family: 'DM Mono', ui-monospace, Consolas, monospace;
+  font-weight: 500; color: var(--gray-900);
+}
+.cell-time {
+  font-family: 'DM Mono', ui-monospace, Consolas, monospace;
+  color: var(--gray-600); white-space: nowrap;
+}
+.cell-tech { display: flex; align-items: center; gap: 1.8mm; }
+.cell-tech span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cell-muted { color: var(--gray-600); }
+
+/* Type pill, tinted from the type's own color. */
+.pill {
+  display: inline-block; padding: 0.5mm 1.8mm; border-radius: 6mm;
+  font-size: 7pt; font-weight: 600; white-space: nowrap;
+}
+.badge-ok      { background: var(--green-lt); color: var(--green); }
+.badge-pending { background: var(--amber-lt); color: var(--amber); }
+
+.fp-badge {
+  display: inline-block; margin-top: 1.2mm;
+  padding: 0.4mm 1.6mm; border-radius: 6mm;
+  border: 0.2mm solid var(--amber);
+  font-size: 6.5pt; font-weight: 600; color: var(--amber);
+  white-space: nowrap;
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────── */
+
+.empty {
+  border: 0.3mm dashed var(--gray-300); border-radius: 1.6mm;
+  padding: 12mm; text-align: center; color: var(--gray-400); font-size: 9pt;
+}
+</style>
+</head>
+<body>
+
+<div class="band-top">
+  <div class="logo-mark">L</div>
+  <div style="margin-left:3.5mm">
+    <div class="title">Daily Report</div>
+    <div class="subtitle">LIRA — Llana IT Reporting &amp; Alerts</div>
+  </div>
+  <div class="right" style="margin-left:auto">
+    <div class="date">{{.DateLong}}</div>
+    <div class="gen">Generated {{.GeneratedAt}}</div>
+  </div>
+</div>
+
+<div class="band-bottom">
+  <span>LIRA — Llana IT Reporting &amp; Alerts</span>
+  <span>Report for {{.Date}}</span>
+</div>
+
+<div class="sheet">
+
+  {{if .Empty}}
+    <div class="empty">No issues were logged on {{.DateLong}}.</div>
+  {{else}}
+
+  <div class="section">
+    <h2>Summary</h2>
+    <div class="cards">
+      {{range .Summary}}
+      <div class="card" style="--accent:{{.Color}}">
+        <div class="label">{{.Label}}</div>
+        <div class="value">{{.Value}}</div>
+        <div class="sub">{{.Sub}}</div>
+      </div>
+      {{end}}
+    </div>
+  </div>
+
+  <div class="section breakdowns">
+    <div>
+      <h2>Issues by type</h2>
+      {{if .Types}}
+        {{range .Types}}
+        <div class="bar-row">
+          <div class="bar-label"><span class="swatch" style="background:{{.Color}}"></span>{{.Name}}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{.Pct}}%;background:{{.Color}}"></div></div>
+          <div class="bar-count">{{.Count}}</div>
+        </div>
+        {{end}}
+      {{else}}
+        <div class="bar-more">No issues logged.</div>
+      {{end}}
+    </div>
+    <div>
+      <h2>By technician</h2>
+      {{if .Techs}}
+        {{range .Techs}}
+          {{if .IsOverflow}}
+          <div class="bar-more">+{{.Overflow}} more with no issues logged</div>
+          {{else}}
+          <div class="bar-row">
+            <div class="bar-label">
+              <span class="avatar-circle" style="background:{{.AvatarBG}};color:{{.AvatarFG}}">{{.Initials}}</span>
+              {{.Name}}
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width:{{.Pct}}%;background:var(--blue)"></div></div>
+            <div class="bar-count">{{.Count}}</div>
+          </div>
+          {{end}}
+        {{end}}
+      {{else}}
+        <div class="bar-more">No issues logged.</div>
+      {{end}}
+    </div>
+  </div>
+
+  {{if .AptIssues}}
+  <div class="section">
+    <h2>Apartment issues <span class="count">({{len .AptIssues}})</span></h2>
+    <table>
+      <colgroup>
+        <col style="width:7%" /><col style="width:10%" /><col style="width:25%" />
+        <col style="width:22%" /><col style="width:8%" /><col style="width:9%" />
+        <col style="width:19%" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Apt.</th><th>Type</th><th>Problem</th><th>Resolution</th>
+          <th>Time</th><th>Status</th><th>Technician</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .AptIssues}}
+        <tr{{if .FalsePositive}} class="fp"{{end}}>
+          <td class="cell-loc">{{.Location}}</td>
+          <td><span class="pill" style="background:{{.TypeColor}}1F;color:{{.TypeColor}}">{{.Type}}</span></td>
+          <td>
+            {{.Problem}}
+            {{if .FalsePositive}}<div><span class="fp-badge">FALSE POSITIVE</span></div>{{end}}
+          </td>
+          <td class="cell-muted">{{.Resolution}}</td>
+          <td class="cell-time">{{.Time}}</td>
+          <td><span class="pill badge-{{.StatusClass}}">{{.Status}}</span></td>
+          <td>
+            <div class="cell-tech">
+              <span class="avatar-circle" style="background:{{.AvatarBG}};color:{{.AvatarFG}}">{{.Initials}}</span>
+              <span>{{.Tech}}</span>
+            </div>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+
+  {{if .DeptIssues}}
+  <div class="section">
+    <h2>Department issues <span class="count">({{len .DeptIssues}})</span></h2>
+    <table>
+      <colgroup>
+        <col style="width:11%" /><col style="width:10%" /><col style="width:24%" />
+        <col style="width:21%" /><col style="width:8%" /><col style="width:9%" />
+        <col style="width:17%" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Dept.</th><th>Type</th><th>Problem</th><th>Resolution</th>
+          <th>Time</th><th>Status</th><th>Technician</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .DeptIssues}}
+        <tr{{if .FalsePositive}} class="fp"{{end}}>
+          <td class="cell-loc">{{.Location}}</td>
+          <td><span class="pill" style="background:{{.TypeColor}}1F;color:{{.TypeColor}}">{{.Type}}</span></td>
+          <td>
+            {{.Problem}}
+            {{if .FalsePositive}}<div><span class="fp-badge">FALSE POSITIVE</span></div>{{end}}
+          </td>
+          <td class="cell-muted">{{.Resolution}}</td>
+          <td class="cell-time">{{.Time}}</td>
+          <td><span class="pill badge-{{.StatusClass}}">{{.Status}}</span></td>
+          <td>
+            <div class="cell-tech">
+              <span class="avatar-circle" style="background:{{.AvatarBG}};color:{{.AvatarFG}}">{{.Initials}}</span>
+              <span>{{.Tech}}</span>
+            </div>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+
+  {{end}}
+</div>
+
+</body>
+</html>

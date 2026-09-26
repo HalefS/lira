@@ -108,6 +108,10 @@ func (app *application) routes() http.Handler {
 
 	// Reports (protected)
 	router.HandlerFunc(http.MethodGet, "/v1/reports/daily", app.requireAuth(app.dailyReportHandler))
+	// The printable version of the same report. Named alongside the JSON
+	// endpoint rather than nested under it, so the ".pdf" suffix stays part of
+	// the path instead of colliding with the wildcard-free route above.
+	router.HandlerFunc(http.MethodGet, "/v1/reports/daily.pdf", app.requireAuth(app.dailyReportPDFHandler))
 
 	return app.recoverPanic(app.enableCORS(app.rateLimit(app.authenticate(router))))
 }
