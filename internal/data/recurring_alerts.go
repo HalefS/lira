@@ -174,7 +174,13 @@ func (m RecurringAlertModel) List(status string) ([]*RecurringAlert, error) {
 		if err != nil {
 			return nil, err
 		}
-		var issues []*RecurringGroupIssue
+		// Initialised rather than left nil on purpose: a nil slice marshals to
+		// JSON null, and the Alerts page reads issues.length, so a single
+		// alert whose issues have all been deleted would take the whole page
+		// down. An alert can outlive its issues — a TV fault at "Back Office"
+		// stays on the list after those issues are removed — so "no issues
+		// yet" is a normal state, not an empty case to leave as null.
+		issues := []*RecurringGroupIssue{}
 		for irows.Next() {
 			var gi RecurringGroupIssue
 			if err := irows.Scan(&gi.ID, &gi.CreatedAt, &gi.Problem, &gi.Resolution, &gi.Status, &gi.LoggedByName); err != nil {
