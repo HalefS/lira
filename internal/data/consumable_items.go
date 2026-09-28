@@ -19,7 +19,39 @@ type ConsumableItem struct {
 	CreatedAt time.Time `json:"created_at"`
 	Name      string    `json:"name"`
 	Icon      string    `json:"icon"`
-	CreatedBy *int64    `json:"created_by,omitempty"`
+	// Stock is how many the hotel has. It is maintained by hand and by the
+	// app as consumables are recorded against issues, and is allowed to go
+	// negative so that using more than was counted stays visible instead of
+	// being silently clamped. ReorderLevel is the point at which the item is
+	// flagged as running low; it warns, it does not block anything.
+	Stock        int    `json:"stock"`
+	ReorderLevel int    `json:"reorder_level"`
+	LowStock     bool   `json:"low_stock"`
+	CreatedBy    *int64 `json:"created_by,omitempty"`
+}
+
+// Reasons a stock movement can be recorded. The first two are deliberate
+// changes by a person; the last two are the app following a consumable being
+// recorded on an issue, or that recording being taken back off.
+const (
+	StockReasonAdded   = "added"
+	StockReasonSet     = "set"
+	StockReasonUsed    = "used"
+	StockReasonRemoved = "removed"
+)
+
+// StockMovement is one entry in an item's inventory history.
+type StockMovement struct {
+	ID           int64     `json:"id"`
+	CreatedAt    time.Time `json:"created_at"`
+	ItemID       *int64    `json:"item_id"`
+	Item         string    `json:"item"`
+	Change       int       `json:"change"`
+	BalanceAfter int       `json:"balance_after"`
+	Reason       string    `json:"reason"`
+	Note         string    `json:"note"`
+	IssueID      *int64    `json:"issue_id"`
+	LoggedByName string    `json:"logged_by_name"`
 }
 
 // DefaultConsumableIcon is used when a consumable is created without an icon.
@@ -87,9 +119,31 @@ func (m ConsumableItemModel) Insert(ci *ConsumableItem) error {
 	return nil
 }
 
+// consumableItemColumns is shared by every read of a catalog item so the scan
+// order below can never drift from the select list.
+//
+// low_stock is derived rather than stored: a stored flag could disagree with
+// the two numbers it comes from. A reorder level of zero means "this item is
+// ordered on demand", so it is never flagged — without that, a brand new item
+// at stock 0 with the default level of 0 would immediately read as low.
+const consumableItemColumns = `
+	id, created_at, name, icon, stock, reorder_level,
+	reorder_level > 0 AND stock <= reorder_level, created_by`
+
+func scanConsumableItem(scan func(dest ...any) error) (*ConsumableItem, error) {
+	var ci ConsumableItem
+	var createdBy sql.NullInt64
+	if err := scan(&ci.ID, &ci.CreatedAt, &ci.Name, &ci.Icon, &ci.Stock, &ci.ReorderLevel, &ci.LowStock, &createdBy); err != nil {
+		return nil, err
+	}
+	if createdBy.Valid {
+		ci.CreatedBy = &createdBy.Int64
+	}
+	return &ci, nil
+}
+
 func (m ConsumableItemModel) GetAll() ([]*ConsumableItem, error) {
-	query := `
-		SELECT id, created_at, name, icon, created_by
+	query := `SELECT ` + consumableItemColumns + `
 		FROM consumable_items
 		ORDER BY name ASC`
 
@@ -104,15 +158,11 @@ func (m ConsumableItemModel) GetAll() ([]*ConsumableItem, error) {
 
 	var items []*ConsumableItem
 	for rows.Next() {
-		var ci ConsumableItem
-		var createdBy sql.NullInt64
-		if err := rows.Scan(&ci.ID, &ci.CreatedAt, &ci.Name, &ci.Icon, &createdBy); err != nil {
+		ci, err := scanConsumableItem(rows.Scan)
+		if err != nil {
 			return nil, err
 		}
-		if createdBy.Valid {
-			ci.CreatedBy = &createdBy.Int64
-		}
-		items = append(items, &ci)
+		items = append(items, ci)
 	}
 	return items, rows.Err()
 }
@@ -140,26 +190,147 @@ func (m ConsumableItemModel) UpdateIcon(id int64, icon string) (*ConsumableItem,
 		UPDATE consumable_items
 		SET icon = $1
 		WHERE id = $2
-		RETURNING id, created_at, name, icon, created_by`
+		RETURNING ` + consumableItemColumns
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	var ci ConsumableItem
-	var createdBy sql.NullInt64
-	err := m.DB.QueryRowContext(ctx, query, icon, id).Scan(
-		&ci.ID, &ci.CreatedAt, &ci.Name, &ci.Icon, &createdBy,
-	)
+	ci, err := scanConsumableItem(m.DB.QueryRowContext(ctx, query, icon, id).Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRecordNotFound
 		}
 		return nil, err
 	}
-	if createdBy.Valid {
-		ci.CreatedBy = &createdBy.Int64
+	return ci, nil
+}
+
+// UpdateReorderLevel sets the count at or below which an item is flagged as
+// running low. Zero means "never flag it", which is the right setting for
+// things that are simply ordered on demand.
+func (m ConsumableItemModel) UpdateReorderLevel(id int64, level int) (*ConsumableItem, error) {
+	query := `
+		UPDATE consumable_items
+		SET reorder_level = $1
+		WHERE id = $2
+		RETURNING ` + consumableItemColumns
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	ci, err := scanConsumableItem(m.DB.QueryRowContext(ctx, query, level, id).Scan)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrRecordNotFound
+		}
+		return nil, err
+	}
+	return ci, nil
+}
+
+// AdjustStock changes an item's stock by hand and records the movement.
+// change is signed and relative; setTo is an absolute counted figure. Passing
+// both, or a change of zero (which the movements table rejects, since a
+// movement that moves nothing is a mistake rather than a movement), is an
+// error.
+func (m ConsumableItemModel) AdjustStock(id int64, change *int, setTo *int, note string, loggedBy *int64) (*ConsumableItem, error) {
+	if (change == nil) == (setTo == nil) {
+		return nil, errors.New("provide exactly one of change or set_to")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	tx, err := m.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var current int
+	if err := tx.QueryRowContext(ctx, `SELECT stock FROM consumable_items WHERE id = $1 FOR UPDATE`, id).Scan(&current); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrRecordNotFound
+		}
+		return nil, err
+	}
+
+	delta := 0
+	reason := StockReasonAdded
+	switch {
+	case setTo != nil:
+		delta = *setTo - current
+		reason = StockReasonSet
+	default:
+		delta = *change
+	}
+	if delta == 0 {
+		return nil, errors.New("this would not change the stock")
+	}
+
+	var ci ConsumableItem
+	if err := tx.QueryRowContext(ctx, `
+		UPDATE consumable_items
+		SET stock = stock + $1
+		WHERE id = $2
+		RETURNING `+consumableItemColumns, delta, id).
+		Scan(&ci.ID, &ci.CreatedAt, &ci.Name, &ci.Icon, &ci.Stock, &ci.ReorderLevel, &ci.LowStock, &ci.CreatedBy); err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO consumable_stock_movements
+			(item_id, item, change, balance_after, reason, note, logged_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		ci.ID, ci.Name, delta, ci.Stock, reason, note, loggedBy,
+	); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	return &ci, nil
+}
+
+// StockMovements returns an item's inventory history, newest first. Passing 0
+// as itemID returns the movements for every item.
+func (m ConsumableItemModel) StockMovements(itemID int64, limit int) ([]*StockMovement, error) {
+	query := `
+		SELECT s.id, s.created_at, s.item_id, s.item, s.change, s.balance_after,
+		       s.reason, s.note, s.issue_id, COALESCE(u.name, '')
+		FROM consumable_stock_movements s
+		LEFT JOIN users u ON u.id = s.logged_by
+		WHERE ($1 = 0 OR s.item_id = $1)
+		ORDER BY s.created_at DESC, s.id DESC
+		LIMIT $2`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rows, err := m.DB.QueryContext(ctx, query, itemID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []*StockMovement{}
+	for rows.Next() {
+		var s StockMovement
+		var itemID, issueID sql.NullInt64
+		if err := rows.Scan(&s.ID, &s.CreatedAt, &itemID, &s.Item, &s.Change,
+			&s.BalanceAfter, &s.Reason, &s.Note, &issueID, &s.LoggedByName); err != nil {
+			return nil, err
+		}
+		if itemID.Valid {
+			s.ItemID = &itemID.Int64
+		}
+		if issueID.Valid {
+			s.IssueID = &issueID.Int64
+		}
+		out = append(out, &s)
+	}
+	return out, rows.Err()
 }
 
 // Delete removes an item from the catalog. Usage that was already recorded

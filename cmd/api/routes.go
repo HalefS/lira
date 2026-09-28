@@ -76,6 +76,10 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodGet, "/v1/consumable-items", app.requireAuth(app.listConsumableItemsHandler))
 	router.HandlerFunc(http.MethodPost, "/v1/consumable-items", app.requireAuth(app.requireManager(app.createConsumableItemHandler)))
 	router.HandlerFunc(http.MethodPatch, "/v1/consumable-items/:id/icon", app.requireAuth(app.requireManager(app.updateConsumableItemIconHandler)))
+	// Inventory — managers change the counts, everyone can read the history
+	router.HandlerFunc(http.MethodPatch, "/v1/consumable-items/:id/stock", app.requireAuth(app.requireManager(app.adjustConsumableItemStockHandler)))
+	router.HandlerFunc(http.MethodPatch, "/v1/consumable-items/:id/reorder-level", app.requireAuth(app.requireManager(app.updateConsumableItemReorderLevelHandler)))
+	router.HandlerFunc(http.MethodGet, "/v1/consumable-stock-movements", app.requireAuth(app.listStockMovementsHandler))
 	router.HandlerFunc(http.MethodDelete, "/v1/consumable-items/:id", app.requireAuth(app.requireManager(app.deleteConsumableItemHandler)))
 
 	// Third-party support — how long Telnet / Telefonica took on each handover,

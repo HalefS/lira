@@ -297,13 +297,31 @@ func (m IssueModel) Update(issue *Issue) error {
 	return nil
 }
 
-func (m IssueModel) Delete(id int64) error {
-	query := `DELETE FROM issues WHERE id = $1`
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+// Delete removes an issue. The consumables it recorded are deleted with it by
+// the foreign key, so their stock is handed back first — in the same
+// transaction, so the count can never be credited for an issue that still
+// exists, or left short for one that is already gone.
+func (m IssueModel) Delete(id int64, deletedBy int64) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := m.DB.ExecContext(ctx, query, id)
+	tx, err := m.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	used, err := quantitiesByItem(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	for itemID, qty := range used {
+		if err := applyStock(ctx, tx, itemID, qty, StockReasonRemoved, id, deletedBy); err != nil {
+			return err
+		}
+	}
+
+	result, err := tx.ExecContext(ctx, `DELETE FROM issues WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}
@@ -314,7 +332,7 @@ func (m IssueModel) Delete(id int64) error {
 	if rowsAffected == 0 {
 		return ErrRecordNotFound
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (m IssueModel) GetStats(date string) (*Stats, error) {
@@ -368,13 +386,18 @@ func (m IssueModel) GetStats(date string) (*Stats, error) {
 		stats.ByType[t] = c
 	}
 
-	// By technician
+	// By technician. Managers are included too when they have logged something
+	// on this date, because in practice managers do log their own issues and
+	// their workload is just as real as anyone else's. Technicians are listed
+	// either way, including on a day they logged nothing, so the chart still
+	// shows who is on shift. This is why the role test is in HAVING rather than
+	// WHERE: it needs the per-user count to decide.
 	techQuery := `
 		SELECT u.id, u.name, u.avatar_idx, COUNT(i.id) AS cnt
 		FROM users u
 		LEFT JOIN issues i ON i.logged_by = u.id AND i.created_at::date = $1
-		WHERE u.role = 'technician'
-		GROUP BY u.id, u.name, u.avatar_idx
+		GROUP BY u.id, u.name, u.avatar_idx, u.role
+		HAVING u.role = 'technician' OR COUNT(i.id) > 0
 		ORDER BY cnt DESC`
 
 	techRows, err := m.DB.QueryContext(ctx, techQuery, date)
@@ -648,6 +671,11 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 	}
 
 	// ── By technician ──
+	// "Technician" here means anyone who does technical work, not the role:
+	// a manager who logs an issue has done technical work and belongs in this
+	// breakdown, which is also how the issue tables above them already list
+	// them. Same inclusion rule as the Dashboard workload chart, so the two
+	// screens agree.
 	techQ := `
 		SELECT u.id, u.name, u.avatar_idx,
 		       COUNT(i.id)                                        AS total,
@@ -655,8 +683,8 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 		       COALESCE(AVG(i.time_minutes), 0)                   AS avg_min
 		FROM users u
 		LEFT JOIN issues i ON i.logged_by = u.id AND i.created_at::date = $1
-		WHERE u.role = 'technician'
-		GROUP BY u.id, u.name, u.avatar_idx
+		GROUP BY u.id, u.name, u.avatar_idx, u.role
+		HAVING u.role = 'technician' OR COUNT(i.id) > 0
 		ORDER BY total DESC`
 
 	techRows, err := m.DB.QueryContext(ctx, techQ, date)

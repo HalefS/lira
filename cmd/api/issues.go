@@ -476,7 +476,9 @@ func (app *application) deleteIssueHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := app.models.Issues.Delete(id); err != nil {
+	// The user id is passed through so the stock movements created by putting
+	// this issue's consumables back are attributed to whoever deleted it.
+	if err := app.models.Issues.Delete(id, currentUser.ID); err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
 			app.notFoundResponse(w, r)

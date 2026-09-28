@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/HalefS/lira/internal/validator"
@@ -76,8 +77,15 @@ type ConsumableModel struct {
 // selected items are inserted (or have their quantity updated), and items that
 // were previously recorded but are no longer selected are removed.
 //
+// It also keeps the inventory straight. Taking a consumable off an issue draws
+// it down from the item's stock; adding one, or taking it off again, puts it
+// back. Each change writes a movement so a count can be explained later. All
+// of it happens in the single transaction below, so the stock can never be
+// left out of step with the usage rows.
+//
 // Rows whose catalog entry has since been deleted (item_id IS NULL) are
-// historical records the edit form can't show, so they are left untouched.
+// historical records the edit form can't show, so they are left untouched, and
+// they never touch stock — the item they belonged to no longer exists.
 // Existing rows keep their original logged_by and created_at; only new rows are
 // attributed to loggedBy.
 func (m ConsumableModel) SetForIssue(issueID int64, uses []ConsumableUse, loggedBy int64) error {
@@ -95,6 +103,24 @@ func (m ConsumableModel) SetForIssue(issueID int64, uses []ConsumableUse, logged
 	keep := make([]int64, 0, len(uses))
 	for _, u := range uses {
 		keep = append(keep, u.ItemID)
+	}
+
+	// What this issue consumed before the edit, so the differences can be
+	// turned into stock movements. Rows whose item left the catalog are
+	// skipped: there is no stock left to move.
+	before, err := quantitiesByItem(ctx, tx, issueID)
+	if err != nil {
+		return err
+	}
+
+	// Hand the stock back for everything being removed, recording the movement
+	// before the rows disappear.
+	for itemID, qty := range before {
+		if !containsID(keep, itemID) {
+			if err := applyStock(ctx, tx, itemID, qty, StockReasonRemoved, issueID, loggedBy); err != nil {
+				return err
+			}
+		}
 	}
 
 	_, err = tx.ExecContext(ctx, `
@@ -127,9 +153,84 @@ func (m ConsumableModel) SetForIssue(issueID int64, uses []ConsumableUse, logged
 			// The catalog entry doesn't exist (e.g. deleted since the form loaded).
 			return ErrRecordNotFound
 		}
+
+		// Draw down only the difference. Re-saving an issue without touching
+		// the quantity must not take the stock down a second time.
+		if delta := before[u.ItemID] - u.Quantity; delta != 0 {
+			// delta is positive when fewer are now used than before (stock back
+			// in), negative when more are used (stock drawn down).
+			if err := applyStock(ctx, tx, u.ItemID, delta, StockReasonUsed, issueID, loggedBy); err != nil {
+				return err
+			}
+		}
 	}
 
 	return tx.Commit()
+}
+
+// quantitiesByItem returns the consumable quantities currently recorded against
+// an issue, keyed by catalog item. Rows whose item has been deleted from the
+// catalog are left out, because there is no stock left to move for them.
+func quantitiesByItem(ctx context.Context, tx *sql.Tx, issueID int64) (map[int64]int, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT item_id, quantity
+		FROM consumables
+		WHERE issue_id = $1 AND item_id IS NOT NULL`, issueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[int64]int)
+	for rows.Next() {
+		var itemID int64
+		var qty int
+		if err := rows.Scan(&itemID, &qty); err != nil {
+			return nil, err
+		}
+		out[itemID] = qty
+	}
+	return out, rows.Err()
+}
+
+// applyStock moves an item's stock by a signed amount and records the movement
+// that explains it. The row is locked while it is updated so two concurrent
+// edits cannot both read the same balance and lose one of the changes.
+//
+// A missing item is not an error here: it means the catalog entry was deleted
+// between the form loading and the save, and there is no stock to move.
+func applyStock(ctx context.Context, tx *sql.Tx, itemID int64, delta int, reason string, issueID int64, loggedBy int64) error {
+	row := tx.QueryRowContext(ctx, `
+		UPDATE consumable_items
+		SET stock = stock + $1
+		WHERE id = $2
+		RETURNING name, stock`, delta, itemID)
+
+	var name string
+	var balance int
+	if err := row.Scan(&name, &balance); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+
+	var issue interface{} = issueID
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO consumable_stock_movements
+			(item_id, item, change, balance_after, reason, issue_id, logged_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		itemID, name, delta, balance, reason, issue, loggedBy)
+	return err
+}
+
+func containsID(ids []int64, id int64) bool {
+	for _, v := range ids {
+		if v == id {
+			return true
+		}
+	}
+	return false
 }
 
 // loadIssueConsumables fills in Consumables on each of the given issues with a
