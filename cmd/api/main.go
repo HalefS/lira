@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/HalefS/lira/internal/data"
+	"github.com/HalefS/lira/internal/report"
 	_ "github.com/lib/pq"
 )
 
@@ -33,12 +35,22 @@ type config struct {
 	cors struct {
 		trustedOrigins []string
 	}
+	report struct {
+		// chromeBin optionally pins the Chromium-based browser used to print
+		// PDF reports. Empty means "discover it", which searches PATH and the
+		// usual install locations.
+		chromeBin string
+	}
 }
 
 type application struct {
-	config config
-	logger *slog.Logger
-	models data.Models
+	config  config
+	logger  *slog.Logger
+	models  data.Models
+	browser *report.Browser
+	// browserErr is why browser is nil, kept so the PDF endpoint can tell the
+	// user whether no browser is installed or the one they pointed at is wrong.
+	browserErr error
 }
 
 func main() {
@@ -61,6 +73,9 @@ func main() {
 		return nil
 	})
 
+	flag.StringVar(&cfg.report.chromeBin, "report-chrome-bin", os.Getenv("LIRA_CHROME_BIN"),
+		"Path to the Chromium-based browser used to print PDF reports (default: auto-detect)")
+
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -77,6 +92,25 @@ func main() {
 		config: cfg,
 		logger: logger,
 		models: data.NewModels(db),
+	}
+
+	// Resolved once here so a misconfigured path is reported at boot rather
+	// than on someone's first report download. Neither failure is fatal:
+	// everything except the PDF endpoint works without a browser, and taking
+	// the whole API down over a reporting feature would be worse.
+	switch browser, err := report.NewBrowser(cfg.report.chromeBin); {
+	case err == nil:
+		app.browser = browser
+		logger.Info("pdf report renderer ready", "browser", browser.Path())
+	case errors.Is(err, report.ErrNoBrowser):
+		app.browserErr = err
+		logger.Warn("no chromium-based browser found: pdf reports are disabled",
+			"hint", "install Chrome, Chromium or Edge, or set -report-chrome-bin / LIRA_CHROME_BIN")
+	default:
+		// An explicit -report-chrome-bin that does not resolve is an operator
+		// mistake, so it is logged as an error rather than a warning.
+		app.browserErr = err
+		logger.Error("invalid pdf report browser: pdf reports are disabled", "error", err)
 	}
 
 	if err := app.seedDefaultManager(); err != nil {

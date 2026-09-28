@@ -9,8 +9,6 @@
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -209,6 +207,9 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
   display: flex; align-items: center; justify-content: center;
   font-size: 11px; font-weight: 600; flex-shrink: 0;
 }
+/* An uploaded photo occupies the same circle as the initials, cropped to fill
+   it. The neutral background shows through while the image decodes. */
+img.avatar-circle { object-fit: cover; background: var(--gray-100); }
 .av-0 { background: var(--blue-light); color: var(--blue); }
 .av-1 { background: var(--teal-light); color: var(--teal); }
 .av-2 { background: #EEF2FF; color: #3730A3; }
@@ -357,6 +358,71 @@ tbody tr.row-clickable { cursor: pointer; }
 .bar-track { flex: 1; height: 6px; background: var(--gray-100); border-radius: 4px; overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
 .bar-count { font-size: 13px; font-weight: 600; min-width: 20px; text-align: right; }
+
+/* ── Team page ── */
+/* The role icon is an inline <svg> with a viewBox and no width/height. Without
+   a rule like this one it has no intrinsic size and flex stretches it to
+   hundreds of pixels — and to a *different* size per icon, so manager and
+   technician cards ended up different heights. Every other icon in the app is
+   sized the same way; see .nav-item svg, .btn svg and friends. */
+.team-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; min-width: 0; }
+/* min-width:0 lets the name shrink inside the flex row so it can ellipsis
+   instead of forcing the card wider than its grid track. */
+.team-card-id { min-width: 0; }
+.team-card-name {
+  font-size: 15px; font-weight: 600;
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+}
+.team-card-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-card-role {
+  font-size: 12px; color: var(--gray-400); margin-top: 2px;
+  display: flex; align-items: center; gap: 5px;
+}
+.team-role-icon { display: flex; align-items: center; flex-shrink: 0; }
+.team-role-icon svg { width: 13px; height: 13px; flex-shrink: 0; }
+.team-card-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.team-stat {
+  background: var(--gray-50); border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md); padding: 10px 12px; min-width: 0;
+}
+.team-stat-label { font-size: 11px; color: var(--gray-400); margin-bottom: 3px; }
+.team-stat-value { font-size: 18px; font-weight: 600; }
+.team-you {
+  background: var(--blue-light); color: var(--blue);
+  font-size: 10px; padding: 2px 7px; border-radius: 10px; flex-shrink: 0;
+}
+html.dark .team-you { background: var(--blue-light) !important; color: var(--blue) !important; }
+/* A deactivated account cannot log in, so it is dimmed and labelled rather
+   than presented like a working member of the team. */
+.team-card-inactive { opacity: 0.6; }
+.team-inactive-badge {
+  background: var(--gray-100); color: var(--gray-400);
+  font-size: 10px; padding: 2px 7px; border-radius: 10px; flex-shrink: 0;
+}
+
+/* Switches the Team page between the member cards and the manager-only
+   management table. */
+.team-viewbar { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+.team-segmented {
+  display: inline-flex; gap: 2px;
+  background: var(--gray-100); border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md); padding: 3px;
+}
+.team-segmented button {
+  border: none; background: none; cursor: pointer;
+  padding: 6px 14px; border-radius: 6px;
+  font: 500 13px 'DM Sans', sans-serif; color: var(--gray-600);
+  display: flex; align-items: center; gap: 6px;
+}
+.team-segmented button:hover { color: var(--gray-900); }
+.team-segmented button.active {
+  background: #fff; color: var(--blue);
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+html.dark .team-segmented button.active { background: var(--gray-50); }
+/* Sized here rather than left to the flex default, which stretches an unsized
+   svg to hundreds of pixels. */
+.team-segmented button svg { width: 14px; height: 14px; flex-shrink: 0; }
 
 /* ── Modal ── */
 .modal-overlay {
@@ -1139,6 +1205,19 @@ const T = {
     passwordPlaceholder: 'Min. 6 characters',
     techRole: 'Technician',
     managerRole: 'Manager',
+    inactive: 'Inactive',
+    // Team page
+    name: 'Name',
+    role: 'Role',
+    actions: 'Actions',
+    activeStatus: 'Active',
+    deactivate: 'Deactivate',
+    reactivate: 'Reactivate',
+    members: 'Members',
+    manage: 'Manage',
+    teamMembers: 'Team members',
+    makeManager: 'Make manager',
+    makeTechnician: 'Make technician',
     signInBtn: 'Sign in',
     createBtn: 'Create account',
     noAccount: "Don't have an account?",
@@ -1456,6 +1535,19 @@ const T = {
     passwordPlaceholder: 'Mín. 6 caracteres',
     techRole: 'Técnico',
     managerRole: 'Gestor',
+    inactive: 'Inativo',
+    // Team page
+    name: 'Nome',
+    role: 'Função',
+    actions: 'Ações',
+    activeStatus: 'Ativo',
+    deactivate: 'Desativar',
+    reactivate: 'Reativar',
+    members: 'Membros',
+    manage: 'Gerir',
+    teamMembers: 'Membros da equipa',
+    makeManager: 'Tornar gestor',
+    makeTechnician: 'Tornar técnico',
     signInBtn: 'Iniciar sessão',
     createBtn: 'Criar conta',
     demoAccounts: 'Contas de demonstração',
@@ -1557,10 +1649,21 @@ const Ic = {
   calendar: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="3" width="14" height="12" rx="1"/><path d="M1 7h14M5 1v4M11 1v4"/></svg>,
 };
 
-/* ── Avatar ── */
-function Avatar({ name, idx, size='md' }) {
+/* ── Avatar ──
+   Shows the member's uploaded photo when they have one, and their initials on
+   a colour derived from avatar_idx when they don't. Previously this only ever
+   drew initials, so every call site that wanted a photo had to hand-roll an
+   img-or-initials ternary — the logic now lives here once.
+   `src` and `style` are optional: call sites that only know a name and an index
+   (issue lists, the stats charts) keep the initials behaviour. */
+function Avatar({ name, idx, size='md', src, style }) {
   const dims = size==='sm' ? {width:24,height:24,fontSize:9} : size==='lg' ? {width:40,height:40,fontSize:15} : {};
-  return <div className={`avatar-circle av-${(idx??0)%5}`} style={dims}>{initials(name)}</div>;
+  const box  = { ...dims, ...style };
+  // alt="" because every current call site already shows the name beside the
+  // avatar, and naming it again would have screen readers announce it twice.
+  return src
+    ? <img className="avatar-circle" src={src} style={box} alt=""/>
+    : <div className={`avatar-circle av-${(idx??0)%5}`} style={box}>{initials(name)}</div>;
 }
 
 /* ── TypeBadge ── */
@@ -3720,35 +3823,172 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate }) {
     </div>
   );
 }
+
 function TeamPage({ users, apt, dept, currentUser }) {
+=======
+
+/* ════════════════ TEAM PAGE ════════════════ */
+/* Two views over the same roster: the member cards everyone can see, and the
+   management table (promote/demote, deactivate/reactivate) that managers only
+   get. The management table used to live as a tab on the Profile page, which
+   was a strange home for it — administering the team belongs with the team. */
+function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
-  const all = [...apt,...dept];
+  const canManage = currentUser?.role === 'manager';
+  const [view, setView] = useState('members');
+
+  // If the signed-in user stops being a manager while the management view is
+  // open, drop back to the cards rather than showing controls the API will
+  // reject anyway.
+  useEffect(() => { if (!canManage) setView('members'); }, [canManage]);
+
+  // One pass over the issues instead of re-filtering the whole list per user,
+  // which was O(users x issues) on every render.
+  const stats = useMemo(() => {
+    const byUser = new Map();
+    for (const i of [...apt, ...dept]) {
+      let s = byUser.get(i.loggedBy);
+      if (!s) { s = { total: 0, resolved: 0, minutes: 0 }; byUser.set(i.loggedBy, s); }
+      s.total++;
+      if (i.status === 'Ok') s.resolved++;
+      s.minutes += Number(i.time) || 0;
+    }
+    return byUser;
+  }, [apt, dept]);
+
+  async function changeRole(userId, newRole) {
+    try {
+      const res = await apiFetch(`/users/${userId}/role`, {method:'PATCH', body:{role: newRole}, token});
+      onUsersUpdate(prev => prev.map(u => u.id === userId ? {...u, role: res.user.role} : u));
+      setToast('Role updated');
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  async function toggleActive(userId, active) {
+    try {
+      const res = await apiFetch(`/users/${userId}/deactivate`, {method:'PATCH', body:{active}, token});
+      onUsersUpdate(prev => prev.map(u => u.id === userId ? {...u, active: res.user.active} : u));
+      setToast(active ? 'Account reactivated' : 'Account deactivated');
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  if (!users.length) {
+    return (
+      <div className="table-card">
+        <div className="empty-state">
+          {Ic.users}
+          <p>No team members yet.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Management view (managers only) ──
+  const manageTable = (
+    <div className="table-card">
+      <div className="table-header">
+        <span className="table-title">{t.teamMembers}</span>
+      </div>
+      <div style={{overflowX:'auto'}}>
+        <table>
+          <thead>
+            <tr>
+              <th>{t.name}</th><th>{t.email}</th><th>{t.role}</th>
+              <th>{t.status}</th><th>{t.actions}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map(u=>(
+              <tr key={u.id} className={u.active ? '' : 'fp-row'}>
+                <td style={{minWidth:170}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <Avatar name={u.name} idx={u.avatar_idx} size="sm" src={u.avatar_data}/>
+                    <span style={{fontWeight:500,whiteSpace:'nowrap'}}>{u.name}</span>
+                    {u.id===currentUser.id && <span className="team-you">{t.you}</span>}
+                  </div>
+                </td>
+                <td style={{fontSize:13,color:'var(--gray-600)'}}>{u.email}</td>
+                <td>
+                  <span className={`badge ${u.role==='manager'?'badge-internet':'badge-type'}`}>{u.role}</span>
+                </td>
+                <td>
+                  <span className={`badge ${u.active?'badge-ok':'badge-pending'}`}>
+                    {u.active ? t.activeStatus : t.inactive}
+                  </span>
+                </td>
+                {/* 250px keeps "Make technician" + "Deactivate" on one line;
+                    at 190 they wrapped and made the rows uneven. */}
+                <td style={{minWidth:250}}>
+                  {/* You cannot demote or deactivate yourself — that is how an
+                      account used to lock its manager out of the page. */}
+                  {u.id !== currentUser.id ? (
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12,whiteSpace:'nowrap'}}
+                        onClick={()=>changeRole(u.id, u.role==='manager'?'technician':'manager')}>
+                        {u.role==='manager' ? t.makeTechnician : t.makeManager}
+                      </button>
+                      <button className={`btn ${u.active?'btn-ghost':'btn-primary'}`} style={{padding:'4px 10px',fontSize:12,whiteSpace:'nowrap'}}
+                        onClick={()=>toggleActive(u.id, !u.active)}>
+                        {u.active ? t.deactivate : t.reactivate}
+                      </button>
+                    </div>
+                  ) : <span style={{fontSize:12,color:'var(--gray-300)'}}>—</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
   return (
+    <>
+      <div className="team-viewbar">
+        <div className="team-segmented">
+          <button className={view==='members'?'active':''} onClick={()=>setView('members')}>
+            {Ic.users}{t.members}
+          </button>
+          {canManage && (
+            <button className={view==='manage'?'active':''} onClick={()=>setView('manage')}>
+              {Ic.shield}{t.manage}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {view==='manage' && canManage ? manageTable : (
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:16}}>
       {users.map(u=>{
-        const mine    = all.filter(i=>i.loggedBy===u.id);
-        const resolved = mine.filter(i=>i.status==='Ok').length;
-        const avgT    = mine.length ? (mine.reduce((s,i)=>s+Number(i.time),0)/mine.length).toFixed(1) : '—';
+        const s = stats.get(u.id) || { total: 0, resolved: 0, minutes: 0 };
+        // No issues means there is no average to report. Appending "m" to the
+        // em dash unconditionally rendered "—m".
+        const avg = s.total ? (s.minutes / s.total).toFixed(1) + 'm' : '—';
+        const isManager = u.role === 'manager';
+        const inactive = u.active === false;
+
         return (
-          <div className="mini-card" key={u.id}>
-            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
-              <Avatar name={u.name} idx={u.avatarIdx} size="lg"/>
-              <div>
-                <div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:7}}>
-                  {u.name}
-                  {u.id===currentUser.id && <span className="badge" style={{background:'var(--blue-light)',color:'var(--blue)',fontSize:10,padding:'2px 7px'}}>{t.you}</span>}
+          <div className={`mini-card${inactive ? ' team-card-inactive' : ''}`} key={u.id}>
+            <div className="team-card-head">
+              <Avatar name={u.name} idx={u.avatar_idx} size="lg" src={u.avatar_data}/>
+              <div className="team-card-id">
+                <div className="team-card-name">
+                  <span>{u.name}</span>
+                  {u.id===currentUser.id && <span className="team-you">{t.you}</span>}
+                  {inactive && <span className="team-inactive-badge">{t.inactive}</span>}
                 </div>
-                <div style={{fontSize:12,color:'var(--gray-400)',marginTop:2,display:'flex',alignItems:'center',gap:5,textTransform:'capitalize'}}>
-                  {u.role==='manager'?Ic.shield:Ic.tool} {u.role==='manager' ? t.managerRole : t.techRole}
+                <div className="team-card-role">
+                  <span className="team-role-icon">{isManager ? Ic.shield : Ic.tool}</span>
+                  <span>{isManager ? t.managerRole : t.techRole}</span>
                 </div>
               </div>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-              {[[t.issues,mine.length],[t.resolved,resolved],[t.avg,avgT+'m']].map(([l,v])=>(
-                <div key={l} style={{background:'var(--gray-50)',borderRadius:8,padding:'10px 12px',border:'1px solid var(--gray-200)'}}>
-                  <div style={{fontSize:11,color:'var(--gray-400)',marginBottom:3}}>{l}</div>
-                  <div style={{fontSize:18,fontWeight:600}}>{v}</div>
+            <div className="team-card-stats">
+              {[[t.issues, s.total], [t.resolved, s.resolved], [t.avg, avg]].map(([l,v])=>(
+                <div className="team-stat" key={l}>
+                  <div className="team-stat-label">{l}</div>
+                  <div className="team-stat-value">{v}</div>
                 </div>
               ))}
             </div>
@@ -3756,6 +3996,8 @@ function TeamPage({ users, apt, dept, currentUser }) {
         );
       })}
     </div>
+      )}
+    </>
   );
 }
 
@@ -3767,6 +4009,7 @@ function ReportsPage({ token }) {
   const [report,  setReport]  = useState(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
+  const [downloading, setDownloading] = useState(false);
 
   async function fetchReport() {
     setLoading(true); setError(''); setReport(null);
@@ -3779,220 +4022,42 @@ function ReportsPage({ token }) {
 
   useEffect(() => { fetchReport(); }, [date]);
 
-  function downloadPDF() {
-    if (!report) return;
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const W = doc.internal.pageSize.getWidth();
-    const blue = [24, 95, 165];
-    const gray = [95, 94, 90];
-    const lightGray = [241, 239, 232];
-    const green = [59, 109, 17];
-    const amber = [186, 117, 23];
-
-    let y = 0;
-
-    // False positives are tinted amber, get a left accent bar, and carry a small
-    // "FALSE POSITIVE" pill under the problem text. The pill is drawn over an extra
-    // blank line (added to the problem text below) so it never overlaps the text.
-    const fpFill = [255, 244, 224];
-    const withFalsePositiveMarks = (issues, problemCol, statusHook) => ({
-      didParseCell: (data) => {
-        if (data.section !== 'body') return;
-        if (statusHook) statusHook(data);
-        if (issues[data.row.index]?.false_positive) data.cell.styles.fillColor = fpFill;
-      },
-      didDrawCell: (data) => {
-        if (data.section !== 'body' || !issues[data.row.index]?.false_positive) return;
-        if (data.column.index === 0) {
-          doc.setFillColor(...amber);
-          doc.rect(data.cell.x, data.cell.y, 1.2, data.cell.height, 'F');
-        }
-        if (data.column.index === problemCol) {
-          const pillW = 24, pillH = 3.6;
-          const px = data.cell.x + data.cell.padding('left');
-          const py = data.cell.y + data.cell.height - data.cell.padding('bottom') - pillH;
-          doc.setFillColor(255, 236, 200); doc.setDrawColor(...amber); doc.setLineWidth(0.2);
-          doc.roundedRect(px, py, pillW, pillH, 1.8, 1.8, 'FD');
-          doc.setFont('helvetica','bold'); doc.setFontSize(5.5); doc.setTextColor(...amber);
-          doc.text('FALSE POSITIVE', px + pillW / 2, py + pillH / 2 + 0.9, {align:'center'});
-        }
-      },
-    });
-    const problemText = i => i.false_positive ? `${i.problem}\n\u00A0` : i.problem;
-    const statusColor = data => {
-      if (data.column.index === 5) {
-        data.cell.styles.textColor = data.cell.raw === 'Ok' ? green : amber;
-        data.cell.styles.fontStyle = 'bold';
+  // The printable report is rendered server-side: the Go backend builds an
+  // HTML+CSS document styled with this app's own palette and prints it with a
+  // headless Chromium (see internal/report). Fetching it as a blob, rather
+  // than linking straight to the URL, is what lets us send the Authorization
+  // header the endpoint requires.
+  async function downloadPDF() {
+    if (!report || downloading) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(`${API}/reports/daily.pdf?date=${date}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        let msg = 'Could not generate the PDF';
+        try {
+          const body = await res.json();
+          if (body.error) msg = typeof body.error === 'string' ? body.error : Object.values(body.error).join(', ');
+        } catch {}
+        throw new Error(msg);
       }
-    };
-
-    // ── Header banner ──
-    doc.setFillColor(...blue);
-    doc.rect(0, 0, W, 28, 'F');
-
-    // Logo block
-    doc.setFillColor(255,255,255, 0.2);
-    doc.setFillColor(255,255,255);
-    doc.roundedRect(10, 7, 14, 14, 2, 2, 'F');
-    doc.setFontSize(9); doc.setTextColor(...blue); doc.setFont('helvetica','bold');
-    doc.text('LIRA', 17, 16.5, {align:'center'});
-
-    // Title
-    doc.setFontSize(16); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
-    doc.text('Daily Report', 30, 13);
-    doc.setFontSize(9); doc.setFont('helvetica','normal');
-    doc.text('Llana IT Reporting & Alerts', 30, 19);
-
-    // Date top right
-    doc.setFontSize(9); doc.setFont('helvetica','bold');
-    doc.text(report.date, W - 10, 13, {align:'right'});
-    doc.setFont('helvetica','normal'); doc.setFontSize(8);
-    doc.text(`Generated: ${new Date(report.generated_at).toLocaleString()}`, W - 10, 19, {align:'right'});
-
-    y = 36;
-
-    // ── Summary cards ──
-    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(28,28,26);
-    doc.text('Summary', 10, y); y += 5;
-
-    const cards = [
-      {label:'Total Issues',    value: String(report.summary.total_issues),  color: blue},
-      {label:'Resolved',        value: `${report.summary.resolved} (${report.summary.resolution_rate.toFixed(0)}%)`, color: green},
-      {label:'Pending',         value: String(report.summary.pending),       color: amber},
-      {label:'Avg. Time',       value: `${report.summary.avg_minutes.toFixed(1)} min`, color: gray},
-      {label:'Total Time',      value: `${report.summary.total_minutes} min`, color: gray},
-      {label:'Fastest Fix',     value: `${report.summary.fastest_minutes} min`, color: green},
-      {label:'Slowest Fix',     value: `${report.summary.slowest_minutes} min`, color: amber},
-      {label:'Apt. Issues',     value: String(report.summary.apt_issues),    color: blue},
-      {label:'Dept. Issues',    value: String(report.summary.dept_issues),   color: blue},
-      {label:'False Positives', value: String(fpCount),                      color: amber},
-      {label:'False Positive Rate', value: `${fpRate}%`,                     color: amber},
-      {label:'Real Issues',     value: String(realCount),                    color: green},
-    ];
-
-    const cw = (W - 20) / 3;
-    cards.forEach((c, i) => {
-      const cx = 10 + (i % 3) * cw;
-      const cy = y + Math.floor(i / 3) * 18;
-      doc.setFillColor(...lightGray);
-      doc.roundedRect(cx, cy, cw - 3, 15, 1.5, 1.5, 'F');
-      doc.setFontSize(7.5); doc.setTextColor(...gray); doc.setFont('helvetica','normal');
-      doc.text(c.label, cx + 4, cy + 5.5);
-      doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(...c.color);
-      doc.text(c.value, cx + 4, cy + 12);
-    });
-    y += Math.ceil(cards.length / 3) * 18 + 6;
-
-    // ── Breakdowns ──
-    const halfW = (W - 24) / 2;
-
-    // By type
-    doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(28,28,26);
-    doc.text('Issues by Type', 10, y); y += 4;
-    const typeData = Object.entries(report.by_type).sort((a,b)=>b[1]-a[1])
-      .map(([type, count]) => [type, String(count)]);
-    doc.autoTable({
-      startY: y,
-      tableWidth: halfW,
-      margin: {left: 10},
-      head: [['Type', 'Count']],
-      body: typeData.length ? typeData : [['No data', '']],
-      styles: {fontSize: 8, cellPadding: 2},
-      headStyles: {fillColor: blue, textColor: 255, fontStyle:'bold'},
-      alternateRowStyles: {fillColor: [248,248,246]},
-      theme: 'grid',
-    });
-
-    // By technician
-    doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(28,28,26);
-    doc.text('By Technician', 14 + halfW, y);
-    const techData = (report.by_technician || []).map(ts => [ts.name, String(ts.count)]);
-    doc.autoTable({
-      startY: y + 4,
-      tableWidth: halfW,
-      margin: {left: 14 + halfW},
-      head: [['Technician', 'Issues']],
-      body: techData.length ? techData : [['No data', '']],
-      styles: {fontSize: 8, cellPadding: 2},
-      headStyles: {fillColor: blue, textColor: 255, fontStyle:'bold'},
-      alternateRowStyles: {fillColor: [248,248,246]},
-      theme: 'grid',
-    });
-
-    y = Math.max(doc.lastAutoTable.finalY, y + 30) + 8;
-
-    // ── Apartment Issues ──
-    if (report.apt_issues?.length > 0) {
-      if (y > 230) { doc.addPage(); y = 15; }
-      doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(28,28,26);
-      doc.text(`Apartment Issues (${report.apt_issues.length})`, 10, y); y += 4;
-      doc.autoTable({
-        startY: y,
-        margin: {left: 10, right: 10},
-        head: [['Apt.', 'Type', 'Problem', 'Resolution', 'Time', 'Status', 'Technician']],
-        body: report.apt_issues.map(i => [
-          i.location, i.type, problemText(i),
-          i.resolution || '—',
-          `${i.time_minutes}m`, i.status, i.logged_by_name,
-        ]),
-        styles: {fontSize: 7.5, cellPadding: 2, overflow: 'linebreak'},
-        headStyles: {fillColor: blue, textColor: 255, fontStyle:'bold'},
-        columnStyles: {
-          0: {cellWidth: 14}, 1: {cellWidth: 18}, 2: {cellWidth: 38},
-          3: {cellWidth: 44}, 4: {cellWidth: 12}, 5: {cellWidth: 16}, 6: {cellWidth: 22},
-        },
-        alternateRowStyles: {fillColor: [248,248,246]},
-        theme: 'grid',
-        ...withFalsePositiveMarks(report.apt_issues, 2, statusColor),
-      });
-      y = doc.lastAutoTable.finalY + 8;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `LIRA-Daily-Report-${report.date}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Release the object URL once the download has been handed to the browser.
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (ex) {
+      setError('Error: ' + ex.message);
+    } finally {
+      setDownloading(false);
     }
-
-    // ── Department Issues ──
-    if (report.dept_issues?.length > 0) {
-      if (y > 230) { doc.addPage(); y = 15; }
-      doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(28,28,26);
-      doc.text(`Department Issues (${report.dept_issues.length})`, 10, y); y += 4;
-      doc.autoTable({
-        startY: y,
-        margin: {left: 10, right: 10},
-        head: [['Dept.', 'Type', 'Problem', 'Resolution', 'Time', 'Status', 'Technician']],
-        body: report.dept_issues.map(i => [
-          i.location, i.type, problemText(i),
-          i.resolution || '—',
-          `${i.time_minutes}m`, i.status, i.logged_by_name,
-        ]),
-        styles: {fontSize: 7.5, cellPadding: 2, overflow: 'linebreak'},
-        headStyles: {fillColor: [29, 158, 117], textColor: 255, fontStyle:'bold'},
-        columnStyles: {
-          0: {cellWidth: 20}, 1: {cellWidth: 18}, 2: {cellWidth: 38},
-          3: {cellWidth: 44}, 4: {cellWidth: 12}, 5: {cellWidth: 16}, 6: {cellWidth: 16},
-        },
-        alternateRowStyles: {fillColor: [248,248,246]},
-        theme: 'grid',
-        ...withFalsePositiveMarks(report.dept_issues, 2, statusColor),
-      });
-    }
-
-    // ── Footer on every page ──
-    const pages = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= pages; i++) {
-      doc.setPage(i);
-      doc.setFillColor(...lightGray);
-      doc.rect(0, doc.internal.pageSize.getHeight() - 10, W, 10, 'F');
-      doc.setFontSize(7); doc.setTextColor(...gray); doc.setFont('helvetica','normal');
-      doc.text('LIRA — Llana IT Reporting & Alerts', 10, doc.internal.pageSize.getHeight() - 4);
-      doc.text(`Page ${i} of ${pages}`, W - 10, doc.internal.pageSize.getHeight() - 4, {align:'right'});
-    }
-
-    doc.save(`LIRA-Daily-Report-${report.date}.pdf`);
   }
-
-  const TYPE_COLORS_HEX = {
-    Door:'#1769AA', Internet:'#1D9E75', Hardware:'#D88A18',
-    TV:'#9D174D', AC:'#3730A3', Phone:'#854F0B', Other:'#4B5563',
-  };
 
   const fpCount    = report ? (report.summary.false_positives || 0) : 0;
   const realCount  = report ? report.summary.total_issues - fpCount : 0;
@@ -4030,9 +4095,9 @@ function ReportsPage({ token }) {
         <button className="btn btn-ghost" onClick={fetchReport} disabled={loading}>
           {loading ? '…' : 'Refresh'}
         </button>
-        <button className="btn btn-primary" onClick={downloadPDF} disabled={!report || loading}
+        <button className="btn btn-primary" onClick={downloadPDF} disabled={!report || loading || downloading}
           style={{marginLeft:'auto'}}>
-          {Ic.download} Download PDF
+          {Ic.download} {downloading ? 'Generating…' : 'Download PDF'}
         </button>
       </div>
 
@@ -4173,7 +4238,7 @@ function ReportsPage({ token }) {
 }
 
 /* ════════════════ PROFILE PAGE ════════════════ */
-function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate, setToast, lang, onLangChange }) {
+function ProfilePage({ currentUser, token, onSessionUpdate, setToast, lang, onLangChange }) {
   const t = T[lang];
   const [myStats,  setMyStats]  = useState(null);
   const [myIssues, setMyIssues] = useState([]);
@@ -4255,28 +4320,11 @@ function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate
     } catch(ex) {}
   }
 
-  async function changeRole(userId, newRole) {
-    try {
-      const res = await apiFetch(`/users/${userId}/role`, {method:'PATCH', body:{role: newRole}, token});
-      onUsersUpdate(prev => prev.map(u => u.id === userId ? {...u, role: res.user.role} : u));
-      setToast('Role updated');
-    } catch(ex) { setToast('Error: ' + ex.message); }
-  }
-
-  async function toggleActive(userId, active) {
-    try {
-      const res = await apiFetch(`/users/${userId}/deactivate`, {method:'PATCH', body:{active}, token});
-      onUsersUpdate(prev => prev.map(u => u.id === userId ? {...u, active: res.user.active} : u));
-      setToast(active ? 'Account reactivated' : 'Account deactivated');
-    } catch(ex) { setToast('Error: ' + ex.message); }
-  }
-
   const sections = [
     {id:'identity',    label:'Identity'},
     {id:'avatar',      label:'Avatar'},
     {id:'preferences', label:'Preferences'},
     {id:'activity',    label:'My Activity'},
-    ...(currentUser.role === 'manager' ? [{id:'team', label:'Team Management'}] : []),
   ];
 
   const statCards = myStats ? [
@@ -4292,10 +4340,9 @@ function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate
       {/* Profile header */}
       <div className="mini-card" style={{display:'flex',alignItems:'center',gap:20,marginBottom:20,padding:'20px 24px'}}>
         <div style={{position:'relative',flexShrink:0}}>
-          {avatarData
-            ? <img src={avatarData} style={{width:64,height:64,borderRadius:'50%',objectFit:'cover',border:'2px solid var(--gray-200)'}}/>
-            : <Avatar name={currentUser.name} idx={currentUser.avatar_idx} size="lg" style={{width:64,height:64,fontSize:22}}/>
-          }
+          <Avatar name={currentUser.name} idx={currentUser.avatar_idx} size="lg"
+            src={avatarData || currentUser.avatar_data}
+            style={{width:64,height:64,fontSize:22,border:'2px solid var(--gray-200)'}}/>
           <button onClick={()=>fileRef.current.click()}
             style={{position:'absolute',bottom:0,right:0,width:22,height:22,borderRadius:'50%',
               background:'var(--blue)',border:'2px solid #fff',cursor:'pointer',
@@ -4451,60 +4498,6 @@ function ProfilePage({ currentUser, token, users, onSessionUpdate, onUsersUpdate
         </div>
       )}
 
-      {/* ── Team Management (manager only) ── */}
-      {section==='team' && currentUser.role==='manager' && (
-        <div className="table-card">
-          <div className="table-header">
-            <span className="table-title">Team members</span>
-          </div>
-          <div style={{overflowX:'auto'}}>
-          <table>
-            <thead>
-              <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              {users.map(u=>(
-                <tr key={u.id}>
-                  <td>
-                    <div style={{display:'flex',alignItems:'center',gap:8}}>
-                      {u.avatar_data
-                        ? <img src={u.avatar_data} style={{width:28,height:28,borderRadius:'50%',objectFit:'cover'}}/>
-                        : <Avatar name={u.name} idx={u.avatar_idx} size="sm"/>
-                      }
-                      <span style={{fontWeight:500}}>{u.name}</span>
-                      {u.id===currentUser.id && <span className="badge" style={{background:'var(--blue-light)',color:'var(--blue)',fontSize:10,padding:'1px 6px'}}>you</span>}
-                    </div>
-                  </td>
-                  <td style={{fontSize:13,color:'var(--gray-600)'}}>{u.email}</td>
-                  <td>
-                    <span className={`badge ${u.role==='manager'?'badge-internet':'badge-type'}`}>{u.role}</span>
-                  </td>
-                  <td>
-                    <span className={`badge ${u.active?'badge-ok':'badge-pending'}`}>
-                      {u.active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td style={{minWidth:190}}>
-                    {u.id !== currentUser.id ? (
-                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                        <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12,whiteSpace:'nowrap'}}
-                          onClick={()=>changeRole(u.id, u.role==='manager'?'technician':'manager')}>
-                          {u.role==='manager' ? 'Make technician' : 'Make manager'}
-                        </button>
-                        <button className={`btn ${u.active?'btn-ghost':'btn-primary'}`} style={{padding:'4px 10px',fontSize:12,whiteSpace:'nowrap'}}
-                          onClick={()=>toggleActive(u.id, !u.active)}>
-                          {u.active ? 'Deactivate' : 'Reactivate'}
-                        </button>
-                      </div>
-                    ) : <span style={{fontSize:12,color:'var(--gray-300)'}}>—</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -5274,10 +5267,7 @@ function App() {
           </div>
           <div className="sidebar-footer">
             <div className="sidebar-user" style={{cursor:'pointer'}} onClick={()=>setPage('profile')}>
-              {me.avatar_data
-                ? <img src={me.avatar_data} style={{width:30,height:30,borderRadius:'50%',objectFit:'cover',flexShrink:0}}/>
-                : <Avatar name={me.name} idx={me.avatar_idx}/>
-              }
+              <Avatar name={me.name} idx={me.avatar_idx} src={me.avatar_data}/>
               <div>
                 <div className="sidebar-user-name">{me.name}</div>
                 <div className="sidebar-user-role">{me.role==='manager' ? t.managerRole : t.techRole}</div>
@@ -5318,7 +5308,8 @@ function App() {
             {page==='analytics' && <AnalyticsPage token={token} alertsPendingCount={alertsPendingCount}/>}
             {page==='consumables' && <ConsumablesPage token={token} currentUser={me} onCatalogUpdate={setConsumableItems}/>}
             {page==='support' && <SupportPage token={token}/>}
-            {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}/>}
+            {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}
+              token={token} onUsersUpdate={setUsers} setToast={setToast}/>}
             {page==='reports' && <ReportsPage token={token}/>}
             {page==='system' && me.role==='manager' && <SystemStatusPage token={token}/>}
             {page==='admin' && me.role==='manager' && <AdminPage
@@ -5338,9 +5329,7 @@ function App() {
             {page==='profile' && <ProfilePage
               currentUser={me}
               token={token}
-              users={users}
               onSessionUpdate={onSessionUpdate}
-              onUsersUpdate={setUsers}
               setToast={setToast}
               lang={lang}
               onLangChange={setLang}
