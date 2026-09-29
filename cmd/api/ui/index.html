@@ -744,6 +744,31 @@ tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
 
 /* ── Empty ── */
 .empty-state { padding: 48px; text-align: center; color: var(--gray-400); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+
+/* Shown on a recurring alert whose issues have all been deleted. */
+.alert-stale { padding: 20px; text-align: center; border-top: 1px solid var(--gray-200); }
+.alert-stale-title { font-size: 13px; font-weight: 600; color: var(--gray-900); margin: 0 0 5px; }
+.alert-stale-body { font-size: 12.5px; color: var(--gray-400); margin: 0 0 12px; line-height: 1.5; }
+
+/* Error boundary fallback. Kept deliberately plain: this is shown when a page
+   has already thrown, so it must not depend on any of the app's own state. */
+.error-boundary { display: flex; align-items: center; justify-content: center; padding: 48px 24px; min-height: 60vh; }
+.error-boundary-card {
+  max-width: 560px; width: 100%; text-align: center;
+  background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg);
+  padding: 32px 28px; box-shadow: var(--shadow-md);
+}
+.error-boundary-icon { color: var(--red); display: flex; justify-content: center; margin-bottom: 12px; }
+.error-boundary-icon svg { width: 30px; height: 30px; }
+.error-boundary-card h2 { font-size: 17px; margin: 0 0 8px; }
+.error-boundary-msg { font-size: 13px; color: var(--gray-400); margin: 0 0 18px; line-height: 1.55; }
+.error-boundary-detail, .error-boundary-stack {
+  text-align: left; font-family: 'DM Mono', monospace; font-size: 11.5px; line-height: 1.5;
+  background: var(--gray-100); color: var(--gray-600); border-radius: var(--radius-sm);
+  padding: 10px 12px; margin: 0 0 10px; max-height: 140px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+}
+.error-boundary-stack { max-height: 96px; color: var(--gray-400); }
+.error-boundary-actions { display: flex; gap: 8px; justify-content: center; margin-top: 18px; }
 .empty-state svg { width: 36px; height: 36px; opacity: 0.25; }
 .empty-state p { font-size: 13.5px; }
 
@@ -790,6 +815,7 @@ html.dark .mini-card,
 html.dark .support-stat-card,
 html.dark .modal,
 html.dark .auth-card,
+html.dark .error-boundary-card,
 html.dark .btn-ghost,
 html.dark .lang-toggle,
 html.dark .form-control { background: var(--gray-50) !important; }
@@ -800,6 +826,7 @@ html.dark .stat-card,
 html.dark .table-card,
 html.dark .mini-card,
 html.dark .support-stat-card { border-color: var(--gray-200) !important; }
+html.dark .error-boundary-card { border-color: var(--gray-200) !important; }
 html.dark .support-counts { border-color: var(--gray-200) !important; }
 
 html.dark thead th { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
@@ -996,6 +1023,10 @@ const T = {
     alertsSolvedEmpty: 'No solved recurring issues yet.',
     markSolved: 'Mark as solved',
     deleteAlert: 'Delete alert',
+    alertStale: 'outdated',
+    alertStaleTitle: 'The issues behind this alert no longer exist',
+    alertStaleBody: 'This alert was raised for issues that have since been deleted, so there is nothing left to act on. It is safe to remove.',
+    alertStaleDismiss: 'Remove this alert',
     finalSolution: 'Final solution',
     finalSolutionPlaceholder: 'What was done to permanently fix this?',
     solvedBy: 'Solved by',
@@ -1166,6 +1197,10 @@ const T = {
     noStockMoves: 'No stock changes recorded yet.',
     toastStockUpdated: 'Stock updated',
     toastReorderSaved: 'Reorder level saved',
+    pageErrorTitle: 'This page could not be displayed',
+    pageErrorBody: 'Something in the data went against what this page expected. The rest of the app still works — you can go to another page, or try this one again.',
+    tryAgain: 'Try again',
+    reloadApp: 'Reload the app',
     you: 'you',
     issues: 'Issues',
     avg: 'Avg',
@@ -1326,6 +1361,10 @@ const T = {
     alertsSolvedEmpty: 'Ainda não há avarias recorrentes resolvidas.',
     markSolved: 'Marcar como resolvida',
     deleteAlert: 'Eliminar alerta',
+    alertStale: 'desactualizada',
+    alertStaleTitle: 'As avarias por trás desta alerta já não existem',
+    alertStaleBody: 'Esta alerta foi criada para avarias que desde então foram eliminadas, pelo que não há nada para resolver. Pode ser removida em segurança.',
+    alertStaleDismiss: 'Remover esta alerta',
     finalSolution: 'Solução final',
     finalSolutionPlaceholder: 'O que foi feito para resolver definitivamente?',
     solvedBy: 'Resolvido por',
@@ -1496,6 +1535,10 @@ const T = {
     noStockMoves: 'Ainda não há alterações de stock registadas.',
     toastStockUpdated: 'Stock actualizado',
     toastReorderSaved: 'Nível de reposição guardado',
+    pageErrorTitle: 'Não foi possível mostrar esta página',
+    pageErrorBody: 'Alguma coisa nos dados não corresponde ao que esta página espera. O resto da aplicação continua a funcionar — pode ir para outra página, ou tentar esta outra vez.',
+    tryAgain: 'Tentar de novo',
+    reloadApp: 'Recarregar a aplicação',
     you: 'tu',
     issues: 'Avarias',
     avg: 'Méd.',
@@ -2989,7 +3032,13 @@ function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
 
       {filtered.length === 0 ? (
         <div className="empty-state">{Ic.bell}<p>{filter==='pending' ? t.alertsEmpty : t.alertsSolvedEmpty}</p></div>
-      ) : filtered.map(alert => (
+      ) : filtered.map(alert => {
+        // The API always sends an array now, but a null here would take the
+        // whole page down, and this is the one field the Alerts page cannot
+        // do without.
+        const issues = alert.issues || [];
+        const isStale = issues.length === 0;
+        return (
         <div className="table-card" key={alert.id} style={{marginBottom:16}}>
           <div className="table-header">
             <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -2998,7 +3047,12 @@ function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
               <TypeBadge type={alert.type}/>
             </div>
             <div style={{display:'flex',alignItems:'center',gap:10}}>
-              <span style={{fontSize:12,color:'var(--gray-400)'}}>{alert.issues.length} {t.alertsOccurrences}</span>
+              <span style={{fontSize:12,color:'var(--gray-400)'}}>{issues.length} {t.alertsOccurrences}</span>
+              {isStale && (
+                <span className="badge" style={{background:'var(--gray-200)',color:'var(--gray-600)',fontSize:10,padding:'1px 7px'}}>
+                  {t.alertStale}
+                </span>
+              )}
               {isManager && alert.status==='pending' && solvingId!==alert.id && (
                 <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12}}
                   onClick={()=>{setSolvingId(alert.id); setSolutionText('');}}>
@@ -3054,7 +3108,7 @@ function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
               </tr>
             </thead>
             <tbody>
-              {alert.issues.map(issue => (
+              {issues.map(issue => (
                 <tr key={issue.id}>
                   <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>
                     {new Date(issue.created_at).toLocaleString()}
@@ -3067,8 +3121,25 @@ function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
               ))}
             </tbody>
           </table>
+
+          {/* Every issue this alert was raised for has since been deleted, so
+              it is a leftover rather than a live problem. An empty table with
+              headers and no rows reads as a bug, so say what it actually is and
+              point at the one action that clears it. */}
+          {isStale && (
+            <div className="alert-stale">
+              <p className="alert-stale-title">{t.alertStaleTitle}</p>
+              <p className="alert-stale-body">{t.alertStaleBody}</p>
+              {isManager && (
+                <button className="btn btn-ghost" style={{fontSize:12.5,padding:'6px 14px'}}
+                  onClick={()=>removeAlert(alert.id)}>
+                  {t.alertStaleDismiss}
+                </button>
+              )}
+            </div>
+          )}
         </div>
-      ))}
+      );})}
     </div>
   );
 }
@@ -5020,6 +5091,54 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
 }
 
 /* ════════════════ ROOT APP ════════════════ */
+/* ── Error boundary ── */
+/* Without this, any component that throws unmounts the whole tree and the user
+   gets a blank white page with nothing in the console they can act on. Two real
+   bugs hit exactly that: a nil `issues` array from the alerts API, and a merge
+   conflict left in this file. A boundary turns "the app is gone" into "this one
+   page broke, here is why, here is how to get back".
+
+   It resets itself when the user navigates elsewhere, so a page that crashes
+   once doesn't lock them out of every other page for the rest of the session. */
+class PageErrorBoundary extends React.Component {
+  static contextType = LangCtx;
+  constructor(props) {
+    super(props);
+    this.state = { error: null, stack: '' };
+  }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) {
+    // Kept in the console as well as the screen, since the component stack is
+    // what actually identifies which of the pages is at fault.
+    console.error('Page crashed:', error, info && info.componentStack);
+    this.setState({ stack: (info && info.componentStack) || '' });
+  }
+  componentDidUpdate(prevProps) {
+    if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ error: null, stack: '' });
+    }
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    const t = T[this.context] || T.en;
+    return (
+      <div className="error-boundary">
+        <div className="error-boundary-card">
+          <div className="error-boundary-icon">{Ic.info}</div>
+          <h2>{t.pageErrorTitle}</h2>
+          <p className="error-boundary-msg">{t.pageErrorBody}</p>
+          <pre className="error-boundary-detail">{String(this.state.error)}</pre>
+          {this.state.stack && <pre className="error-boundary-stack">{this.state.stack.trim()}</pre>}
+          <div className="error-boundary-actions">
+            <button className="btn btn-primary" onClick={()=>this.setState({error:null, stack:''})}>{t.tryAgain}</button>
+            <button className="btn btn-ghost" onClick={()=>location.reload()}>{t.reloadApp}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
 function App() {
   const [lang,    setLang]    = useState(()=>loadLS('lira_lang','en'));
   const [theme,   setTheme]   = useState(()=>loadLS('lira_theme','light'));
@@ -5297,6 +5416,11 @@ function App() {
           )}
 
           <div className="content">
+            {/* resetKey={page} so a crash is contained to the page that caused
+                it — navigating away clears it and the rest of the app keeps
+                working. */}
+            <PageErrorBoundary resetKey={page}>
+            <React.Fragment>
             {page==='dashboard' && <Dashboard apt={apt} dept={dept} users={users} stats={stats}/>}
             {page==='apt'       && <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='dept'      && <IssuesTable issues={dept} tableMode="dept" currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
@@ -5331,6 +5455,8 @@ function App() {
               lang={lang}
               onLangChange={setLang}
             />}
+            </React.Fragment>
+            </PageErrorBoundary>
           </div>
         </div>
 
