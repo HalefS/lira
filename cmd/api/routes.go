@@ -25,6 +25,10 @@ func (app *application) routes() http.Handler {
 		http.Redirect(w, r, "/dashboard", http.StatusMovedPermanently)
 	})
 	router.HandlerFunc(http.MethodGet, "/dashboard", app.uiHandler)
+	// Frontend libraries, embedded in the binary. These paths are not API
+	// paths, so they have to be registered explicitly or the catch-all
+	// redirects them to /dashboard and hands HTML back to a <script> tag.
+	router.HandlerFunc(http.MethodGet, "/vendor/:file", app.vendorHandler)
 
 	// Health
 	router.HandlerFunc(http.MethodGet, "/v1/healthcheck", app.healthcheckHandler)

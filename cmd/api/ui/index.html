@@ -6,8 +6,16 @@
 <title>LIRA — Llana IT Reporting & Alerts</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <script>try{if(localStorage.getItem('lira_theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
-<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<!-- React is served from this binary rather than a CDN, in its production
+     build: the development builds are ~8x larger and carry warnings that are
+     never seen in production. The version is in the filename so that upgrading
+     React changes the URL and no browser can keep serving a stale copy. -->
+<script src="/vendor/react-18.3.1.production.min.js"></script>
+<script src="/vendor/react-dom-18.3.1.production.min.js"></script>
+<!-- Babel compiles the JSX below in the browser on every page load, which
+     costs ~1.2s and 3MB. It is the single biggest cost in starting this app
+     and it disappears entirely once the JSX is precompiled at build time
+     (esbuild) and this tag is removed along with the text/babel type. -->
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
