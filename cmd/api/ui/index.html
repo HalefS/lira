@@ -187,6 +187,25 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
 }
 .nav-item:hover { background: var(--gray-100); color: var(--gray-900); }
 .nav-item.active { background: var(--blue-light); color: var(--blue); font-weight: 500; }
+
+/* ── Collapsible nav group ────────────────────────────────────────────── */
+/* A group is a parent button that reveals its children; the chevron rotates to
+   show whether it is open. The parent is not itself a destination, so it never
+   takes the .active class -- a child does instead. */
+.nav-group-chevron {
+  display: flex; align-items: center; flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+/* Sized here rather than left to the flex default, which stretches an unsized
+   svg to hundreds of pixels. The selector repeats .nav-item to outrank the
+   generic `.nav-item svg` sizing that comes later in this stylesheet. */
+.nav-item .nav-group-chevron svg { width: 12px; height: 12px; }
+.nav-group-toggle.open .nav-group-chevron { transform: rotate(90deg); }
+/* A group holding the current page stays marked while collapsed, so the user can
+   still see where they are without opening it. */
+.nav-group-toggle.contains-active { color: var(--blue); }
+.nav-group-children { padding-left: 20px; }
+.nav-item-child { font-size: 13px; }
 .nav-item svg { width: 15px; height: 15px; flex-shrink: 0; }
 .nav-icon-wrap { position: relative; display: inline-flex; }
 .nav-badge {
@@ -477,6 +496,72 @@ html.dark .week-nav button { background: var(--gray-50); }
 .week-bar-fill { height: 100%; border-radius: 4px; }
 .week-bar-count { font-size: 13px; font-weight: 600; text-align: right; }
 .week-none { font-size: 13px; color: var(--gray-400); }
+
+/* ── LCU testing ──────────────────────────────────────────────────────── */
+/* The seven-day strip: one cell per calendar day of a reader's trial, so a
+   week reads left to right at a glance and a gap is obvious. */
+.lcu-strip { display: flex; gap: 6px; flex-wrap: wrap; }
+.lcu-day {
+  width: 46px; padding: 7px 0 6px; border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200); background: var(--gray-100);
+  text-align: center; line-height: 1.25;
+}
+.lcu-day-dow {
+  display: block; font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--gray-400);
+}
+.lcu-day-date { display: block; font-size: 12px; color: var(--gray-600); }
+/* The light itself: green means the reader took the card, red means it did not. */
+.lcu-day-light {
+  display: block; width: 13px; height: 13px; border-radius: 50%;
+  margin: 5px auto 0; background: var(--gray-300); border: 1px solid var(--gray-200);
+}
+.lcu-day.pass { background: var(--green-light); border-color: var(--green-mid); }
+.lcu-day.pass .lcu-day-light { background: var(--green); border-color: var(--green); }
+.lcu-day.fail { background: var(--red-light); border-color: var(--red-mid); }
+.lcu-day.fail .lcu-day-light { background: var(--red); border-color: var(--red); }
+/* Today is ringed rather than recoloured, so it is still obvious on a cell that
+   has a verdict. */
+.lcu-day.today { outline: 2px solid var(--blue); outline-offset: 1px; }
+.lcu-day:not(.pass):not(.fail) .lcu-day-dow,
+.lcu-day:not(.pass):not(.fail) .lcu-day-date { color: var(--gray-400); }
+
+/* The pass/fail choice, built around the light the technician actually looks
+   at. Sized for a thumb: this is answered one-handed, holding a card. */
+.lcu-choice { display: flex; gap: 10px; }
+.lcu-choice-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px;
+  padding: 12px 14px; border-radius: var(--radius-md); cursor: pointer;
+  border: 1.5px solid var(--gray-200); background: #fff; color: var(--gray-600);
+  font-size: 13.5px; font-weight: 500; transition: all 0.12s;
+}
+.lcu-choice-btn:hover { border-color: var(--gray-400); }
+.lcu-choice-btn .lcu-bulb {
+  width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+  background: var(--gray-300); border: 1px solid var(--gray-200);
+}
+.lcu-choice-btn.pass.on { background: var(--green-light); border-color: var(--green); color: var(--green); }
+.lcu-choice-btn.pass.on .lcu-bulb { background: var(--green); border-color: var(--green); }
+.lcu-choice-btn.fail.on { background: var(--red-light); border-color: var(--red); color: var(--red); }
+.lcu-choice-btn.fail.on .lcu-bulb { background: var(--red); border-color: var(--red); }
+.lcu-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--gray-400); }
+.lcu-serial {
+  font-family: 'DM Mono', monospace; font-size: 13.5px; font-weight: 600; color: var(--gray-900);
+}
+.lcu-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+.lcu-tally { font-size: 12.5px; color: var(--gray-600); }
+.lcu-tally b { color: var(--gray-900); }
+/* The prompt cannot be dismissed, so it is marked as such rather than looking
+   like an ordinary dialog with a stray close button. */
+.lcu-gate-body { display: flex; flex-direction: column; gap: 16px; }
+.lcu-gate-unit { border: 1px solid var(--gray-200); border-radius: var(--radius-md); padding: 14px; }
+.lcu-gate-unit:last-of-type { margin-bottom: 0; }
+.lcu-howto {
+  display: flex; gap: 11px; padding: 12px 14px; border-radius: var(--radius-md);
+  background: var(--blue-light); font-size: 12.5px; color: var(--gray-600); line-height: 1.5;
+}
+.lcu-howto svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--blue); margin-top: 1px; }
+.lcu-lockout { text-align: center; font-size: 12px; color: var(--gray-400); margin-top: 4px; }
 
 /* ── Modal ── */
 .modal-overlay {
@@ -958,7 +1043,17 @@ async function apiFetch(path, { method='GET', body, token } = {}) {
     const msg = data.error
       ? (typeof data.error === 'object' ? Object.values(data.error).join(', ') : data.error)
       : 'Something went wrong';
-    throw new Error(msg);
+    const err = new Error(msg);
+    // The server refuses work from a user who still owes an LCU result for
+    // today. Both cases here are 403, so the code in the body is the only way to
+    // tell them apart; the units come along so the prompt can be built from the
+    // response that refused the call rather than asking again.
+    if (data.code === 'lcu_test_required') {
+      err.lcuRequired = true;
+      err.lcuUnits = data.units || [];
+      err.lcuToday  = data.today  || '';
+    }
+    throw err;
   }
   return data;
 }
@@ -1340,6 +1435,35 @@ const T = {
     downloadWeeklyPdf: 'Download PDF',
     generatingPdf: 'Generating…',
     nothingUsedThisWeek: 'No consumables were recorded this week.',
+    // Collapsible group in the sidebar, and LCU testing
+    miscellaneous: 'Miscellaneous',
+    lcuTesting: 'LCU Testing',
+    lcuIntro: 'A card reader that has gone intermittent is put on trial for seven days before it is scrapped. Each day, hold an RFID card against it: a green light means it read the card and the test passed, a red light means it did not.',
+    lcuAddUnit: 'Add test unit',
+    lcuStartTrial: 'Start 7-day trial',
+    lcuSerial: 'Serial number',
+    lcuSerialPlaceholder: 'e.g. LCU-88231',
+    lcuNote: 'Note (optional)',
+    lcuNotePlaceholder: 'Which door it came from',
+    lcuNone: 'No LCU test units yet.',
+    lcuAdded: 'LCU test unit added',
+    lcuDeleted: 'LCU test unit removed',
+    lcuRecorded: "Today's result recorded",
+    lcuRecordToday: "Record today's result",
+    lcuOnTrial: 'On trial',
+    lcuPassed: 'Passed',
+    lcuFailed: 'Not passed',
+    lcuDay: 'Day',
+    lcuDaysLeft: 'days left',
+    lcuAddedBy: 'Added by',
+    lcuHowToTest: 'Hold an RFID card against the reader. A green light means it read the card, so the test passed. A red light means it did not.',
+    lcuDelete: 'Delete',
+    lcuSave: 'Save',
+    lcuDeleteConfirm: 'Delete this test unit and its seven days of results?',
+    lcuGateTitle: "Today's LCU test",
+    lcuGateBody: 'Record how each reader behaved today before you can carry on using the app.',
+    lcuGateLogOut: 'Log out',
+    lcuGateLocked: 'The app stays locked until every reader is answered.',
     signInBtn: 'Sign in',
     createBtn: 'Create account',
     noAccount: "Don't have an account?",
@@ -1702,6 +1826,35 @@ const T = {
     downloadWeeklyPdf: 'Descarregar PDF',
     generatingPdf: 'A gerar…',
     nothingUsedThisWeek: 'Não foram registados consumíveis esta semana.',
+    // Grupo expansível na barra lateral, e testes LCU
+    miscellaneous: 'Diversos',
+    lcuTesting: 'Teste LCU',
+    lcuIntro: 'Um leitor de cartões que começou a falhar é posto à prova durante sete dias antes de ser deitado fora. Todos os dias, aproxime um cartão RFID: a luz verde significa que leu o cartão e o teste passou, a luz vermelha significa que não leu.',
+    lcuAddUnit: 'Adicionar unidade',
+    lcuStartTrial: 'Iniciar teste de 7 dias',
+    lcuSerial: 'Número de série',
+    lcuSerialPlaceholder: 'ex. LCU-88231',
+    lcuNote: 'Nota (opcional)',
+    lcuNotePlaceholder: 'De que porta veio',
+    lcuNone: 'Ainda não há unidades de teste LCU.',
+    lcuAdded: 'Unidade de teste LCU adicionada',
+    lcuDeleted: 'Unidade de teste LCU removida',
+    lcuRecorded: "Resultado de hoje registado",
+    lcuRecordToday: 'Registar o resultado de hoje',
+    lcuOnTrial: 'Em teste',
+    lcuPassed: 'Passou',
+    lcuFailed: 'Não passou',
+    lcuDay: 'Dia',
+    lcuDaysLeft: 'dias restantes',
+    lcuAddedBy: 'Adicionado por',
+    lcuHowToTest: 'Aproxime um cartão RFID do leitor. A luz verde significa que leu o cartão, por isso o teste passou. A luz vermelha significa que não leu.',
+    lcuDelete: 'Eliminar',
+    lcuSave: 'Guardar',
+    lcuDeleteConfirm: 'Eliminar esta unidade de teste e os seus sete dias de resultados?',
+    lcuGateTitle: 'Teste LCU de hoje',
+    lcuGateBody: 'Registe como se comportou cada leitor hoje antes de continuar a usar a aplicação.',
+    lcuGateLogOut: 'Terminar sessão',
+    lcuGateLocked: 'A aplicação fica bloqueada até responder para todos os leitores.',
     signInBtn: 'Iniciar sessão',
     createBtn: 'Criar conta',
     demoAccounts: 'Contas de demonstração',
@@ -1801,6 +1954,7 @@ const Ic = {
   report: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="1" width="12" height="14" rx="1"/><path d="M5 5h6M5 8h6M5 11h4"/></svg>,
   download: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 13h12"/></svg>,
   calendar: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="3" width="14" height="12" rx="1"/><path d="M1 7h14M5 1v4M11 1v4"/></svg>,
+  chevron: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3.5l4.5 4.5L6 12.5"/></svg>,
 };
 
 /* ── Avatar ──
@@ -4459,6 +4613,330 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
   );
 }
 
+/* ════════════════ LCU TESTING PAGE ════════════════ */
+/*
+  A door card reader that has gone intermittent is put on trial for a week
+  before it is scrapped. The test is holding an RFID card against it: a green
+  light means it read the card, red means it did not. A reader that works on
+  Monday can still be failing by Friday, hence seven days rather than one.
+
+  The unit is the reader; its seven days are the log. The server decides who may
+  answer (the technician who added it, or a manager) and sends can_answer so the
+  controls are only drawn where they will actually work.
+*/
+
+// One cell per day of the trial. The dot is the reader's light on that day.
+function LCUDayStrip({ unit, today }) {
+  const lang = React.useContext(LangCtx);
+  return (
+    <div className="lcu-strip">
+      {unit.days.map(day=>{
+        const cls = ['lcu-day'];
+        if (day.result === 'pass') cls.push('pass');
+        else if (day.result === 'fail') cls.push('fail');
+        if (day.day.slice(0,10) === today) cls.push('today');
+        // A `date` column arrives from the server as midnight UTC. Handing that
+        // straight to new Date() and reading getDate() back shows the PREVIOUS
+        // day anywhere west of Greenwich, so the window would start a day early.
+        // Building the local date from its parts keeps the label on the day the
+        // server meant.
+        const [y, m, dNum] = day.day.slice(0,10).split('-').map(Number);
+        const asDate = new Date(y, m-1, dNum);
+        return (
+          <div key={day.day} className={cls.join(' ')}
+            title={`${day.day.slice(0,10)}${day.result ? ' — ' + day.result : ''}`}>
+            <span className="lcu-day-dow">{asDate.toLocaleDateString(lang==='pt'?'pt-PT':'en-GB',{weekday:'narrow'})}</span>
+            <span className="lcu-day-date">{asDate.getDate()}</span>
+            <span className="lcu-day-light"/>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function LCUUnitCard({ unit, today, onAnswer, onDelete, t }) {
+  const [choosing, setChoosing] = useState(false);
+  const [choice, setChoice]   = useState('');
+  const [saving, setSaving]   = useState(false);
+  const [err, setErr]         = useState('');
+
+  const active = unit.status === 'active';
+  const tested = unit.passes + unit.fails;
+  const dayNo  = unit.days.findIndex(d=>d.day.slice(0,10) === today) + 1;
+  // Only the days that have not happened yet count towards "left", and only
+  // while the window is still open.
+  const left  = active ? unit.days.filter(d=>d.day.slice(0,10) > today).length : 0;
+
+  async function save(result) {
+    setSaving(true); setErr('');
+    try { await onAnswer(unit.id, result); setChoosing(false); setChoice(''); }
+    catch(ex) { setErr(ex.message); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="table-card" style={{padding:'18px 20px'}}>
+      <div className="lcu-row">
+        <div>
+          <span className="lcu-serial">{unit.serial}</span>
+          <div className="lcu-meta" style={{marginTop:5}}>
+            {unit.added_by_name && <span>{t.lcuAddedBy} {unit.added_by_name}</span>}
+            <span>{unit.starts_on.slice(0,10)} → {unit.ends_on.slice(0,10)}</span>
+            {unit.note && <span>· {unit.note}</span>}
+          </div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          {unit.status === 'passed' && <span className="badge badge-ok">{t.lcuPassed}</span>}
+          {unit.status === 'failed' && <span className="badge" style={{background:'var(--red-light)',color:'var(--red)'}}>{t.lcuFailed}</span>}
+          {active && <span className="badge badge-pending">{t.lcuOnTrial}</span>}
+          {active && dayNo > 0 && <span className="lcu-meta">{t.lcuDay} {dayNo}/{unit.days.length}</span>}
+        </div>
+      </div>
+
+      <LCUDayStrip unit={unit} today={today}/>
+
+      <div className="lcu-row" style={{marginTop:16,marginBottom:0,alignItems:'center'}}>
+        <div className="lcu-tally">
+          <b>{unit.passes}</b> {t.lcuPassed.toLowerCase()} · <b>{unit.fails}</b> {t.lcuFailed.toLowerCase()}
+          {left > 0 && <> · {left} {t.lcuDaysLeft.toLowerCase()}</>}
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          {active && unit.can_answer && !choosing && dayNo > 0 && (
+            <button className="btn btn-primary" onClick={()=>setChoosing(true)}>
+              {t.lcuRecordToday}
+            </button>
+          )}
+          {unit.can_answer && (
+            <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}}
+              onClick={()=>{ if (confirm(t.lcuDeleteConfirm)) onDelete(unit.id); }}>
+              {t.lcuDelete}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {err && <div className="auth-error" style={{marginTop:12}}>{err}</div>}
+
+      {choosing && (
+        <div style={{marginTop:14,paddingTop:14,borderTop:'1px solid var(--gray-200)'}}>
+          <div className="lcu-howto" style={{marginBottom:12}}>
+            {Ic.info}
+            <span>{t.lcuHowToTest}</span>
+          </div>
+          <div className="lcu-choice">
+            <button className={`lcu-choice-btn pass ${choice==='pass'?'on':''}`}
+              onClick={()=>setChoice('pass')} disabled={saving}>
+              <span className="lcu-bulb"/>{t.lcuPassed}
+            </button>
+            <button className={`lcu-choice-btn fail ${choice==='fail'?'on':''}`}
+              onClick={()=>setChoice('fail')} disabled={saving}>
+              <span className="lcu-bulb"/>{t.lcuNotPassed}
+            </button>
+          </div>
+          <div style={{display:'flex',gap:8,marginTop:12,justifyContent:'flex-end'}}>
+            <button className="btn btn-ghost" onClick={()=>{setChoosing(false);setChoice('');}} disabled={saving}>
+              {t.cancel}
+            </button>
+            <button className="btn btn-primary" disabled={!choice || saving} onClick={()=>save(choice)}>
+              {saving ? '…' : t.lcuSave}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LCUPage({ token, setToast, onLcuRequired, refreshKey }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const [units, setUnits]     = useState(null);
+  const [today, setToday]     = useState('');
+  const [err, setErr]         = useState('');
+  const [adding, setAdding]   = useState(false);
+  const [serial, setSerial]   = useState('');
+  const [note, setNote]       = useState('');
+  const [saving, setSaving]   = useState(false);
+
+  async function load() {
+    try {
+      const res = await apiFetch('/lcu/units', {token});
+      setUnits(res.units || []);
+      setToday(res.today || localISODate(new Date()));
+      setErr('');
+    } catch(ex) {
+      // Adding a unit makes today's result owed straight away, so the reload that
+      // follows is itself refused. That is the gate working, not a failure: hand
+      // it up so the prompt opens instead of leaving a stale empty state behind.
+      if (ex.lcuRequired) { onLcuRequired(ex); return; }
+      setErr(ex.message);
+    }
+  }
+  // refreshKey is bumped when the daily prompt closes, so the list is re-read
+  // after an answer rather than left showing whatever it managed to fetch before
+  // the gate closed.
+  useEffect(()=>{ load(); }, [token, refreshKey]);
+
+  async function add(e) {
+    e.preventDefault();
+    setSaving(true); setErr('');
+    try {
+      await apiFetch('/lcu/units', {method:'POST', token, body:{serial, note}});
+      setSerial(''); setNote(''); setAdding(false);
+      setToast(t.lcuAdded);
+      await load();
+    } catch(ex) { setErr(ex.message); }
+    finally { setSaving(false); }
+  }
+
+  async function answer(unitID, result) {
+    await apiFetch('/lcu/tests', {method:'POST', token, body:{results:[{unit_id:unitID, result}]}});
+    setToast(t.lcuRecorded);
+    await load();
+  }
+
+  async function remove(id) {
+    try {
+      await apiFetch(`/lcu/units/${id}`, {method:'DELETE', token});
+      setToast(t.lcuDeleted);
+      await load();
+    } catch(ex) { setErr(ex.message); }
+  }
+
+  return (
+    <div style={{maxWidth:900}}>
+      <div className="lcu-howto" style={{marginBottom:18}}>
+        {Ic.info}
+        <span>{t.lcuIntro}</span>
+      </div>
+
+      <div className="team-viewbar" style={{marginBottom:16}}>
+        <button className="btn btn-primary" onClick={()=>setAdding(a=>!a)}>
+          {Ic.plus} {t.lcuAddUnit}
+        </button>
+      </div>
+
+      {adding && (
+        <form onSubmit={add} className="admin-form" style={{marginBottom:20}}>
+          <div className="form-group">
+            <label>{t.lcuSerial}</label>
+            <input className="form-control" value={serial} maxLength={64} required autoFocus
+              placeholder={t.lcuSerialPlaceholder} onChange={e=>setSerial(e.target.value)}/>
+          </div>
+          <div className="form-group">
+            <label>{t.lcuNote}</label>
+            <input className="form-control" value={note} maxLength={200}
+              placeholder={t.lcuNotePlaceholder} onChange={e=>setNote(e.target.value)}/>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button type="button" className="btn btn-ghost" onClick={()=>setAdding(false)} disabled={saving}>
+              {t.cancel}
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving || !serial.trim()}>
+              {saving ? '…' : t.lcuStartTrial}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {err && <div className="auth-error" style={{marginBottom:16}}>{err}</div>}
+
+      {units === null && <div className="table-card"><div className="empty-state"><p>{t.analyticsLoading}</p></div></div>}
+
+      {units !== null && units.length === 0 && (
+        <div className="table-card">
+          <div className="empty-state">{Ic.server}<p>{t.lcuNone}</p></div>
+        </div>
+      )}
+
+      {units !== null && units.map(u=>(
+        <LCUUnitCard key={u.id} unit={u} today={today} t={t}
+          onAnswer={answer} onDelete={remove}/>
+      ))}
+    </div>
+  );
+}
+
+/*
+  The daily LCU prompt. This has no close button on purpose: a reader being
+  trialled is only judged on seven honest days, so a result has to be given
+  before the app is usable. The server refuses everything else until it is, so
+  this dialog is the way through rather than a decoration over a locked app --
+  the only way out of it is answering or logging out.
+*/
+function LCUPrompt({ units, token, onDone, onLogout }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  // One entry per unit, all of which must be answered before the form will send.
+  const [answers, setAnswers] = useState(() => Object.fromEntries(units.map(u=>[u.id, ''])));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const complete = units.every(u => answers[u.id]);
+
+  async function submit() {
+    setSaving(true); setErr('');
+    try {
+      await apiFetch('/lcu/tests', {method:'POST', token, body:{
+        results: units.map(u=>({unit_id:u.id, result:answers[u.id]})),
+      }});
+      onDone();
+    } catch(ex) {
+      setErr(ex.message);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" style={{zIndex:200}}>
+      <div className="modal" style={{maxWidth:480}} role="dialog" aria-modal="true" aria-label={t.lcuGateTitle}>
+        <div className="modal-header">
+          <h2>{t.lcuGateTitle}</h2>
+        </div>
+        <div className="modal-body lcu-gate-body">
+          <p style={{margin:0,fontSize:13,color:'var(--gray-600)'}}>{t.lcuGateBody}</p>
+
+          <div className="lcu-howto">
+            {Ic.info}
+            <span>{t.lcuHowToTest}</span>
+          </div>
+
+          {units.map(u=>(
+            <div key={u.id} className="lcu-gate-unit">
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:9}}>
+                <span className="lcu-serial">{u.serial}</span>
+                {u.note && <span className="lcu-meta">{u.note}</span>}
+              </div>
+              <div className="lcu-choice">
+                <button className={`lcu-choice-btn pass ${answers[u.id]==='pass'?'on':''}`}
+                  onClick={()=>setAnswers(a=>({...a,[u.id]:'pass'}))} disabled={saving}>
+                  <span className="lcu-bulb"/>{t.lcuPassed}
+                </button>
+                <button className={`lcu-choice-btn fail ${answers[u.id]==='fail'?'on':''}`}
+                  onClick={()=>setAnswers(a=>({...a,[u.id]:'fail'}))} disabled={saving}>
+                  <span className="lcu-bulb"/>{t.lcuFailed}
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {err && <div className="auth-error">{err}</div>}
+        </div>
+        <div className="modal-footer" style={{flexDirection:'column',alignItems:'stretch',gap:8}}>
+          <button className="btn btn-primary btn-full" disabled={!complete || saving} onClick={submit}>
+            {saving ? t.analyticsLoading : t.lcuRecordToday}
+          </button>
+          <div className="lcu-lockout">{t.lcuGateLocked}</div>
+          <button className="btn btn-ghost btn-full" onClick={onLogout} disabled={saving}>
+            {t.lcuGateLogOut}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ════════════════ REPORTS PAGE ════════════════ */
 function ReportsPage({ token }) {
   const lang = React.useContext(LangCtx);
@@ -5549,6 +6027,14 @@ function App() {
   );
   const [stats,   setStats]   = useState(null);
   const [page,    setPage]    = useState('dashboard');
+  // Collapsed by default: the sidebar looks unchanged until it is opened.
+  const [miscOpen, setMiscOpen] = useState(false);
+  // Non-null while this user owes an LCU result for today, which is also the
+  // condition under which the server refuses everything else.
+  const [lcuPrompt, setLcuPrompt] = useState(null);
+  // Bumped when the prompt closes, so an open LCU page re-reads its list: the
+  // fetch that would have refreshed it was itself refused while the gate was shut.
+  const [lcuEpoch, setLcuEpoch] = useState(0);
   const [modal,   setModal]   = useState(null);
   const [editing, setEditing] = useState(null);
   const [pending, setPending] = useState(null);   // issue awaiting delete confirmation
@@ -5571,11 +6057,44 @@ function App() {
   }, [theme]);
   useEffect(()=>{ saveLS('lira_session', session); }, [session]);
 
-  // Load all data when logged in
+  // Load all data when logged in.
+  //
+  // The LCU check goes first and on its own. A reader on trial owes a result for
+  // today, and until it is given the server refuses every other route -- so
+  // firing the whole batch would come back as a wall of 403s. Asking first means
+  // the prompt opens before any of that, and the app is simply not loaded until
+  // the answer is in.
   useEffect(() => {
-    if (!token) return;
+    if (!token) { setLcuPrompt(null); return; }
+    let cancelled = false;
+    apiFetch('/lcu/today', {token})
+      .then(res => {
+        if (cancelled) return;
+        if (res.required && res.units && res.units.length) {
+          setLcuPrompt({units: res.units, today: res.today});
+          return;
+        }
+        setLcuPrompt(null);
+        loadEverything();
+      })
+      .catch(ex => {
+        if (cancelled) return;
+        if (ex.lcuRequired) {
+          setLcuPrompt({units: ex.lcuUnits, today: ex.lcuToday});
+          return;
+        }
+        if (ex.message.includes('401') || ex.message.toLowerCase().includes('token')) {
+          setSession(null); // token expired
+        } else {
+          setApiErr(ex.message);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  function loadEverything() {
     const todayStr = new Date().toISOString().slice(0,10);
-    Promise.all([
+    return Promise.all([
       apiFetch('/issues?mode=apt', {token}),
       apiFetch('/issues?mode=dept', {token}),
       apiFetch('/users', {token}),
@@ -5598,13 +6117,17 @@ function App() {
       setAlerts(alertsRes.alerts || []);
       setConsumableItems(consumableItemsRes.consumable_items || []);
     }).catch(ex => {
-      if (ex.message.includes('401') || ex.message.toLowerCase().includes('token')) {
+      if (ex.lcuRequired) {
+        // The gate closed mid-session -- a unit was added, or the day rolled over
+        // while the tab sat open. Open the prompt rather than showing an error.
+        setLcuPrompt({units: ex.lcuUnits, today: ex.lcuToday});
+      } else if (ex.message.includes('401') || ex.message.toLowerCase().includes('token')) {
         setSession(null); // token expired
       } else {
         setApiErr(ex.message);
       }
     });
-  }, [token]);
+  }
 
   function login(user, token) {
     setSession({user, token});
@@ -5745,8 +6268,24 @@ function App() {
     {id:'reports',   label:'Reports',    icon:Ic.report},
     ...(me.role === 'manager' ? [{id:'system', label:t.systemStatus, icon:Ic.server}] : []),
     ...(me.role === 'manager' ? [{id:'admin', label:t.admin, icon:Ic.shield}] : []),
+    // A collapsible group rather than a destination: it only reveals its
+    // children, so it never takes the .active class itself.
+    {id:'misc', label:t.miscellaneous, icon:Ic.grid, group:true, children:[
+      {id:'lcu', label:t.lcuTesting, icon:Ic.server},
+    ]},
     {id:'profile',   label:'Profile',    icon:Ic.person},
   ];
+
+  // A group's children are not in the top-level list, so the topbar title has to
+  // look inside them as well or it would fall back to "Lcu".
+  const navLabel = id => {
+    for (const n of nav) {
+      if (n.id === id) return n.label;
+      const child = n.children && n.children.find(c => c.id === id);
+      if (child) return child.label;
+    }
+    return id.charAt(0).toUpperCase() + id.slice(1);
+  };
 
   return (
     <LangCtx.Provider value={lang}>
@@ -5759,7 +6298,28 @@ function App() {
           </div>
           <div className="sidebar-section">
             <div className="sidebar-section-label">{t.menu}</div>
-            {nav.map(n=>(
+            {nav.map(n=> n.group ? (
+              <div key={n.id}>
+                <button
+                  className={`nav-item nav-group-toggle ${miscOpen?'open':''} ${n.children.some(c=>c.id===page)?'contains-active':''}`}
+                  onClick={()=>setMiscOpen(o=>!o)}
+                  aria-expanded={miscOpen}>
+                  <span className="nav-group-chevron">{Ic.chevron}</span>
+                  {n.icon}
+                  <span>{n.label}</span>
+                </button>
+                {miscOpen && (
+                  <div className="nav-group-children">
+                    {n.children.map(c=>(
+                      <button key={c.id} className={`nav-item nav-item-child ${page===c.id?'active':''}`} onClick={()=>setPage(c.id)}>
+                        {c.icon}
+                        <span>{c.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
               <button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>setPage(n.id)}>
                 {n.id==='alerts' && alertsPendingCount > 0 ? (
                   <span className="nav-icon-wrap">
@@ -5786,13 +6346,13 @@ function App() {
         <div className="main">
           <div className="topbar">
             <div className="topbar-left">
-              <h1>{nav.find(n=>n.id===page)?.label || page.charAt(0).toUpperCase() + page.slice(1)}</h1>
+              <h1>{navLabel(page)}</h1>
               <p>{today(lang)}</p>
             </div>
             <div className="topbar-right">
               <ThemeToggle theme={theme} onChange={setTheme}/>
               <LangToggle lang={lang} onChange={setLang}/>
-              {page !== 'profile' && page !== 'reports' && page !== 'admin' && <>
+              {page !== 'profile' && page !== 'reports' && page !== 'admin' && page !== 'lcu' && <>
                 <button className="btn btn-ghost" onClick={()=>setModal('dept')}>{Ic.plus} {t.deptIssueBtn}</button>
                 <button className="btn btn-primary" onClick={()=>setModal('apt')}>{Ic.plus} {t.aptIssueBtn}</button>
               </>}
@@ -5822,6 +6382,10 @@ function App() {
             {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}
               token={token} onUsersUpdate={setUsers} setToast={setToast}/>}
             {page==='reports' && <ReportsPage token={token}/>}
+            {/* LCU testing — a card reader on trial for a week. */}
+            {page==='lcu'     && <LCUPage token={token} setToast={setToast}
+              refreshKey={lcuEpoch}
+              onLcuRequired={ex=>setLcuPrompt({units:ex.lcuUnits, today:ex.lcuToday})}/>}
             {page==='system' && me.role==='manager' && <SystemStatusPage token={token}/>}
             {page==='admin' && me.role==='manager' && <AdminPage
               token={token}
@@ -5852,6 +6416,11 @@ function App() {
 
         {modal && (
           <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)}/>
+        )}
+        {lcuPrompt && (
+          <LCUPrompt units={lcuPrompt.units} token={token}
+            onDone={()=>{ setLcuPrompt(null); setLcuEpoch(e=>e+1); loadEverything(); }}
+            onLogout={logout}/>
         )}
         {editing && (
           <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token}

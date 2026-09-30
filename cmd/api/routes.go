@@ -125,5 +125,20 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodGet, "/v1/reports/consumables/weekly", app.requireAuth(app.weeklyConsumablesReportHandler))
 	router.HandlerFunc(http.MethodGet, "/v1/reports/consumables/weekly.pdf", app.requireAuth(app.weeklyConsumablesPDFHandler))
 
-	return app.recoverPanic(app.enableCORS(app.rateLimit(app.authenticate(router))))
+	// LCU testing — a failed door card reader is trialled for a week before it is
+	// scrapped. /v1/lcu/today is what the frontend asks on load, and the
+	// gate-exempt pair here is what the daily prompt needs to do its job.
+	router.HandlerFunc(http.MethodGet, "/v1/lcu/today", app.requireAuth(app.lcuTodayHandler))
+	router.HandlerFunc(http.MethodPost, "/v1/lcu/tests", app.requireAuth(app.recordLCUTestsHandler))
+	// Units: any authenticated user may start one for themselves; reading and
+	// answering is the owner's or a manager's, checked per unit in the handlers.
+	router.HandlerFunc(http.MethodGet, "/v1/lcu/units", app.requireAuth(app.listLCUUnitsHandler))
+	router.HandlerFunc(http.MethodPost, "/v1/lcu/units", app.requireAuth(app.createLCUUnitHandler))
+	router.HandlerFunc(http.MethodGet, "/v1/lcu/units/:id", app.requireAuth(app.getLCUUnitHandler))
+	router.HandlerFunc(http.MethodDelete, "/v1/lcu/units/:id", app.requireAuth(app.deleteLCUUnitHandler))
+
+	// lcuGate sits inside authenticate because it needs the resolved user, and
+	// outside the router so it covers every route rather than the ones someone
+	// remembered to wrap.
+	return app.recoverPanic(app.enableCORS(app.rateLimit(app.authenticate(app.lcuGate(router)))))
 }
