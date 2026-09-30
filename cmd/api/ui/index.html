@@ -3652,14 +3652,6 @@ function AnalyticsPage({ token, alertsPendingCount }) {
 }
 
 /* ════════════════ CONSUMABLES PAGE ════════════════ */
-<<<<<<< HEAD
-/*
-  Two views over the same data. "Log" is the running list of every recorded
-  use, filterable by date. "Weekly report" is the Monday-to-Sunday roll-up —
-  what was used, where, on which issue and by whom — with a PDF download.
-*/
-function ConsumablesPage({ token }) {
-=======
 /* Lets a manager put stock in, take it out, or correct it to a counted figure.
    The resulting count is previewed live, and a removal that would overdraw the
    item is pointed out before saving — the server allows a negative count, but
@@ -3738,8 +3730,13 @@ function StockAdjustDialog({ item, onCancel, onSave, saving, t }) {
   );
 }
 
-function ConsumablesPage({ token, currentUser, onCatalogUpdate }) {
->>>>>>> 1e2c89cd15b3d1b3b84cd2431c0873c681f248c1
+/*
+  Two views over the same data. "Log" is the running list of every recorded
+  use, filterable by date, together with what is in stock right now. "Weekly
+  report" is the Monday-to-Sunday roll-up — what was used, where, on which
+  issue and by whom — with a PDF download.
+*/
+function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const todayStr = localISODate(new Date());
@@ -3984,6 +3981,11 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate }) {
             {Ic.report}{t.weeklyConsumables}
           </button>
         </div>
+      </div>
+
+      {view==='log' && (
+        <>
+
       {/* ── Inventory: what is in stock right now ── */}
       <div className="table-card" style={{marginBottom:16}}>
         <div className="table-header">
@@ -4110,18 +4112,6 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate }) {
         )}
       </div>
 
-      {/* ── Usage log ── */}
-      <div className="table-card" style={{marginBottom:16,padding:'14px 20px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
-        <p style={{fontSize:13,color:'var(--gray-400)',margin:0,flex:1,minWidth:200}}>{t.consumablesSubtitle}</p>
-        <input type="date" className="form-control" style={{width:'auto'}} value={date} max={todayStr}
-          onChange={e=>setDate(e.target.value)} />
-        <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate(todayStr)}>{t.historyToday}</button>
-        <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate('')}>{t.historyAllDates}</button>
->>>>>>> 1e2c89cd15b3d1b3b84cd2431c0873c681f248c1
-      </div>
-
-      {view==='log' && (
-        <>
           <div className="table-card" style={{marginBottom:16,padding:'14px 20px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
             <p style={{fontSize:13,color:'var(--gray-400)',margin:0,flex:1,minWidth:200}}>{t.consumablesSubtitle}</p>
             <input type="date" className="form-control" style={{width:'auto'}} value={date} max={todayStr}
@@ -5827,7 +5817,7 @@ function App() {
             {page==='history'   && <HistoryPage apt={apt} dept={dept} currentUser={me} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='alerts'    && <AlertsPage alerts={alerts} currentUser={me} token={token} onAlertsUpdate={setAlerts} setToast={setToast}/>}
             {page==='analytics' && <AnalyticsPage token={token} alertsPendingCount={alertsPendingCount}/>}
-            {page==='consumables' && <ConsumablesPage token={token} currentUser={me} onCatalogUpdate={setConsumableItems}/>}
+            {page==='consumables' && <ConsumablesPage token={token} currentUser={me} onCatalogUpdate={setConsumableItems} setToast={setToast}/>}
             {page==='support' && <SupportPage token={token}/>}
             {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}
               token={token} onUsersUpdate={setUsers} setToast={setToast}/>}
