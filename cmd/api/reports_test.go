@@ -10,6 +10,66 @@ import (
 	"github.com/HalefS/lira/internal/report"
 )
 
+// A malformed week anchor is refused before any query runs, so it can be
+// exercised without a database.
+func TestWeeklyConsumablesRejectsMalformedWeek(t *testing.T) {
+	app := &application{}
+
+	for _, endpoint := range []string{
+		"/v1/reports/consumables/weekly?week=nope",
+		"/v1/reports/consumables/weekly.pdf?week=2026-13-45",
+	} {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, endpoint, nil)
+
+		switch {
+		case strings.HasSuffix(endpoint, ".pdf?week=2026-13-45"):
+			app.weeklyConsumablesPDFHandler(w, r)
+		default:
+			app.weeklyConsumablesReportHandler(w, r)
+		}
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want %d", endpoint, w.Code, http.StatusBadRequest)
+		}
+		if !strings.Contains(w.Body.String(), "YYYY-MM-DD") {
+			t.Errorf("%s: body = %q, want it to name the expected date format", endpoint, w.Body.String())
+		}
+	}
+}
+
+// A missing browser disables the PDF endpoint but not the JSON one, and
+// neither should be a 500.
+func TestWeeklyConsumablesPDFReportsMissingBrowser(t *testing.T) {
+	app := &application{browserErr: report.ErrNoBrowser}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/reports/consumables/weekly.pdf?week=2026-09-26", nil)
+	app.weeklyConsumablesPDFHandler(w, r)
+
+	if w.Code != http.StatusNotImplemented {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+	}
+	if !strings.Contains(w.Body.String(), "chromium") {
+		t.Errorf("body = %q, want it to explain that no browser was found", w.Body.String())
+	}
+}
+
+// An absent anchor means the current week rather than an error.
+func TestReportWeekAnchorDefaultsToNow(t *testing.T) {
+	app := &application{}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/reports/consumables/weekly", nil)
+
+	anchor, ok := app.reportWeekAnchor(w, r)
+	if !ok {
+		t.Fatal("an absent week anchor should be accepted")
+	}
+	if anchor.IsZero() {
+		t.Error("anchor should default to now, not the zero time")
+	}
+}
+
 func TestDateParamPattern(t *testing.T) {
 	valid := []string{"2026-09-26", "2026-01-01", "1999-12-31"}
 	invalid := []string{"", "26-09-2026", "2026/09/26", "2026-9-26", "yesterday", "2026-09-26; DROP TABLE issues"}

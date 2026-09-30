@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -195,6 +196,37 @@ func (b *Browser) Render(ctx context.Context, html string) ([]byte, error) {
 
 // lastLine trims a browser's multi-line diagnostics down to something worth
 // putting in an error message.
+//
+// The measured reason the footer band is not offset vertically, recorded here
+// because it is invisible in the source and expensive to rediscover. Rendering
+// a short document through Chromium and counting pages gave:
+//
+//	position: fixed; bottom: -16mm; left/right: -12mm   -> 2 pages
+//	position: fixed; bottom: 0;      left/right: 0        -> 1 page
+//	position: fixed; bottom: 0;      left/right: -12mm     -> 1 page
+//	position: fixed; bottom: -16mm; left/right: 0        -> 2 pages
+//	position: absolute; bottom: -16mm                     -> 2 pages
+//
+// So it is specifically the element extending *below* the content box that grows
+// the paginated area, not the full-bleed width and not position:fixed itself.
+// The header's upward offset (top: -26mm) causes no extra page.
+// pageCount reports how many pages a rendered PDF has, by counting its page
+// objects. It exists so a caller (and the tests) can assert that a short report
+// does not silently gain a blank extra page -- a failure mode that is invisible
+// in the returned bytes but obvious on paper.
+//
+// This is not a general-purpose PDF parser; it only has to read what Chromium
+// emits, where the page tree is not stored in a compressed object stream.
+func pageCount(pdf []byte) int {
+	// Matches "/Type /Page" but not the single "/Type /Pages" root. The
+	// terminator is a lookahead written as a consuming group, because RE2 has
+	// no negative lookahead -- and requiring a *following character* (rather
+	// than allowing end-of-input) would silently miss a page object that ends
+	// the object body.
+	re := regexp.MustCompile(`/Type\s*/Page(\s|/|>>|$)`)
+	return len(re.FindAll(pdf, -1))
+}
+
 func lastLine(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {

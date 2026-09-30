@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>LIRA Weekly Consumables Report — {{.RangeLabel}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+{{BASE_CSS}}
+
+/* Consumables-report-specific rules. Everything shared lives in base.css. */
+
+/* The quantity column reads as a number, not as text. */
+.qty-cell {
+  font-family: 'DM Mono', ui-monospace, Consolas, monospace;
+  font-weight: 500; text-align: right; white-space: nowrap;
+}
+/* A "×4" chip, so the unit count is scannable down the column. */
+.qty-chip {
+  display: inline-block; min-width: 9mm; text-align: center;
+  padding: 0.4mm 1.4mm; border-radius: 1mm;
+  background: var(--blue-lt); color: var(--blue);
+  font-family: 'DM Mono', ui-monospace, Consolas, monospace;
+  font-size: 7.5pt; font-weight: 600;
+}
+/* Apartments are what most of this report is about, so the location is set in
+   the monospace face the app uses for apartment numbers. */
+.loc-cell {
+  font-family: 'DM Mono', ui-monospace, Consolas, monospace;
+  font-weight: 500;
+}
+.loc-cell.dept { font-family: 'DM Sans', sans-serif; }
+</style>
+</head>
+<body>
+
+<div class="band-top">
+  <div class="logo-mark">L</div>
+  <div style="margin-left:3.5mm">
+    <div class="title">Consumables Report</div>
+    <div class="subtitle">LIRA — Llana IT Reporting &amp; Alerts</div>
+  </div>
+  <div class="right" style="margin-left:auto">
+    <div class="date">{{.RangeLabel}}</div>
+    <div class="gen">Week of {{.FromDate}} · Generated {{.GeneratedAt}}</div>
+  </div>
+</div>
+
+<div class="band-bottom">
+  <span>LIRA — Llana IT Reporting &amp; Alerts</span>
+  <span>Consumables {{.FromDate}} to {{.ToDate}}</span>
+</div>
+
+<div class="sheet">
+
+  {{if .Empty}}
+    <div class="empty">
+      No consumables were recorded between {{.FromDate}} and {{.ToDate}}.
+    </div>
+  {{else}}
+
+  <div class="section">
+    <h2>Week at a glance</h2>
+    <div class="cards cards-4">
+      {{range .Stats}}
+      <div class="card" style="--accent:{{.Color}}">
+        <div class="label">{{.Label}}</div>
+        <div class="value">{{.Value}}</div>
+        <div class="sub">{{.Sub}}</div>
+      </div>
+      {{end}}
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Usage by day</h2>
+    <div class="daychart">
+      {{range .Days}}
+      <div class="daycol{{if .Empty}} empty{{end}}">
+        <div class="qty">{{.Quantity}}</div>
+        <div class="track"><div class="fill" style="height:{{.Height}}%"></div></div>
+        <div class="day">{{.Label}}</div>
+        <div class="dow">{{.Weekday}}</div>
+      </div>
+      {{end}}
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Breakdown</h2>
+    <div class="breakdowns breakdowns-3">
+
+      <div>
+        <h2>By item</h2>
+        {{if .Items}}
+          {{range .Items}}
+          <div class="bar-row">
+            <div class="bar-label">
+              <span class="cicon sm tone-{{citone .Icon}}">{{cicon .Icon}}</span>{{.Item}}
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width:{{.Pct}}%;background:var(--blue)"></div></div>
+            <div class="bar-count">{{.Quantity}}</div>
+          </div>
+          {{end}}
+        {{else}}
+          <div class="bar-more">Nothing used.</div>
+        {{end}}
+      </div>
+
+      <div>
+        <h2>By location</h2>
+        {{if .Location}}
+          {{range .Location}}
+          <div class="bar-row">
+            <div class="bar-label">{{.Location}}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:{{.Pct}}%;background:var(--teal)"></div></div>
+            <div class="bar-count">{{.Quantity}}</div>
+          </div>
+          {{end}}
+        {{else}}
+          <div class="bar-more">Nothing used.</div>
+        {{end}}
+      </div>
+
+      <div>
+        <h2>By technician</h2>
+        {{if .Techs}}
+          {{range .Techs}}
+          <div class="bar-row">
+            <div class="bar-label">
+              <span class="avatar-circle" style="background:{{.AvatarBG}};color:{{.AvatarFG}}">{{.Initials}}</span>{{.Name}}
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width:{{.Pct}}%;background:var(--green)"></div></div>
+            <div class="bar-count">{{.Quantity}}</div>
+          </div>
+          {{end}}
+        {{else}}
+          <div class="bar-more">Nothing used.</div>
+        {{end}}
+      </div>
+
+    </div>
+  </div>
+
+  {{if .AptEntries}}
+  <div class="section">
+    <h2>Apartment usage <span class="count">({{len .AptEntries}})</span></h2>
+    <table>
+      <colgroup>
+        <col style="width:11%" /><col style="width:20%" /><col style="width:7%" />
+        <col style="width:14%" /><col style="width:11%" /><col style="width:22%" />
+        <col style="width:15%" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>When</th><th>Item</th><th>Qty</th><th>Apt.</th>
+          <th>Issue type</th><th>Issue</th><th>Technician</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .AptEntries}}
+        <tr>
+          <td class="cell-time">{{.Date}}<br>{{.Time}}</td>
+          <td>
+            <div class="item-cell">
+              <span class="cicon sm tone-{{citone .Icon}}">{{cicon .Icon}}</span>
+              <span>{{.Item}}</span>
+            </div>
+          </td>
+          <td class="qty-cell"><span class="qty-chip">&times;{{.Quantity}}</span></td>
+          <td class="loc-cell">{{.Location}}</td>
+          <td><span class="pill" style="background:var(--blue-lt);color:var(--blue)">{{.IssueType}}</span></td>
+          <td class="cell-muted">#{{.IssueID}} {{.Problem}}</td>
+          <td>
+            <div class="cell-tech">
+              <span class="avatar-circle" style="background:{{.AvatarBG}};color:{{.AvatarFG}}">{{.Initials}}</span>
+              <span>{{.Tech}}</span>
+            </div>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+
+  {{if .DeptEntries}}
+  <div class="section">
+    <h2>Department usage <span class="count">({{len .DeptEntries}})</span></h2>
+    <table>
+      <colgroup>
+        <col style="width:11%" /><col style="width:20%" /><col style="width:7%" />
+        <col style="width:15%" /><col style="width:11%" /><col style="width:21%" />
+        <col style="width:15%" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>When</th><th>Item</th><th>Qty</th><th>Dept.</th>
+          <th>Issue type</th><th>Issue</th><th>Technician</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .DeptEntries}}
+        <tr>
+          <td class="cell-time">{{.Date}}<br>{{.Time}}</td>
+          <td>
+            <div class="item-cell">
+              <span class="cicon sm tone-{{citone .Icon}}">{{cicon .Icon}}</span>
+              <span>{{.Item}}</span>
+            </div>
+          </td>
+          <td class="qty-cell"><span class="qty-chip">&times;{{.Quantity}}</span></td>
+          <td class="loc-cell dept">{{.Location}}</td>
+          <td><span class="pill" style="background:var(--teal-lt);color:var(--teal)">{{.IssueType}}</span></td>
+          <td class="cell-muted">#{{.IssueID}} {{.Problem}}</td>
+          <td>
+            <div class="cell-tech">
+              <span class="avatar-circle" style="background:{{.AvatarBG}};color:{{.AvatarFG}}">{{.Initials}}</span>
+              <span>{{.Tech}}</span>
+            </div>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+
+  {{end}}
+</div>
+
+</body>
+</html>

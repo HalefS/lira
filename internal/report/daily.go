@@ -20,10 +20,50 @@ import (
 	"github.com/HalefS/lira/internal/data"
 )
 
-//go:embed templates/daily.html
+//go:embed templates/base.css templates/consumables.html templates/daily.html
 var templateFS embed.FS
 
-var dailyTemplate = template.Must(template.ParseFS(templateFS, "templates/daily.html"))
+// baseCSSMarker is where each report template puts its shared stylesheet.
+//
+// It is deliberately NOT a Go template action. Injecting the CSS as {{.CSS}}
+// drops html/template's escaper into a CSS context it cannot later resolve, and
+// every `style="background:{{.Color}}"` in the document then fails to parse
+// with "appears in an ambiguous context within a URL". Substituting the text
+// into the template *source* before parsing keeps the escaper's view of the
+// document identical to a hand-written one, and keeps the shared stylesheet in
+// a single file so the two reports cannot drift apart.
+const baseCSSMarker = "{{BASE_CSS}}"
+
+// templateFuncs are the helpers the templates call. cicon/citone resolve a
+// consumable icon key to its drawing and colour family.
+var templateFuncs = template.FuncMap{
+	"cicon":  func(key string) template.HTML { svg, _ := consumableIconFor(key); return svg },
+	"citone": func(key string) string { _, tone := consumableIconFor(key); return tone },
+}
+
+var (
+	dailyTemplate       = mustLoadTemplate("templates/daily.html")
+	consumablesTemplate = mustLoadTemplate("templates/consumables.html")
+)
+
+func mustLoadTemplate(name string) *template.Template {
+	src := mustReadTemplate(name)
+	if !strings.Contains(src, baseCSSMarker) {
+		panic("report: " + name + " is missing the " + baseCSSMarker + " placeholder")
+	}
+	src = strings.ReplaceAll(src, baseCSSMarker, mustReadTemplate("templates/base.css"))
+	return template.Must(template.New(name).Funcs(templateFuncs).Parse(src))
+}
+
+func mustReadTemplate(name string) string {
+	b, err := templateFS.ReadFile(name)
+	if err != nil {
+		// The file is embedded at compile time, so a failure here means the
+		// build itself is broken rather than anything a caller can handle.
+		panic("report: reading embedded template " + name + ": " + err.Error())
+	}
+	return string(b)
+}
 
 // The application's light-theme palette (the CSS custom properties in the UI's
 // :root block). Declared here so the printed report is generated from the same

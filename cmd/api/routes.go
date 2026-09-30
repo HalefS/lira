@@ -112,6 +112,10 @@ func (app *application) routes() http.Handler {
 	// endpoint rather than nested under it, so the ".pdf" suffix stays part of
 	// the path instead of colliding with the wildcard-free route above.
 	router.HandlerFunc(http.MethodGet, "/v1/reports/daily.pdf", app.requireAuth(app.dailyReportPDFHandler))
+	// Weekly consumables report, JSON and printable. Readable by any
+	// authenticated user, like the daily report.
+	router.HandlerFunc(http.MethodGet, "/v1/reports/consumables/weekly", app.requireAuth(app.weeklyConsumablesReportHandler))
+	router.HandlerFunc(http.MethodGet, "/v1/reports/consumables/weekly.pdf", app.requireAuth(app.weeklyConsumablesPDFHandler))
 
 	return app.recoverPanic(app.enableCORS(app.rateLimit(app.authenticate(router))))
 }

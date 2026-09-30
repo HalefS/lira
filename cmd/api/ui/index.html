@@ -424,6 +424,52 @@ html.dark .team-segmented button.active { background: var(--gray-50); }
    svg to hundreds of pixels. */
 .team-segmented button svg { width: 14px; height: 14px; flex-shrink: 0; }
 
+/* ── Weekly consumables report ────────────────────────────────────────── */
+
+.week-nav { display: flex; align-items: center; gap: 8px; }
+.week-nav .label {
+  font-size: 13px; color: var(--gray-600); font-weight: 500;
+  min-width: 150px; text-align: center;
+}
+.week-nav button {
+  border: 1px solid var(--gray-200); background: #fff; cursor: pointer;
+  border-radius: var(--radius-md); padding: 6px 10px;
+  display: flex; align-items: center; color: var(--gray-600);
+}
+.week-nav button:hover:not(:disabled) { background: var(--gray-100); color: var(--gray-900); }
+.week-nav button:disabled { opacity: 0.4; cursor: default; }
+.week-nav button svg { width: 14px; height: 14px; flex-shrink: 0; }
+html.dark .week-nav button { background: var(--gray-50); }
+
+/* Per-day usage. Bars grow from a fixed baseline and are floored so a day with
+   a single unit is still visible. */
+.daychart {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: 10px; align-items: end; height: 130px;
+}
+.daycol { display: flex; flex-direction: column; align-items: center; height: 100%; }
+.daycol .qty { font-size: 12px; font-weight: 600; color: var(--gray-600); margin-bottom: 4px; }
+.daycol .track {
+  flex: 1; width: 100%; display: flex; align-items: flex-end;
+  background: var(--gray-100); border-radius: var(--radius-sm); overflow: hidden;
+}
+.daycol .fill { width: 100%; background: var(--blue); border-radius: var(--radius-sm); min-height: 2px; }
+.daycol.empty .fill { background: var(--gray-300); }
+.daycol .dow { font-size: 10px; color: var(--gray-400); margin-top: 6px; text-transform: uppercase; }
+.daycol .dom { font-size: 10px; color: var(--gray-300); }
+
+.week-breakdowns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+.week-bar-row { display: grid; grid-template-columns: 1fr 90px 34px; align-items: center; gap: 8px; padding: 5px 0; }
+.week-bar-label {
+  display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--gray-600);
+  min-width: 0;
+}
+.week-bar-label > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.week-bar-track { height: 7px; background: var(--gray-100); border-radius: 4px; overflow: hidden; }
+.week-bar-fill { height: 100%; border-radius: 4px; }
+.week-bar-count { font-size: 13px; font-weight: 600; text-align: right; }
+.week-none { font-size: 13px; color: var(--gray-400); }
+
 /* ── Modal ── */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(28,28,26,0.45);
@@ -882,6 +928,15 @@ async function apiFetch(path, { method='GET', body, token } = {}) {
 function today(lang) {
   return new Date().toLocaleDateString(lang==='pt' ? 'pt-PT' : 'en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
 }
+/* Format a Date as YYYY-MM-DD in the *local* calendar.
+   Date.prototype.toISOString() is UTC, so for a Date built at local midnight it
+   returns the previous day anywhere east of Greenwich — at Europe/Lisbon in
+   summer (+01:00) '2026-10-05T00:00:00' formats as '2026-10-04'. That silently
+   moved the week selector: clicking "next week" on a Monday sent the previous
+   Sunday, the server resolved the same week, and the button appeared dead. */
+function localISODate(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 function initials(name) {
   return name.trim().split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase();
 }
@@ -1189,6 +1244,30 @@ const T = {
     teamMembers: 'Team members',
     makeManager: 'Make manager',
     makeTechnician: 'Make technician',
+    // Weekly consumables report
+    weeklyConsumables: 'Weekly report',
+    consumablesLog: 'Log',
+    thisWeek: 'This week',
+    prevWeek: 'Previous week',
+    nextWeek: 'Next week',
+    weekOf: 'Week of',
+    weekTotalUnits: 'units used',
+    weekTotalRecords: 'logged entries',
+    weekDistinctItems: 'distinct items',
+    weekLocations: 'locations',
+    byItem: 'By item',
+    byLocation: 'By location',
+    byTechnician: 'By technician',
+    usageByDay: 'Usage by day',
+    weekAtAGlance: 'Week at a glance',
+    apartmentUsage: 'Apartment usage',
+    departmentUsage: 'Department usage',
+    issueType: 'Issue type',
+    qty: 'Qty',
+    records: 'records',
+    downloadWeeklyPdf: 'Download PDF',
+    generatingPdf: 'Generating…',
+    nothingUsedThisWeek: 'No consumables were recorded this week.',
     signInBtn: 'Sign in',
     createBtn: 'Create account',
     noAccount: "Don't have an account?",
@@ -1494,6 +1573,30 @@ const T = {
     teamMembers: 'Membros da equipa',
     makeManager: 'Tornar gestor',
     makeTechnician: 'Tornar técnico',
+    // Relatório semanal de consumíveis
+    weeklyConsumables: 'Relatório semanal',
+    consumablesLog: 'Registo',
+    thisWeek: 'Esta semana',
+    prevWeek: 'Semana anterior',
+    nextWeek: 'Semana seguinte',
+    weekOf: 'Semana de',
+    weekTotalUnits: 'unidades usadas',
+    weekTotalRecords: 'registos',
+    weekDistinctItems: 'itens distintos',
+    weekLocations: 'localizações',
+    byItem: 'Por item',
+    byLocation: 'Por localização',
+    byTechnician: 'Por técnico',
+    usageByDay: 'Uso por dia',
+    weekAtAGlance: 'Semana em resumo',
+    apartmentUsage: 'Uso em apartamentos',
+    departmentUsage: 'Uso em departamentos',
+    issueType: 'Tipo de avaria',
+    qty: 'Qtd',
+    records: 'registos',
+    downloadWeeklyPdf: 'Descarregar PDF',
+    generatingPdf: 'A gerar…',
+    nothingUsedThisWeek: 'Não foram registados consumíveis esta semana.',
     signInBtn: 'Iniciar sessão',
     createBtn: 'Criar conta',
     demoAccounts: 'Contas de demonstração',
@@ -3402,16 +3505,25 @@ function AnalyticsPage({ token, alertsPendingCount }) {
 }
 
 /* ════════════════ CONSUMABLES PAGE ════════════════ */
+/*
+  Two views over the same data. "Log" is the running list of every recorded
+  use, filterable by date. "Weekly report" is the Monday-to-Sunday roll-up —
+  what was used, where, on which issue and by whom — with a PDF download.
+*/
 function ConsumablesPage({ token }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = localISODate(new Date());
+  const [view, setView] = useState('log');
+
+  // ── Log view ──
   const [date, setDate] = useState('');
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (view !== 'log') return;
     let cancelled = false;
     setLoading(true);
     const qs = date ? `?date=${date}` : '';
@@ -3424,60 +3536,329 @@ function ConsumablesPage({ token }) {
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [date, token]);
+  }, [date, token, view]);
+
+  // ── Weekly report view ──
+  // anchor is any day inside the week being shown; the server expands it to the
+  // Monday-to-Sunday window and reports the range back.
+  const [anchor, setAnchor] = useState(todayStr);
+  const [report, setReport] = useState(null);
+  const [rLoading, setRLoading] = useState(false);
+  const [rError, setRError] = useState('');
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    if (view !== 'report') return;
+    let cancelled = false;
+    setRLoading(true); setRError('');
+    apiFetch(`/reports/consumables/weekly?week=${anchor}`, {token})
+      .then(res => { if (!cancelled) setReport(res.report || null); })
+      .catch(ex => { if (!cancelled) setRError(ex.message); })
+      .finally(() => { if (!cancelled) setRLoading(false); });
+    return () => { cancelled = true; };
+  }, [anchor, token, view]);
+
+  function shiftWeek(days) {
+    const d = new Date(anchor + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    setAnchor(localISODate(d));
+  }
+
+  // Downloading goes through fetch rather than a plain link so the
+  // Authorization header reaches the endpoint.
+  async function downloadWeeklyPDF() {
+    if (!report || downloading) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(`${API}/reports/consumables/weekly.pdf?week=${anchor}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        let msg = 'Could not generate the PDF';
+        try {
+          const body = await res.json();
+          if (body.error) msg = typeof body.error === 'string' ? body.error : Object.values(body.error).join(', ');
+        } catch {}
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `LIRA-Consumables-Week-${report.from_date}-to-${report.to_date}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (ex) {
+      setRError('Error: ' + ex.message);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  // A bar never reads as zero-width, so a day with one unit is still a day.
+  const dayMax = report ? Math.max(1, ...(report.by_day || []).map(d => d.quantity)) : 1;
+  // One bar per day of the week, so a quiet day shows as quiet rather than
+  // simply missing.
+  const dayCells = report ? (() => {
+    const byDate = new Map((report.by_day || []).map(d => [d.date, d.quantity]));
+    const out = [];
+    const start = new Date(report.from_date + 'T00:00:00');
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start.getTime() + i * 86400000);
+      const key = localISODate(d);
+      const qty = byDate.get(key) || 0;
+      out.push({
+        key, qty,
+        dow: d.toLocaleDateString(lang === 'pt' ? 'pt-PT' : 'en-GB', { weekday: 'short' }),
+        dom: d.getDate(),
+        height: qty === 0 ? 2 : Math.max(6, (qty / dayMax) * 100),
+      });
+    }
+    return out;
+  })() : [];
+
+  const itemMax    = report ? Math.max(1, ...(report.by_item || []).map(x => x.quantity)) : 1;
+  const locMax     = report ? Math.max(1, ...(report.by_location || []).map(x => x.quantity)) : 1;
+  const techMax    = report ? Math.max(1, ...(report.by_technician || []).map(x => x.quantity)) : 1;
+  const aptRows    = report ? (report.entries || []).filter(e => e.mode === 'apt') : [];
+  const deptRows   = report ? (report.entries || []).filter(e => e.mode !== 'apt') : [];
+
+  const statCards = report ? [
+    { label: t.item + 's',       value: report.total_quantity, sub: t.weekTotalUnits,   color: '#1769AA' },
+    { label: t.records,          value: report.total_records,  sub: t.weekTotalRecords, color: '#1D9E75' },
+    { label: t.weekDistinctItems,value: report.distinct_items, sub: t.byItem,           color: '#2E8B57' },
+    { label: t.weekLocations,    value: report.locations_count,sub: t.byLocation,       color: '#D88A18' },
+  ] : [];
+
+  function EntryTable({ rows, locationHeader }) {
+    if (!rows.length) return null;
+    return (
+      <div className="table-card" style={{marginBottom:20}}>
+        <div className="table-header">
+          <span className="table-title">{locationHeader} <span style={{fontSize:12,color:'var(--gray-400)',fontWeight:400}}>({rows.length})</span></span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>{t.date}</th><th>{t.item}</th><th>{t.qty}</th>
+              <th>{t.location}</th><th>{t.issueType}</th><th>{t.issues}</th><th>{t.loggedBy}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(c=>(
+              <tr key={c.id}>
+                <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>
+                  {new Date(c.created_at).toLocaleDateString(lang==='pt'?'pt-PT':'en-GB',{day:'2-digit',month:'short'})}
+                  {' '}{new Date(c.created_at).toLocaleTimeString(lang==='pt'?'pt-PT':'en-GB',{hour:'2-digit',minute:'2-digit'})}
+                </td>
+                <td>
+                  <div style={{display:'flex',alignItems:'center',gap:9}}>
+                    <ConsumableIcon name={c.icon} size={26}/>
+                    <span style={{fontWeight:500}}>{c.item}</span>
+                  </div>
+                </td>
+                <td style={{fontFamily:'DM Mono,monospace',fontSize:13,textAlign:'right'}}>×{c.quantity}</td>
+                <td style={{fontFamily: c.mode==='apt' ? 'DM Mono,monospace' : 'DM Sans,sans-serif', fontSize:13}}>{c.location}</td>
+                <td><TypeBadge type={c.issue_type}/></td>
+                <td style={{fontSize:12,color:'var(--gray-600)',maxWidth:220}}>
+                  <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={c.issue_problem}>
+                    #{c.issue_id} {c.issue_problem}
+                  </div>
+                </td>
+                <td>
+                  <div style={{display:'flex',alignItems:'center',gap:7}}>
+                    <Avatar name={c.logged_by_name} idx={c.logged_by_idx||0} size="sm"/>
+                    <span style={{fontSize:13,color:'var(--gray-600)'}}>{c.logged_by_name}</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <div className="table-card" style={{marginBottom:16,padding:'14px 20px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
-        <p style={{fontSize:13,color:'var(--gray-400)',margin:0,flex:1,minWidth:200}}>{t.consumablesSubtitle}</p>
-        <input type="date" className="form-control" style={{width:'auto'}} value={date} max={todayStr}
-          onChange={e=>setDate(e.target.value)} />
-        <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate(todayStr)}>{t.historyToday}</button>
-        <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate('')}>{t.historyAllDates}</button>
+      <div className="team-viewbar" style={{marginBottom:16}}>
+        <div className="team-segmented">
+          <button className={view==='log'?'active':''} onClick={()=>setView('log')}>
+            {Ic.list}{t.consumablesLog}
+          </button>
+          <button className={view==='report'?'active':''} onClick={()=>setView('report')}>
+            {Ic.report}{t.weeklyConsumables}
+          </button>
+        </div>
       </div>
 
-      {summary.length > 0 && (
-        <div className="analytics-grid">
-          {summary.map(s=>(
-            <div className="stat-card" key={s.item} style={{display:'flex',alignItems:'center',gap:12}}>
-              <ConsumableIcon name={s.icon} size={42}/>
-              <div style={{minWidth:0}}>
-                <div className="stat-label" style={{marginBottom:4}}>{s.item}</div>
-                <div className="stat-value">{s.quantity}</div>
-              </div>
+      {view==='log' && (
+        <>
+          <div className="table-card" style={{marginBottom:16,padding:'14px 20px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+            <p style={{fontSize:13,color:'var(--gray-400)',margin:0,flex:1,minWidth:200}}>{t.consumablesSubtitle}</p>
+            <input type="date" className="form-control" style={{width:'auto'}} value={date} max={todayStr}
+              onChange={e=>setDate(e.target.value)} />
+            <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate(todayStr)}>{t.historyToday}</button>
+            <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate('')}>{t.historyAllDates}</button>
+          </div>
+
+          {summary.length > 0 && (
+            <div className="analytics-grid">
+              {summary.map(s=>(
+                <div className="stat-card" key={s.item} style={{display:'flex',alignItems:'center',gap:12}}>
+                  <ConsumableIcon name={s.icon} size={42}/>
+                  <div style={{minWidth:0}}>
+                    <div className="stat-label" style={{marginBottom:4}}>{s.item}</div>
+                    <div className="stat-value">{s.quantity}</div>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+
+          {loading ? (
+            <div className="empty-state"><p>{t.analyticsLoading}</p></div>
+          ) : items.length === 0 ? (
+            <div className="empty-state">{Ic.box}<p>{date ? t.consumablesEmpty : t.consumablesEmptyAll}</p></div>
+          ) : (
+            <div className="table-card">
+              <table>
+                <thead>
+                  <tr><th>{t.date}</th><th>{t.item}</th><th>{t.quantity}</th><th>{t.location}</th><th>{t.loggedBy}</th></tr>
+                </thead>
+                <tbody>
+                  {items.map(c=>(
+                    <tr key={c.id}>
+                      <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>{new Date(c.created_at).toLocaleString()}</td>
+                      <td>
+                        <div style={{display:'flex',alignItems:'center',gap:10}}>
+                          <ConsumableIcon name={c.icon} size={30}/>
+                          <span style={{fontWeight:500}}>{c.item}</span>
+                        </div>
+                      </td>
+                      <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>×{c.quantity}</td>
+                      <td>{c.location}</td>
+                      <td>{c.logged_by_name}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
-      {loading ? (
-        <div className="empty-state"><p>{t.analyticsLoading}</p></div>
-      ) : items.length === 0 ? (
-        <div className="empty-state">{Ic.box}<p>{date ? t.consumablesEmpty : t.consumablesEmptyAll}</p></div>
-      ) : (
-        <div className="table-card">
-          <table>
-            <thead>
-              <tr><th>{t.date}</th><th>{t.item}</th><th>{t.quantity}</th><th>{t.location}</th><th>{t.loggedBy}</th></tr>
-            </thead>
-            <tbody>
-              {items.map(c=>(
-                <tr key={c.id}>
-                  <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>{new Date(c.created_at).toLocaleString()}</td>
-                  <td>
-                    <div style={{display:'flex',alignItems:'center',gap:10}}>
-                      <ConsumableIcon name={c.icon} size={30}/>
-                      <span style={{fontWeight:500}}>{c.item}</span>
+      {view==='report' && (
+        <>
+          <div className="table-card" style={{marginBottom:16,padding:'14px 20px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+            <div className="week-nav">
+              <button onClick={()=>shiftWeek(-7)} title={t.prevWeek} aria-label={t.prevWeek}>
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3L5 8l5 5"/></svg>
+              </button>
+              <span className="label">
+                {report ? `${report.from_date} → ${report.to_date}` : `${t.weekOf} ${anchor}`}
+              </span>
+              <button onClick={()=>shiftWeek(7)} title={t.nextWeek} aria-label={t.nextWeek}>
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3l5 5-5 5"/></svg>
+              </button>
+            </div>
+            <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setAnchor(todayStr)}>{t.thisWeek}</button>
+            <button className="btn btn-primary" style={{marginLeft:'auto'}}
+              onClick={downloadWeeklyPDF} disabled={!report || downloading}>
+              {Ic.download} {downloading ? t.generatingPdf : t.downloadWeeklyPdf}
+            </button>
+          </div>
+
+          {rError && (
+            <div style={{background:'var(--red-light)',color:'var(--red)',borderRadius:'var(--radius-md)',padding:'10px 16px',fontSize:13,marginBottom:16}}>
+              {rError}
+            </div>
+          )}
+
+          {rLoading ? (
+            <div className="empty-state"><p>{t.analyticsLoading}</p></div>
+          ) : !report || report.total_records === 0 ? (
+            <div className="empty-state">{Ic.box}<p>{t.nothingUsedThisWeek}</p></div>
+          ) : (
+            <>
+              <div className="analytics-grid" style={{marginBottom:20}}>
+                {statCards.map(c=>(
+                  <div className="stat-card" key={c.label}>
+                    <div className="stat-label">{c.label}</div>
+                    <div className="stat-value" style={{color:c.color}}>{c.value}</div>
+                    <div className="stat-sub">{c.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mini-card" style={{marginBottom:20}}>
+                <div className="mini-card-title">{t.usageByDay}</div>
+                <div className="daychart">
+                  {dayCells.map(d=>(
+                    <div className={`daycol${d.qty===0?' empty':''}`} key={d.key}>
+                      <div className="qty">{d.qty}</div>
+                      <div className="track"><div className="fill" style={{height:`${d.height}%`}}/></div>
+                      <div className="dow">{d.dow}</div>
+                      <div className="dom">{d.dom}</div>
                     </div>
-                  </td>
-                  <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>×{c.quantity}</td>
-                  <td>{c.location}</td>
-                  <td>{c.logged_by_name}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="week-breakdowns" style={{marginBottom:20}}>
+                <div className="mini-card">
+                  <div className="mini-card-title">{t.byItem}</div>
+                  {(report.by_item||[]).map(x=>(
+                    <div className="week-bar-row" key={x.item}>
+                      <div className="week-bar-label">
+                        <ConsumableIcon name={x.icon} size={22}/>
+                        <span>{x.item}</span>
+                      </div>
+                      <div className="week-bar-track">
+                        <div className="week-bar-fill" style={{width:`${Math.max(4,(x.quantity/itemMax)*100)}%`,background:'#1769AA'}}/>
+                      </div>
+                      <div className="week-bar-count">{x.quantity}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mini-card">
+                  <div className="mini-card-title">{t.byLocation}</div>
+                  {(report.by_location||[]).map(x=>(
+                    <div className="week-bar-row" key={`${x.mode}:${x.location}`}>
+                      <div className="week-bar-label"><span>{x.location}</span></div>
+                      <div className="week-bar-track">
+                        <div className="week-bar-fill" style={{width:`${Math.max(4,(x.quantity/locMax)*100)}%`,background:'#1D9E75'}}/>
+                      </div>
+                      <div className="week-bar-count">{x.quantity}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mini-card">
+                  <div className="mini-card-title">{t.byTechnician}</div>
+                  {(report.by_technician||[]).map(x=>(
+                    <div className="week-bar-row" key={x.name}>
+                      <div className="week-bar-label">
+                        <Avatar name={x.name} idx={x.avatar_idx} size="sm"/>
+                        <span>{x.name}</span>
+                      </div>
+                      <div className="week-bar-track">
+                        <div className="week-bar-fill" style={{width:`${Math.max(4,(x.quantity/techMax)*100)}%`,background:'#2E8B57'}}/>
+                      </div>
+                      <div className="week-bar-count">{x.quantity}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <EntryTable rows={aptRows}  locationHeader={t.apartmentUsage}/>
+              <EntryTable rows={deptRows} locationHeader={t.departmentUsage}/>
+            </>
+          )}
+        </>
       )}
     </div>
   );

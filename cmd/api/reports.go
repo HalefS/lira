@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/HalefS/lira/internal/report"
 )
@@ -89,10 +90,97 @@ func (app *application) dailyReportPDFHandler(w http.ResponseWriter, r *http.Req
 	w.Write(pdf)
 }
 
+// GET /v1/reports/consumables/weekly?week=YYYY-MM-DD
+//
+// The weekly consumables report as JSON. The anchor date may be any day in the
+// week; the report covers that day's Monday-to-Sunday window.
+func (app *application) weeklyConsumablesReportHandler(w http.ResponseWriter, r *http.Request) {
+	anchor, ok := app.reportWeekAnchor(w, r)
+	if !ok {
+		return
+	}
+
+	rep, err := app.models.Consumables.GetWeeklyConsumablesReport(anchor)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.writeJSON(w, http.StatusOK, envelope{"report": rep}, nil)
+}
+
+// GET /v1/reports/consumables/weekly.pdf?week=YYYY-MM-DD
+//
+// The same report, printed. Readable by any authenticated user, matching the
+// JSON endpoint and the daily report.
+func (app *application) weeklyConsumablesPDFHandler(w http.ResponseWriter, r *http.Request) {
+	anchor, ok := app.reportWeekAnchor(w, r)
+	if !ok {
+		return
+	}
+
+	if app.browser == nil {
+		reason := "no chromium-based browser was found on this server"
+		if app.browserErr != nil && !errors.Is(app.browserErr, report.ErrNoBrowser) {
+			reason = "the configured pdf report browser could not be used: " + app.browserErr.Error()
+		}
+		app.errorResponse(w, r, http.StatusNotImplemented, "pdf reports are unavailable: "+reason)
+		return
+	}
+
+	rep, err := app.models.Consumables.GetWeeklyConsumablesReport(anchor)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	html, err := report.RenderConsumablesHTML(rep)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// The request context bounds the browser run, so a client that gives up
+	// doesn't leave a Chrome process behind.
+	pdf, err := app.browser.Render(r.Context(), html)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", contentDisposition("attachment",
+		fmt.Sprintf("LIRA-Consumables-Week-%s-to-%s.pdf", rep.FromDate, rep.ToDate)))
+	// The document is generated per request from a week the user can step
+	// through, so it must never be reused for a different one.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Length", strconv.Itoa(len(pdf)))
+	w.WriteHeader(http.StatusOK)
+	w.Write(pdf)
+}
+
+// reportWeekAnchor reads and validates the ?week= anchor shared by both
+// consumables report endpoints. An absent anchor means the current week.
+//
+// It writes the error response itself and reports whether the caller may carry
+// on, so both handlers stay a single call at the top.
+func (app *application) reportWeekAnchor(w http.ResponseWriter, r *http.Request) (time.Time, bool) {
+	raw := r.URL.Query().Get("week")
+	if raw == "" {
+		return time.Now(), true
+	}
+	anchor, err := time.ParseInLocation("2006-01-02", raw, time.Local)
+	if err != nil {
+		app.errorResponse(w, r, http.StatusBadRequest, "week must be a date in YYYY-MM-DD format")
+		return time.Time{}, false
+	}
+	return anchor, true
+}
+
 // contentDisposition builds a Content-Disposition header value. The filename is
-// assembled from a fixed prefix and a date the handler has already matched
-// against dateParamPattern, but it is still stripped of quotes and line breaks
-// so it cannot break out of the quoted string.
+// assembled from a fixed prefix and a date the handler has already validated,
+// but it is still stripped of quotes and line breaks so it cannot break out of
+// the quoted string.
 func contentDisposition(disposition, filename string) string {
 	filename = strings.NewReplacer(`"`, "", "\\", "", "\r", "", "\n", "").Replace(filename)
 	return fmt.Sprintf(`%s; filename="%s"`, disposition, filename)
