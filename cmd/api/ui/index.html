@@ -6,8 +6,16 @@
 <title>LIRA — Llana IT Reporting & Alerts</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <script>try{if(localStorage.getItem('lira_theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
-<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<!-- React is served from this binary rather than a CDN, in its production
+     build: the development builds are ~8x larger and carry warnings that are
+     never seen in production. The version is in the filename so that upgrading
+     React changes the URL and no browser can keep serving a stale copy. -->
+<script src="/vendor/react-18.3.1.production.min.js"></script>
+<script src="/vendor/react-dom-18.3.1.production.min.js"></script>
+<!-- Babel compiles the JSX below in the browser on every page load, which
+     costs ~1.2s and 3MB. It is the single biggest cost in starting this app
+     and it disappears entirely once the JSX is precompiled at build time
+     (esbuild) and this tag is removed along with the text/babel type. -->
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -637,6 +645,10 @@ select.form-control { cursor: pointer; }
 .tp-row-status.pending { background: var(--amber-light); color: var(--amber); }
 .tp-row-status.solved  { background: var(--green-light); color: var(--green); }
 
+/* Remaining-stock line under an item's name in the consumable picker. */
+.cpick-stock { font-size: 11.5px; color: var(--gray-400); font-variant-numeric: tabular-nums; }
+.cpick-stock strong { font-weight: 700; }
+
 /* Picker dialog (opens over the issue form) */
 .picker-overlay { z-index: 110; }
 .picker-modal { max-width: 620px; }
@@ -786,6 +798,31 @@ tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
 
 /* ── Empty ── */
 .empty-state { padding: 48px; text-align: center; color: var(--gray-400); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+
+/* Shown on a recurring alert whose issues have all been deleted. */
+.alert-stale { padding: 20px; text-align: center; border-top: 1px solid var(--gray-200); }
+.alert-stale-title { font-size: 13px; font-weight: 600; color: var(--gray-900); margin: 0 0 5px; }
+.alert-stale-body { font-size: 12.5px; color: var(--gray-400); margin: 0 0 12px; line-height: 1.5; }
+
+/* Error boundary fallback. Kept deliberately plain: this is shown when a page
+   has already thrown, so it must not depend on any of the app's own state. */
+.error-boundary { display: flex; align-items: center; justify-content: center; padding: 48px 24px; min-height: 60vh; }
+.error-boundary-card {
+  max-width: 560px; width: 100%; text-align: center;
+  background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg);
+  padding: 32px 28px; box-shadow: var(--shadow-md);
+}
+.error-boundary-icon { color: var(--red); display: flex; justify-content: center; margin-bottom: 12px; }
+.error-boundary-icon svg { width: 30px; height: 30px; }
+.error-boundary-card h2 { font-size: 17px; margin: 0 0 8px; }
+.error-boundary-msg { font-size: 13px; color: var(--gray-400); margin: 0 0 18px; line-height: 1.55; }
+.error-boundary-detail, .error-boundary-stack {
+  text-align: left; font-family: 'DM Mono', monospace; font-size: 11.5px; line-height: 1.5;
+  background: var(--gray-100); color: var(--gray-600); border-radius: var(--radius-sm);
+  padding: 10px 12px; margin: 0 0 10px; max-height: 140px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+}
+.error-boundary-stack { max-height: 96px; color: var(--gray-400); }
+.error-boundary-actions { display: flex; gap: 8px; justify-content: center; margin-top: 18px; }
 .empty-state svg { width: 36px; height: 36px; opacity: 0.25; }
 .empty-state p { font-size: 13.5px; }
 
@@ -832,6 +869,7 @@ html.dark .mini-card,
 html.dark .support-stat-card,
 html.dark .modal,
 html.dark .auth-card,
+html.dark .error-boundary-card,
 html.dark .btn-ghost,
 html.dark .lang-toggle,
 html.dark .form-control { background: var(--gray-50) !important; }
@@ -842,6 +880,7 @@ html.dark .stat-card,
 html.dark .table-card,
 html.dark .mini-card,
 html.dark .support-stat-card { border-color: var(--gray-200) !important; }
+html.dark .error-boundary-card { border-color: var(--gray-200) !important; }
 html.dark .support-counts { border-color: var(--gray-200) !important; }
 
 html.dark thead th { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
@@ -1018,9 +1057,9 @@ const T = {
     resolutionRate: '% resolution rate',
     avgTime: 'Avg. resolution time',
     acrossAll: 'Across all issues',
-    activeTechs: 'Active technicians',
-    workload: 'Workload by technician',
-    noTechs: 'No technicians yet.',
+    activeUsers: 'Active users',
+    workload: 'Workload by user',
+    noUsers: 'No users yet.',
     byType: 'Issues by type',
     noIssues: 'No issues yet.',
     aptIssuesTitle: 'Apartment issues',
@@ -1047,6 +1086,10 @@ const T = {
     alertsSolvedEmpty: 'No solved recurring issues yet.',
     markSolved: 'Mark as solved',
     deleteAlert: 'Delete alert',
+    alertStale: 'outdated',
+    alertStaleTitle: 'The issues behind this alert no longer exist',
+    alertStaleBody: 'This alert was raised for issues that have since been deleted, so there is nothing left to act on. It is safe to remove.',
+    alertStaleDismiss: 'Remove this alert',
     finalSolution: 'Final solution',
     finalSolutionPlaceholder: 'What was done to permanently fix this?',
     solvedBy: 'Solved by',
@@ -1192,6 +1235,35 @@ const T = {
     toastConsumableAdded: 'Consumable added',
     toastConsumableDeleted: 'Consumable removed',
     toastConsumableIconUpdated: 'Icon updated',
+    inventory: 'Inventory',
+    inventorySubtitle: 'What is in stock right now. Recording a consumable on an issue takes it off automatically.',
+    inStock: 'In stock',
+    reorderLevel: 'Reorder at',
+    adjustStock: 'Adjust stock',
+    lowStock: 'low',
+    stockOverdrawn: 'overdrawn',
+    stockNoChange: 'That is already the current count.',
+    stockWouldGoNegative: 'That is more than is in stock. The count can go negative, but check you meant it.',
+    stockHow: 'How',
+    stockHowMany: 'How many',
+    stockCountedAs: 'Counted as',
+    stockNote: 'Note',
+    stockNotePlaceholder: 'e.g. delivery from the supplier',
+    stockMode_add: 'Add',
+    stockMode_remove: 'Remove',
+    stockMode_set: 'Set to',
+    stockReason: 'Reason',
+    stockReason_added: 'Added',
+    stockReason_set: 'Corrected',
+    stockReason_used: 'Used on an issue',
+    stockReason_removed: 'Returned',
+    noStockMoves: 'No stock changes recorded yet.',
+    toastStockUpdated: 'Stock updated',
+    toastReorderSaved: 'Reorder level saved',
+    pageErrorTitle: 'This page could not be displayed',
+    pageErrorBody: 'Something in the data went against what this page expected. The rest of the app still works — you can go to another page, or try this one again.',
+    tryAgain: 'Try again',
+    reloadApp: 'Reload the app',
     you: 'you',
     issues: 'Issues',
     avg: 'Avg',
@@ -1347,9 +1419,9 @@ const T = {
     resolutionRate: '% taxa de resolução',
     avgTime: 'Tempo médio de resolução',
     acrossAll: 'Todas as avarias',
-    activeTechs: 'Técnicos activos',
-    workload: 'Carga por técnico',
-    noTechs: 'Sem técnicos ainda.',
+    activeUsers: 'Utilizadores activos',
+    workload: 'Carga por utilizador',
+    noUsers: 'Ainda sem utilizadores.',
     byType: 'Avarias por tipo',
     noIssues: 'Sem avarias ainda.',
     aptIssuesTitle: 'Avarias de apartamentos',
@@ -1376,6 +1448,10 @@ const T = {
     alertsSolvedEmpty: 'Ainda não há avarias recorrentes resolvidas.',
     markSolved: 'Marcar como resolvida',
     deleteAlert: 'Eliminar alerta',
+    alertStale: 'desactualizada',
+    alertStaleTitle: 'As avarias por trás desta alerta já não existem',
+    alertStaleBody: 'Esta alerta foi criada para avarias que desde então foram eliminadas, pelo que não há nada para resolver. Pode ser removida em segurança.',
+    alertStaleDismiss: 'Remover esta alerta',
     finalSolution: 'Solução final',
     finalSolutionPlaceholder: 'O que foi feito para resolver definitivamente?',
     solvedBy: 'Resolvido por',
@@ -1521,6 +1597,35 @@ const T = {
     toastConsumableAdded: 'Consumível adicionado',
     toastConsumableDeleted: 'Consumível removido',
     toastConsumableIconUpdated: 'Ícone atualizado',
+    inventory: 'Inventário',
+    inventorySubtitle: 'O que existe em stock neste momento. Registar um consumível numa avaria retira-o automaticamente.',
+    inStock: 'Em stock',
+    reorderLevel: 'Reordenar em',
+    adjustStock: 'Ajustar stock',
+    lowStock: 'baixo',
+    stockOverdrawn: 'negativo',
+    stockNoChange: 'Esse é já o valor actual.',
+    stockWouldGoNegative: 'É mais do que existe em stock. O valor pode ficar negativo, mas confirme que é isso que quer.',
+    stockHow: 'Como',
+    stockHowMany: 'Quantos',
+    stockCountedAs: 'Contado como',
+    stockNote: 'Nota',
+    stockNotePlaceholder: 'ex. entrega do fornecedor',
+    stockMode_add: 'Adicionar',
+    stockMode_remove: 'Retirar',
+    stockMode_set: 'Definir',
+    stockReason: 'Motivo',
+    stockReason_added: 'Adicionado',
+    stockReason_set: 'Corrigido',
+    stockReason_used: 'Usado numa avaria',
+    stockReason_removed: 'Devolvido',
+    noStockMoves: 'Ainda não há alterações de stock registadas.',
+    toastStockUpdated: 'Stock actualizado',
+    toastReorderSaved: 'Nível de reposição guardado',
+    pageErrorTitle: 'Não foi possível mostrar esta página',
+    pageErrorBody: 'Alguma coisa nos dados não corresponde ao que esta página espera. O resto da aplicação continua a funcionar — pode ir para outra página, ou tentar esta outra vez.',
+    tryAgain: 'Tentar de novo',
+    reloadApp: 'Recarregar a aplicação',
     you: 'tu',
     issues: 'Avarias',
     avg: 'Méd.',
@@ -2197,6 +2302,16 @@ function ConsumablePicker({ items, value, onCancel, onDone }) {
                     <span className="cpick-check">{Ic.check}</span>
                     <ConsumableIcon name={it.icon} size={48}/>
                     <span className="cpick-name">{it.name}</span>
+                    {/* Remaining stock, so it is obvious before saving that
+                        something is about to be drawn down. Shortfall is
+                        allowed — the work happened — but shown in red. */}
+                    <span className="cpick-stock">
+                      {t.inStock}: <strong style={{
+                        color: (it.stock ?? 0) < 0 ? 'var(--red)'
+                            : it.reorder_level > 0 && it.stock <= it.reorder_level ? 'var(--amber)'
+                            : 'var(--gray-500)',
+                      }}>{it.stock ?? 0}</strong>
+                    </span>
                     {sel ? (
                       <div className="cpick-stepper" onClick={e=>e.stopPropagation()} onKeyDown={e=>e.stopPropagation()}>
                         <button type="button" aria-label="−" onClick={()=>bump(it.id, -1)}>{Ic.minus}</button>
@@ -2774,7 +2889,11 @@ function Dashboard({ apt, dept, users, stats }) {
   const byTech       = stats ? stats.by_technician  : [];
   const maxWork      = Math.max(...(byTech.map(t=>t.count)), 1);
   const maxType      = Math.max(...Object.values(byType), 1);
-  const activeTechs  = users.filter(u=>u.role==='technician');
+  // Everyone who can currently sign in, whatever their role: managers log
+  // issues too, and a deactivated account is not active no matter its role.
+  // The `active` flag is the same one that gates login in GetForToken, so
+  // this is the roster of people who could be working today.
+  const activeUsers  = users.filter(u=>u.active);
 
   return (
     <div>
@@ -2795,15 +2914,15 @@ function Dashboard({ apt, dept, users, stats }) {
           <div className="stat-sub"><span className="stat-dot" style={{background:'#EF9F27'}}></span>{t.acrossAll}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">{t.activeTechs}</div>
-          <div className="stat-value">{activeTechs.length}</div>
-          <div className="stat-sub"><span className="stat-dot" style={{background:'#9FE1CB'}}></span>{activeTechs.map(u=>u.name).join(' · ')||'—'}</div>
+          <div className="stat-label">{t.activeUsers}</div>
+          <div className="stat-value">{activeUsers.length}</div>
+          <div className="stat-sub"><span className="stat-dot" style={{background:'#9FE1CB'}}></span>{activeUsers.map(u=>u.name).join(' · ')||'—'}</div>
         </div>
       </div>
       <div className="bottom-grid">
         <div className="mini-card">
           <div className="mini-card-title">{t.workload}</div>
-          {byTech.length===0 && <p style={{color:'var(--gray-400)',fontSize:13}}>{t.noTechs}</p>}
+          {byTech.length===0 && <p style={{color:'var(--gray-400)',fontSize:13}}>{t.noUsers}</p>}
           {byTech.map(ts=>(
             <div className="bar-row" key={ts.user_id}>
               <div className="bar-label"><Avatar name={ts.name} idx={ts.avatar_idx} size="sm"/>{ts.name}</div>
@@ -3024,7 +3143,13 @@ function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
 
       {filtered.length === 0 ? (
         <div className="empty-state">{Ic.bell}<p>{filter==='pending' ? t.alertsEmpty : t.alertsSolvedEmpty}</p></div>
-      ) : filtered.map(alert => (
+      ) : filtered.map(alert => {
+        // The API always sends an array now, but a null here would take the
+        // whole page down, and this is the one field the Alerts page cannot
+        // do without.
+        const issues = alert.issues || [];
+        const isStale = issues.length === 0;
+        return (
         <div className="table-card" key={alert.id} style={{marginBottom:16}}>
           <div className="table-header">
             <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -3033,7 +3158,12 @@ function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
               <TypeBadge type={alert.type}/>
             </div>
             <div style={{display:'flex',alignItems:'center',gap:10}}>
-              <span style={{fontSize:12,color:'var(--gray-400)'}}>{alert.issues.length} {t.alertsOccurrences}</span>
+              <span style={{fontSize:12,color:'var(--gray-400)'}}>{issues.length} {t.alertsOccurrences}</span>
+              {isStale && (
+                <span className="badge" style={{background:'var(--gray-200)',color:'var(--gray-600)',fontSize:10,padding:'1px 7px'}}>
+                  {t.alertStale}
+                </span>
+              )}
               {isManager && alert.status==='pending' && solvingId!==alert.id && (
                 <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12}}
                   onClick={()=>{setSolvingId(alert.id); setSolutionText('');}}>
@@ -3089,7 +3219,7 @@ function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
               </tr>
             </thead>
             <tbody>
-              {alert.issues.map(issue => (
+              {issues.map(issue => (
                 <tr key={issue.id}>
                   <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>
                     {new Date(issue.created_at).toLocaleString()}
@@ -3102,8 +3232,25 @@ function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
               ))}
             </tbody>
           </table>
+
+          {/* Every issue this alert was raised for has since been deleted, so
+              it is a leftover rather than a live problem. An empty table with
+              headers and no rows reads as a bug, so say what it actually is and
+              point at the one action that clears it. */}
+          {isStale && (
+            <div className="alert-stale">
+              <p className="alert-stale-title">{t.alertStaleTitle}</p>
+              <p className="alert-stale-body">{t.alertStaleBody}</p>
+              {isManager && (
+                <button className="btn btn-ghost" style={{fontSize:12.5,padding:'6px 14px'}}
+                  onClick={()=>removeAlert(alert.id)}>
+                  {t.alertStaleDismiss}
+                </button>
+              )}
+            </div>
+          )}
         </div>
-      ))}
+      );})}
     </div>
   );
 }
@@ -3505,12 +3652,94 @@ function AnalyticsPage({ token, alertsPendingCount }) {
 }
 
 /* ════════════════ CONSUMABLES PAGE ════════════════ */
+<<<<<<< HEAD
 /*
   Two views over the same data. "Log" is the running list of every recorded
   use, filterable by date. "Weekly report" is the Monday-to-Sunday roll-up —
   what was used, where, on which issue and by whom — with a PDF download.
 */
 function ConsumablesPage({ token }) {
+=======
+/* Lets a manager put stock in, take it out, or correct it to a counted figure.
+   The resulting count is previewed live, and a removal that would overdraw the
+   item is pointed out before saving — the server allows a negative count, but
+   doing it by accident is not what someone reaching for "remove" means. */
+function StockAdjustDialog({ item, onCancel, onSave, saving, t }) {
+  const [mode, setMode] = useState('add');   // add | remove | set
+  const [value, setValue] = useState('');
+  const [note, setNote] = useState('');
+
+  const n = Number(value);
+  const valid = value !== '' && Number.isFinite(n) && (mode === 'set' ? n >= 0 : n > 0);
+  const result = !valid ? null : mode === 'set' ? n : mode === 'add' ? item.stock + n : item.stock - n;
+  const error = !valid ? null
+    : mode === 'set'    ? (n === item.stock ? t.stockNoChange : null)
+    : mode === 'remove' ? (n > item.stock ? t.stockWouldGoNegative : null)
+    : null;
+
+  function submit() {
+    if (!valid || error) return;
+    if (mode === 'set')   onSave({set_to: n, note});
+    else if (mode === 'add') onSave({change: n, note});
+    else                  onSave({change: -n, note});
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && !saving && onCancel()}>
+      <div className="modal" style={{maxWidth:420}} role="dialog" aria-modal="true" aria-label={t.adjustStock}>
+        <div className="modal-header">
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <ConsumableIcon name={item.icon} size={30}/>
+            <div>
+              <h2>{t.adjustStock}</h2>
+              <div className="picker-sub">{item.name}</div>
+            </div>
+          </div>
+          <button type="button" className="icon-btn" onClick={onCancel} disabled={saving}>{Ic.x}</button>
+        </div>
+        <div className="modal-body">
+          <div className="form-group">
+            <label>{t.stockHow}</label>
+            <div className="filter-chips" style={{marginTop:2}}>
+              {['add','remove','set'].map(m=>(
+                <button key={m} className={`chip ${mode===m?'active':''}`} onClick={()=>{setMode(m);setValue('');}}>
+                  {t['stockMode_'+m]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="form-group">
+            <label>{mode === 'set' ? t.stockCountedAs : t.stockHowMany}</label>
+            <input className="form-control" type="number" inputMode="numeric" value={value} autoFocus
+              onChange={e=>setValue(e.target.value)} onKeyDown={e=>e.key==='Enter' && submit()}/>
+          </div>
+          <div className="form-group">
+            <label>{t.stockNote}</label>
+            <input className="form-control" placeholder={t.stockNotePlaceholder} value={note} maxLength={200}
+              onChange={e=>setNote(e.target.value)} onKeyDown={e=>e.key==='Enter' && submit()}/>
+          </div>
+          {error && <div style={{fontSize:12.5,color:'var(--amber)'}}>{error}</div>}
+          {valid && !error && (
+            <div style={{fontSize:12.5,color:'var(--gray-400)'}}>
+              {t.inStock}: <strong style={{color:'var(--gray-900)'}}>{item.stock}</strong>
+              {' → '}
+              <strong style={{color: result < 0 ? 'var(--red)' : 'var(--gray-900)'}}>{result}</strong>
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={saving}>{t.cancel}</button>
+          <button type="button" className="btn btn-primary" onClick={submit} disabled={!valid || !!error || saving}>
+            {saving ? t.analyticsLoading : t.saveChanges}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConsumablesPage({ token, currentUser, onCatalogUpdate }) {
+>>>>>>> 1e2c89cd15b3d1b3b84cd2431c0873c681f248c1
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const todayStr = localISODate(new Date());
@@ -3521,6 +3750,29 @@ function ConsumablesPage({ token }) {
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Inventory state. The catalog is fetched here as well as from the issue
+  // form, because this page is where stock is corrected and explained.
+  const [catalog, setCatalog] = useState([]);
+  const [adjusting, setAdjusting] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [historyFor, setHistoryFor] = useState(null);
+  const [movements, setMovements] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const canManage = !!(currentUser && currentUser.role === 'manager');
+
+  // The issue form's consumable picker is fed from the catalog the app loaded
+  // at start-up, which would otherwise still show the count from before any
+  // correction made here. Writing every change through to it means a manager
+  // who fixes a count is immediately followed by a technician seeing the right
+  // number, without anyone reloading.
+  const publish = (listOrUpdater) => {
+    setCatalog(listOrUpdater);
+    if (onCatalogUpdate) onCatalogUpdate(listOrUpdater);
+  };
+  const replaceItem = updated => publish(list => list.map(ci => ci.id === updated.id ? updated : ci));
+
+  const loadCatalog = () =>
+    apiFetch('/consumable-items', {token}).then(res => publish(res.consumable_items || []));
 
   useEffect(() => {
     if (view !== 'log') return;
@@ -3535,6 +3787,7 @@ function ConsumablesPage({ token }) {
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
+    loadCatalog().catch(() => {});
     return () => { cancelled = true; };
   }, [date, token, view]);
 
@@ -3681,6 +3934,45 @@ function ConsumablesPage({ token }) {
     );
   }
 
+  async function saveStock(body) {
+    setSaving(true);
+    try {
+      const res = await apiFetch(`/consumable-items/${adjusting.id}/stock`, {method:'PATCH', body, token});
+      replaceItem(res.consumable_item);
+      setAdjusting(null);
+      setToast(t.toastStockUpdated);
+      if (historyFor !== null) loadMovements(historyFor);
+    } catch(ex) {
+      setToast('Error: ' + ex.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveReorderLevel(item, level) {
+    try {
+      const res = await apiFetch(`/consumable-items/${item.id}/reorder-level`, {method:'PATCH', body:{reorder_level: level}, token});
+      replaceItem(res.consumable_item);
+      setToast(t.toastReorderSaved);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  function loadMovements(itemID) {
+    setHistoryLoading(true);
+    apiFetch(`/consumable-stock-movements?item_id=${itemID}&limit=100`, {token})
+      .then(res => setMovements(res.movements || []))
+      .catch(() => setMovements([]))
+      .finally(() => setHistoryLoading(false));
+  }
+
+  function toggleHistory(item) {
+    if (historyFor === item.id) { setHistoryFor(null); setMovements([]); return; }
+    setHistoryFor(item.id);
+    loadMovements(item.id);
+  }
+
+  const lowCount = catalog.filter(ci => ci.low_stock).length;
+
   return (
     <div>
       <div className="team-viewbar" style={{marginBottom:16}}>
@@ -3692,6 +3984,140 @@ function ConsumablesPage({ token }) {
             {Ic.report}{t.weeklyConsumables}
           </button>
         </div>
+      {/* ── Inventory: what is in stock right now ── */}
+      <div className="table-card" style={{marginBottom:16}}>
+        <div className="table-header">
+          <span className="table-title">{t.inventory}</span>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            {lowCount > 0 && (
+              <span className="badge" style={{background:'var(--amber-light)',color:'var(--amber)'}}>
+                {lowCount} {t.lowStock}
+              </span>
+            )}
+            <span style={{fontSize:12,color:'var(--gray-400)'}}>{catalog.length}</span>
+          </div>
+        </div>
+        <div style={{padding:'13px 20px 2px',fontSize:12.5,color:'var(--gray-400)'}}>{t.inventorySubtitle}</div>
+        {catalog.length === 0 ? (
+          <div className="empty-state">{Ic.box}<p>{t.noConsumableItems}</p></div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>{t.consumableName}</th>
+                <th>{t.inStock}</th>
+                <th>{t.reorderLevel}</th>
+                {canManage && <th></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {catalog.map(ci=>(
+                <React.Fragment key={ci.id}>
+                  <tr>
+                    <td>
+                      <div style={{display:'flex',alignItems:'center',gap:10}}>
+                        <ConsumableIcon name={ci.icon} size={30}/>
+                        <span style={{fontWeight:500}}>{ci.name}</span>
+                        {ci.low_stock && (
+                          <span className="badge" style={{background:'var(--amber-light)',color:'var(--amber)',fontSize:10,padding:'1px 7px'}}>
+                            {t.lowStock}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{
+                        fontFamily:'DM Mono,monospace', fontSize:14, fontWeight:600,
+                        color: ci.stock < 0 ? 'var(--red)' : ci.low_stock ? 'var(--amber)' : 'var(--gray-900)',
+                      }}>{ci.stock}</span>
+                      {ci.stock < 0 && (
+                        <span className="badge" style={{background:'var(--red-light)',color:'var(--red)',fontSize:10,padding:'1px 7px',marginLeft:7}}>
+                          {t.stockOverdrawn}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {canManage ? (
+                        <input className="form-control" type="number" min="0" defaultValue={ci.reorder_level}
+                          style={{width:80,padding:'5px 8px'}}
+                          // Saved when the field is left, and on Enter so the
+                          // value is not silently lost by someone who types it
+                          // and moves straight on.
+                          onBlur={e=>{
+                            const v = Number(e.target.value);
+                            if (Number.isFinite(v) && v >= 0 && v !== ci.reorder_level) saveReorderLevel(ci, v);
+                          }}
+                          onKeyDown={e=>{ if (e.key === 'Enter') e.currentTarget.blur(); }}/>
+                      ) : (
+                        <span style={{fontSize:13,color:'var(--gray-400)'}}>{ci.reorder_level || '—'}</span>
+                      )}
+                    </td>
+                    {canManage && (
+                      <td style={{textAlign:'right'}}>
+                        <div className="action-cell" style={{justifyContent:'flex-end'}}>
+                          <button className="btn btn-ghost" style={{fontSize:12,padding:'4px 10px'}}
+                            onClick={()=>setAdjusting(ci)}>
+                            {Ic.edit} {t.adjustStock}
+                          </button>
+                          <button className="icon-btn" title={t.history} onClick={()=>toggleHistory(ci)}>
+                            {Ic.clock}
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                  {historyFor === ci.id && (
+                    <tr>
+                      <td colSpan={canManage ? 4 : 3} style={{background:'var(--gray-100)'}}>
+                        {historyLoading ? (
+                          <p style={{fontSize:12.5,color:'var(--gray-400)',margin:0}}>{t.analyticsLoading}</p>
+                        ) : movements.length === 0 ? (
+                          <p style={{fontSize:12.5,color:'var(--gray-400)',margin:0}}>{t.noStockMoves}</p>
+                        ) : (
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>{t.date}</th><th></th><th>{t.inStock}</th>
+                                <th>{t.stockReason}</th><th>{t.loggedBy}</th><th>{t.stockNote}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {movements.map(m=>(
+                                <tr key={m.id}>
+                                  <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>
+                                    {new Date(m.created_at).toLocaleString()}
+                                  </td>
+                                  <td style={{fontFamily:'DM Mono,monospace',fontSize:13,fontWeight:600,
+                                              color: m.change > 0 ? 'var(--green)' : 'var(--red)'}}>
+                                    {m.change > 0 ? `+${m.change}` : m.change}
+                                  </td>
+                                  <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{m.balance_after}</td>
+                                  <td style={{fontSize:12.5}}>{t['stockReason_'+m.reason] || m.reason}</td>
+                                  <td style={{fontSize:12.5,color:'var(--gray-600)'}}>{m.logged_by_name || '—'}</td>
+                                  <td style={{fontSize:12.5,color:'var(--gray-500)'}}>{m.note || '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* ── Usage log ── */}
+      <div className="table-card" style={{marginBottom:16,padding:'14px 20px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+        <p style={{fontSize:13,color:'var(--gray-400)',margin:0,flex:1,minWidth:200}}>{t.consumablesSubtitle}</p>
+        <input type="date" className="form-control" style={{width:'auto'}} value={date} max={todayStr}
+          onChange={e=>setDate(e.target.value)} />
+        <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate(todayStr)}>{t.historyToday}</button>
+        <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate('')}>{t.historyAllDates}</button>
+>>>>>>> 1e2c89cd15b3d1b3b84cd2431c0873c681f248c1
       </div>
 
       {view==='log' && (
@@ -3859,6 +4285,11 @@ function ConsumablesPage({ token }) {
             </>
           )}
         </>
+      )}
+
+      {adjusting && (
+        <StockAdjustDialog item={adjusting} saving={saving} t={t}
+          onCancel={()=>setAdjusting(null)} onSave={saveStock}/>
       )}
     </div>
   );
@@ -5060,6 +5491,54 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
 }
 
 /* ════════════════ ROOT APP ════════════════ */
+/* ── Error boundary ── */
+/* Without this, any component that throws unmounts the whole tree and the user
+   gets a blank white page with nothing in the console they can act on. Two real
+   bugs hit exactly that: a nil `issues` array from the alerts API, and a merge
+   conflict left in this file. A boundary turns "the app is gone" into "this one
+   page broke, here is why, here is how to get back".
+
+   It resets itself when the user navigates elsewhere, so a page that crashes
+   once doesn't lock them out of every other page for the rest of the session. */
+class PageErrorBoundary extends React.Component {
+  static contextType = LangCtx;
+  constructor(props) {
+    super(props);
+    this.state = { error: null, stack: '' };
+  }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) {
+    // Kept in the console as well as the screen, since the component stack is
+    // what actually identifies which of the pages is at fault.
+    console.error('Page crashed:', error, info && info.componentStack);
+    this.setState({ stack: (info && info.componentStack) || '' });
+  }
+  componentDidUpdate(prevProps) {
+    if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ error: null, stack: '' });
+    }
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    const t = T[this.context] || T.en;
+    return (
+      <div className="error-boundary">
+        <div className="error-boundary-card">
+          <div className="error-boundary-icon">{Ic.info}</div>
+          <h2>{t.pageErrorTitle}</h2>
+          <p className="error-boundary-msg">{t.pageErrorBody}</p>
+          <pre className="error-boundary-detail">{String(this.state.error)}</pre>
+          {this.state.stack && <pre className="error-boundary-stack">{this.state.stack.trim()}</pre>}
+          <div className="error-boundary-actions">
+            <button className="btn btn-primary" onClick={()=>this.setState({error:null, stack:''})}>{t.tryAgain}</button>
+            <button className="btn btn-ghost" onClick={()=>location.reload()}>{t.reloadApp}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
 function App() {
   const [lang,    setLang]    = useState(()=>loadLS('lira_lang','en'));
   const [theme,   setTheme]   = useState(()=>loadLS('lira_theme','light'));
@@ -5337,13 +5816,18 @@ function App() {
           )}
 
           <div className="content">
+            {/* resetKey={page} so a crash is contained to the page that caused
+                it — navigating away clears it and the rest of the app keeps
+                working. */}
+            <PageErrorBoundary resetKey={page}>
+            <React.Fragment>
             {page==='dashboard' && <Dashboard apt={apt} dept={dept} users={users} stats={stats}/>}
             {page==='apt'       && <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='dept'      && <IssuesTable issues={dept} tableMode="dept" currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='history'   && <HistoryPage apt={apt} dept={dept} currentUser={me} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='alerts'    && <AlertsPage alerts={alerts} currentUser={me} token={token} onAlertsUpdate={setAlerts} setToast={setToast}/>}
             {page==='analytics' && <AnalyticsPage token={token} alertsPendingCount={alertsPendingCount}/>}
-            {page==='consumables' && <ConsumablesPage token={token}/>}
+            {page==='consumables' && <ConsumablesPage token={token} currentUser={me} onCatalogUpdate={setConsumableItems}/>}
             {page==='support' && <SupportPage token={token}/>}
             {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}
               token={token} onUsersUpdate={setUsers} setToast={setToast}/>}
@@ -5371,6 +5855,8 @@ function App() {
               lang={lang}
               onLangChange={setLang}
             />}
+            </React.Fragment>
+            </PageErrorBoundary>
           </div>
         </div>
 
