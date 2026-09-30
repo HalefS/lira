@@ -609,6 +609,12 @@ html.dark .week-nav button { background: var(--gray-50); }
 .form-control:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(24,95,165,0.1); }
 .form-control::placeholder { color: var(--gray-400); }
 select.form-control { cursor: pointer; }
+/* A locked field has to look locked, or "uneditable" is invisible and people
+   still try to type in it. Dimmed, flat, and explicitly not-allowed. */
+.form-control:disabled {
+  background: var(--gray-100); color: var(--gray-400);
+  border-color: var(--gray-200); cursor: not-allowed; box-shadow: none;
+}
 
 /* ── Consumables ── */
 /* Icon tile: a tinted rounded square with a duotone drawing inside. Colors come
@@ -1373,6 +1379,8 @@ const T = {
     descPlaceholder: 'Describe the issue…',
     resolutionLabel: 'Resolution',
     resolutionPlaceholder: 'What was done to fix it?',
+    // Written into the resolution of a Pending issue, which nobody may edit.
+    stillWaiting: 'Still waiting',
     startTime: 'Start time',
     endTime: 'End time',
     duration: 'Duration',
@@ -1764,6 +1772,8 @@ const T = {
     descPlaceholder: 'Descreva a avaria…',
     resolutionLabel: 'Resolução',
     resolutionPlaceholder: 'O que foi feito para resolver?',
+    // Escrito na resolução de uma avaria Pendente, que ninguém pode editar.
+    stillWaiting: 'Ainda à espera',
     startTime: 'Hora de início',
     endTime: 'Hora de fim',
     duration: 'Duração',
@@ -2786,6 +2796,32 @@ function ConfirmDeleteIssue({ issue, onCancel, onConfirm, deleting }) {
   );
 }
 
+/*
+  The start/end times to open the edit form with.
+
+  Three cases, and the middle one is easy to confuse with the last:
+
+  1. The issue has real times. Use them.
+  2. The issue is Pending. It has no end time because the work is not finished,
+     which is a real absence rather than missing data — so the end stays empty
+     instead of being given a made-up one.
+  3. The issue predates clock times. Nothing was ever recorded, so rebuild a
+     placeholder pair ending "now" that reproduces the stored duration. Without
+     this the duration line would be blank on every legacy issue.
+*/
+function initialClockTimes(issue) {
+  if (issue.startTime && issue.endTime) {
+    return { startTime: issue.startTime, endTime: issue.endTime };
+  }
+  if (issue.status === 'Pending') {
+    return { startTime: issue.startTime || '', endTime: '' };
+  }
+  const end = new Date();
+  const start = new Date(end.getTime() - issue.time*60000);
+  const toHM = d => String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  return { startTime: toHM(start), endTime: toHM(end) };
+}
+
 function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments, connectaAgents, consumableItems, token, onClose, onSave }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
@@ -2816,20 +2852,8 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
     type:       editIssue.type,
     problem:    editIssue.problem,
     resolution: editIssue.resolution,
-    // Use the actual start/end times the issue was logged with. Only
-    // issues logged before this feature existed lack them — for those
-    // legacy rows only, fall back to a placeholder pair ending "now" that
-    // reproduces the existing total duration, since real clock times were
-    // never recorded for them.
-    ...(editIssue.startTime && editIssue.endTime
-      ? { startTime: editIssue.startTime, endTime: editIssue.endTime }
-      : (() => {
-          const end = new Date();
-          const start = new Date(end.getTime() - editIssue.time*60000);
-          const toHM = d => String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-          return { startTime: toHM(start), endTime: toHM(end) };
-        })()
-    ),
+    // Use the actual start/end times the issue was logged with.
+    ...initialClockTimes(editIssue),
     status:           editIssue.status,
     reportedByAgent:  editIssue.reportedByAgent || '',
     confirmedByAgent: editIssue.confirmedByAgent || '',
@@ -2853,10 +2877,27 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
   function set(k,v) { setForm(f=>({...f,[k]:v})); }
   const duration = useMemo(()=>computeDurationMinutes(form.startTime, form.endTime), [form.startTime, form.endTime]);
   const timeRangeInvalid = form.startTime && form.endTime && duration === null;
+
+  // A Pending issue has not been fixed yet, so the two fields that say the work
+  // is done are taken away: the resolution is not the technician's to write, and
+  // there is no end time for a job that has not ended. Switching back to Ok
+  // clears the resolution too, so a real one has to be written from scratch
+  // rather than the "still waiting" placeholder being kept and mistaken for one.
+  const isPending = form.status === 'Pending';
+  const resolution = isPending ? t.stillWaiting : form.resolution;
+
+  function setStatus(next) {
+    setForm(f => next === 'Pending'
+      ? {...f, status: next, resolution: '', endTime: ''}
+      : {...f, status: next, resolution: ''});
+  }
+
+  // A pending issue is logged without an end time, so there is no duration to
+  // compute and none is required; everything else still has to be filled in.
   const valid = (issueMode==='apt'
-    ? form.apt && form.type && form.problem && form.resolution
-    : form.dept && form.type && form.problem && form.resolution
-  ) && duration !== null;
+    ? form.apt && form.type && form.problem && resolution
+    : form.dept && form.type && form.problem && resolution
+  ) && (isPending || duration !== null);
 
   // Recurring-issue check: once a location + type are picked, ask the
   // backend (debounced) whether this same issue type has already happened
@@ -2922,7 +2963,9 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
           </div>
           <div className="form-group">
             <label>{t.resolutionLabel}</label>
-            <input className="form-control" placeholder={t.resolutionPlaceholder} value={form.resolution} onChange={e=>set('resolution',e.target.value)} />
+            <input className="form-control" placeholder={t.resolutionPlaceholder}
+              disabled={isPending} title={isPending ? t.stillWaiting : undefined}
+              value={resolution} onChange={e=>set('resolution',e.target.value)} />
           </div>
           <div className="form-row">
             <div className="form-group">
@@ -2931,12 +2974,13 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
             </div>
             <div className="form-group">
               <label>{t.endTime}</label>
-              <input className="form-control" type="time" lang="sv-SE" value={form.endTime} onChange={e=>set('endTime',e.target.value)} />
+              <input className="form-control" type="time" lang="sv-SE" disabled={isPending}
+                value={form.endTime} onChange={e=>set('endTime',e.target.value)} />
             </div>
           </div>
           <div className="form-group">
             <label>{t.statusLabel}</label>
-            <select className="form-control" value={form.status} onChange={e=>set('status',e.target.value)}>
+            <select className="form-control" value={form.status} onChange={e=>setStatus(e.target.value)}>
               <option value="Ok">{t.statusOk}</option>
               <option value="Pending">{t.statusPending}</option>
             </select>
@@ -3003,13 +3047,13 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
           </div>
           {timeRangeInvalid ? (
             <div style={{fontSize:12.5,color:'var(--red)',marginTop:-8}}>{t.invalidTimeRange}</div>
-          ) : duration !== null ? (
+          ) : duration !== null && !isPending ? (
             <div style={{fontSize:12.5,color:'var(--gray-400)',marginTop:-8}}>{t.duration}: <strong style={{color:'var(--gray-600)'}}>{duration}m</strong></div>
           ) : null}
         </div>
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>{t.cancel}</button>
-          <button className="btn btn-primary" disabled={!valid} onClick={()=>{onSave({...form,time:duration,reportedByAgent:form.reportedByAgent||null,confirmedByAgent:form.confirmedByAgent||null});onClose();}}>
+          <button className="btn btn-primary" disabled={!valid} onClick={()=>{onSave({...form,resolution:resolution,time:isPending?0:duration,reportedByAgent:form.reportedByAgent||null,confirmedByAgent:form.confirmedByAgent||null});onClose();}}>
             {Ic.check} {isEdit ? t.saveChanges : t.logIssue}
           </button>
         </div>
@@ -6163,6 +6207,13 @@ function App() {
     }));
   }
 
+  // A clock time the user never filled in goes to the server as an empty string,
+  // not null. The times are *string there and the update path reads the two
+  // differently: null means "the client did not mention this field", whereas ""
+  // means "there is no time here" and clears the column. A Pending issue has no
+  // end time, so it depends on the second one to actually remove it.
+  const clockOrEmpty = v => v || '';
+
   async function addIssue(form, mode) {
     try {
       const body = {
@@ -6172,8 +6223,8 @@ function App() {
         problem:      form.problem,
         resolution:   form.resolution,
         time_minutes: Number(form.time),
-        start_time:   form.startTime,
-        end_time:     form.endTime,
+        start_time:   clockOrEmpty(form.startTime),
+        end_time:     clockOrEmpty(form.endTime),
         status:       form.status,
         reported_by_agent:  form.reportedByAgent,
         confirmed_by_agent: form.confirmedByAgent,
@@ -6205,8 +6256,8 @@ function App() {
         problem:      form.problem,
         resolution:   form.resolution,
         time_minutes: Number(form.time),
-        start_time:   form.startTime,
-        end_time:     form.endTime,
+        start_time:   clockOrEmpty(form.startTime),
+        end_time:     clockOrEmpty(form.endTime),
         status:       form.status,
         reported_by_agent:  form.reportedByAgent,
         confirmed_by_agent: form.confirmedByAgent,

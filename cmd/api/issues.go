@@ -3,10 +3,42 @@ package main
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/HalefS/lira/internal/data"
 	"github.com/HalefS/lira/internal/validator"
 )
+
+// normaliseClockTime drops a blank submitted clock time, so an issue with no
+// time at all stores NULL rather than an empty string. A Pending issue has no
+// end time -- the job has not been fixed, so it has not ended.
+func normaliseClockTime(v *string) *string {
+	if v == nil || strings.TrimSpace(*v) == "" {
+		return nil
+	}
+	return v
+}
+
+// applyClockTime copies a submitted clock time onto an issue being updated, and
+// has to tell three cases apart that would otherwise be indistinguishable:
+//
+//	nil      the client did not mention the field, so the stored value stands
+//	""       an explicit "there is no time here", which clears the column
+//	"HH:MM"  a real value, which replaces it
+//
+// Without the middle case, switching a resolved issue to Pending would leave its
+// old end time on the row, so the issue would read as ended while its status
+// says it is still waiting.
+func applyClockTime(dst **string, submitted *string) {
+	switch {
+	case submitted == nil:
+		// not mentioned -- leave whatever is already stored
+	case strings.TrimSpace(*submitted) == "":
+		*dst = nil
+	default:
+		*dst = submitted
+	}
+}
 
 func (app *application) listIssuesHandler(w http.ResponseWriter, r *http.Request) {
 	qs := r.URL.Query()
@@ -105,8 +137,8 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		Problem:          input.Problem,
 		Resolution:       input.Resolution,
 		TimeMinutes:      input.TimeMinutes,
-		StartTime:        input.StartTime,
-		EndTime:          input.EndTime,
+		StartTime:        normaliseClockTime(input.StartTime),
+		EndTime:          normaliseClockTime(input.EndTime),
 		ReportedByAgent:  input.ReportedByAgent,
 		ConfirmedByAgent: input.ConfirmedByAgent,
 		Status:           input.Status,
@@ -331,10 +363,10 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		issue.FalsePositive = *input.FalsePositive
 	}
 	if input.StartTime != nil {
-		issue.StartTime = input.StartTime
+		applyClockTime(&issue.StartTime, input.StartTime)
 	}
 	if input.EndTime != nil {
-		issue.EndTime = input.EndTime
+		applyClockTime(&issue.EndTime, input.EndTime)
 	}
 	if input.ReportedByAgent != nil {
 		issue.ReportedByAgent = input.ReportedByAgent
