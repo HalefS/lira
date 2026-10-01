@@ -199,37 +199,50 @@ func (m TVSwapModel) SetForIssue(issueID int64, uses []TVSwapUse, loggedBy int64
 // of fault it was. Without those, a bare "1324 -> 1301" is hard to read — it
 // doesn't say which of the two rooms was the problem.
 type TVSwapListItem struct {
-	ID           int64     `json:"id"`
-	CreatedAt    time.Time `json:"created_at"`
-	IssueID      int64     `json:"issue_id"`
-	FromRoom     string    `json:"from_room"`
-	ToRoom       string    `json:"to_room"`
-	Notes        string    `json:"notes"`
-	IssueMode    string    `json:"issue_mode"`
-	IssueType    string    `json:"issue_type"`
-	IssueProblem string    `json:"issue_problem"`
-	LoggedByName string    `json:"logged_by_name"`
+	ID        int64     `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	IssueID   int64     `json:"issue_id"`
+	FromRoom  string    `json:"from_room"`
+	ToRoom    string    `json:"to_room"`
+	Notes     string    `json:"notes"`
+	IssueMode string    `json:"issue_mode"`
+	// The room or department the fault was reported in. This is usually the
+	// same as ToRoom, but not always: a set can be moved to a room whose own
+	// set was fine, and it is the reported room that says what the guest
+	// complained about.
+	IssueLocation string `json:"issue_location"`
+	IssueType     string `json:"issue_type"`
+	IssueProblem  string `json:"issue_problem"`
+	LoggedByName  string `json:"logged_by_name"`
 }
 
 // GetList returns swaps newest first. Passing issueID 0 returns swaps across
-// every issue; a non-zero id scopes the list to that issue. The issue's own
-// fields are joined in because a swap on its own does not say which of the two
-// rooms was the one that was faulty.
-func (m TVSwapModel) GetList(issueID int64, limit int) ([]*TVSwapListItem, error) {
+// every issue; a non-zero id scopes the list to that issue. from and to are
+// "YYYY-MM-DD" bounds on the swap's own created_at, either of which may be
+// empty for unbounded.
+//
+// The issue's own fields are joined in because a swap on its own does not say
+// which of the two rooms was the one that was faulty.
+func (m TVSwapModel) GetList(issueID int64, from, to string, limit int) ([]*TVSwapListItem, error) {
+	// The range is on the swap's own created_at, anchored in the server's
+	// timezone like every other date filter in the app. An empty bound is
+	// unbounded, so the page opens on "everything" and narrows from there.
 	query := `
 		SELECT s.id, s.created_at, s.issue_id, s.from_room, s.to_room, s.notes,
-		       i.mode, i.type, i.problem, COALESCE(u.name, '')
+		       i.mode, i.location, i.type, i.problem, COALESCE(u.name, '')
 		FROM issue_tv_swaps s
 		INNER JOIN issues i ON i.id = s.issue_id
 		LEFT JOIN users u ON u.id = i.logged_by
 		WHERE ($1 = 0 OR s.issue_id = $1)
+		  AND ($2 = '' OR s.created_at::date >= $2::date)
+		  AND ($3 = '' OR s.created_at::date <= $3::date)
 		ORDER BY s.created_at DESC, s.id DESC
-		LIMIT $2`
+		LIMIT $4`
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	rows, err := m.DB.QueryContext(ctx, query, issueID, limit)
+	rows, err := m.DB.QueryContext(ctx, query, issueID, from, to, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +252,8 @@ func (m TVSwapModel) GetList(issueID int64, limit int) ([]*TVSwapListItem, error
 	for rows.Next() {
 		var s TVSwapListItem
 		if err := rows.Scan(&s.ID, &s.CreatedAt, &s.IssueID, &s.FromRoom, &s.ToRoom,
-			&s.Notes, &s.IssueMode, &s.IssueType, &s.IssueProblem, &s.LoggedByName); err != nil {
+			&s.Notes, &s.IssueMode, &s.IssueLocation, &s.IssueType, &s.IssueProblem,
+			&s.LoggedByName); err != nil {
 			return nil, err
 		}
 		out = append(out, &s)

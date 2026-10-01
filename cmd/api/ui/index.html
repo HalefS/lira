@@ -1400,6 +1400,16 @@ const T = {
     tvSwapErrDup: 'That swap is already in the list.',
     tvSwapErrTooMany: 'An issue cannot hold more than 10 swaps.',
     tvSwapTitle: 'TV swap',
+    tvSwapsNav: 'TV swaps',
+    tvSwapsSubtitle: 'Every TV that has been moved between rooms to fix a fault. A room that appears as a destination more than once is living off a set that belongs elsewhere.',
+    tvSwapsEmpty: 'No TV swaps have been recorded yet.',
+    tvSwapsNoMatch: 'No swaps match that search.',
+    tvSwapsSearch: 'Search room, note or issue…',
+    tvSwapsColIssue: 'Issue',
+    tvSwapsStatTotal: 'Swaps',
+    tvSwapsStatRooms: 'Rooms involved',
+    tvSwapsBorrowed: 'borrowed',
+    tvSwapsLent: 'lent',
     adminSwapsCol: 'Swaps',
     adminSwapsOn: 'Yes',
     adminSwapsOff: 'No',
@@ -1821,6 +1831,16 @@ const T = {
     tvSwapErrDup: 'Esta troca já está na lista.',
     tvSwapErrTooMany: 'Não é possível registar mais de 10 trocas numa avaria.',
     tvSwapTitle: 'Troca de TV',
+    tvSwapsNav: 'Trocas de TV',
+    tvSwapsSubtitle: 'Todas as TVs que foram levadas de um quarto para outro para resolver uma avaria. Um quarto que aparece como destino mais do que uma vez está a usar uma TV que é de outro.',
+    tvSwapsEmpty: 'Ainda não há trocas de TV registadas.',
+    tvSwapsNoMatch: 'Nenhuma troca corresponde à pesquisa.',
+    tvSwapsSearch: 'Procurar quarto, nota ou avaria…',
+    tvSwapsColIssue: 'Avaria',
+    tvSwapsStatTotal: 'Trocas',
+    tvSwapsStatRooms: 'Quartos envolvidos',
+    tvSwapsBorrowed: 'recebeu',
+    tvSwapsLent: 'cedeu',
     adminSwapsCol: 'Trocas',
     adminSwapsOn: 'Sim',
     adminSwapsOff: 'Não',
@@ -3972,8 +3992,185 @@ function SupportPage({ token }) {
   );
 }
 
+/* Every TV swap in one list, for the overview the per-issue strips cannot give:
+   which rooms have been borrowing sets from each other, and whether the same pair
+   keeps recurring (which usually means one room's set is failing for good). */
+function TVSwapsPage({ token }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const [range, setRange] = useState('all');
+  const [query, setQuery] = useState('');
+  const [swaps, setSwaps] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const days = SUPPORT_RANGES.find(r=>r.id===range).days;
+    const params = new URLSearchParams();
+    if (days > 0) {
+      // Inclusive of today, so "last 30 days" is 30 days wide rather than 29.
+      const from = new Date(); from.setDate(from.getDate() - (days - 1));
+      params.set('from', from.toISOString().slice(0,10));
+      params.set('to', new Date().toISOString().slice(0,10));
+    }
+    const qs = params.toString();
+    apiFetch(`/tv-swaps${qs ? '?'+qs : ''}`, {token})
+      .then(res => { if (!cancelled) setSwaps(res.swaps || []); })
+      .catch(() => { if (!cancelled) setSwaps([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [range, token]);
+
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? swaps.filter(s => [s.from_room, s.to_room, s.notes, s.issue_problem, s.issue_type]
+        .some(v => String(v||'').toLowerCase().includes(q)))
+    : swaps;
+
+  // Counted over the whole range, not over `shown`. Tying the search box's
+  // visibility to the filtered list would make it vanish the moment it
+  // narrowed the results, stranding the user in the filtered view with no way
+  // to widen it again.
+  const allRooms = useMemo(() => {
+    const set = new Set();
+    for (const s of swaps) { set.add(s.from_room); set.add(s.to_room); }
+    return set.size;
+  }, [swaps]);
+
+  // A room that borrowed more than it lent is the one worth looking at: it is
+  // living off a set that belongs elsewhere. Counted from the destination side
+  // so "1301 <- 1204" credits 1204 as the lender.
+  const tally = useMemo(() => {
+    const borrowed = new Map(), lent = new Map();
+    for (const s of shown) {
+      borrowed.set(s.to_room,   (borrowed.get(s.to_room)   || 0) + 1);
+      lent.set(s.from_room,     (lent.get(s.from_room)     || 0) + 1);
+    }
+    return {borrowed, lent};
+  }, [shown]);
+
+  const rooms = useMemo(() => {
+    const set = new Set();
+    for (const s of shown) { set.add(s.from_room); set.add(s.to_room); }
+    return [...set].sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
+  }, [shown]);
+
+  return (
+    <>
+      <p style={{fontSize:13,color:'var(--gray-400)',margin:'-6px 0 18px',maxWidth:760}}>{t.tvSwapsSubtitle}</p>
+
+      <div className="table-card" style={{marginBottom:18}}>
+        <div className="table-header">
+          <span className="table-title">{t.supportRange}</span>
+          <div className="filter-chips">
+            {SUPPORT_RANGES.map(r=>(
+              <button key={r.id} className={`chip ${range===r.id?'active':''}`} onClick={()=>setRange(r.id)}>
+                {t[`supportRange${r.id==='all'?'All':r.id}`]}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {rooms.length > 0 && (
+        <div className="analytics-grid" style={{marginBottom:18}}>
+          <div className="stat-card">
+            <div className="stat-label" style={{marginBottom:4}}>{t.tvSwapsStatTotal}</div>
+            <div className="stat-value">{shown.length}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label" style={{marginBottom:4}}>{t.tvSwapsStatRooms}</div>
+            <div className="stat-value">{rooms.length}</div>
+          </div>
+        </div>
+      )}
+
+      {/* The search box lives outside the table so it survives the results
+          narrowing to nothing — otherwise a search that matched nothing would
+          remove the only control that could undo it. */}
+      {!loading && allRooms > 8 && (
+        <div className="table-card" style={{marginBottom:18}}>
+          <div className="search-wrap" style={{padding:'14px 20px 0'}}>
+            {Ic.search}
+            <input placeholder={t.tvSwapsSearch} value={query} onChange={e=>setQuery(e.target.value)}/>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="empty-state"><p>{t.analyticsLoading}</p></div>
+      ) : shown.length === 0 ? (
+        <div className="empty-state">{Ic.tv}<p>{q ? t.tvSwapsNoMatch : t.tvSwapsEmpty}</p></div>
+      ) : (
+        <div className="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>{t.date}</th>
+                <th>{t.tvSwapFrom}</th>
+                <th>{t.tvSwapTo}</th>
+                <th>{t.tvSwapsColIssue}</th>
+                <th>{t.tvSwapNotes}</th>
+                <th>{t.loggedBy}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map(s=>{
+                const borrowed = tally.borrowed.get(s.to_room) || 0;
+                const lent     = tally.lent.get(s.from_room)     || 0;
+                return (
+                  <tr key={s.id}>
+                    <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>
+                      {new Date(s.created_at).toLocaleString()}
+                    </td>
+                    <td>
+                      <div style={{display:'flex',alignItems:'center',gap:7}}>
+                        <span style={{color:'var(--gray-400)',fontSize:11}}>{Ic.tv}</span>
+                        <strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{s.from_room}</strong>
+                        {/* A room that has lent more often than it borrowed is
+                            the one worth looking at: its own sets keep going
+                            somewhere else. */}
+                        {lent > 1 && (
+                          <span className="badge" style={{background:'var(--amber-light)',color:'var(--amber)',fontSize:10,padding:'1px 7px'}}>
+                            {lent} {t.tvSwapsLent}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{display:'flex',alignItems:'center',gap:7}}>
+                        <span style={{color:'var(--gray-300)',fontSize:13}}>{'\u2192'}</span>
+                        <strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{s.to_room}</strong>
+                        {borrowed > 1 && (
+                          <span className="badge" style={{background:'var(--amber-light)',color:'var(--amber)',fontSize:10,padding:'1px 7px'}}>
+                            {borrowed} {t.tvSwapsBorrowed}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td style={{maxWidth:180}}>
+                      <div style={{display:'flex',alignItems:'center',gap:7}}>
+                        <TypeBadge type={s.issue_type}/>
+                        <strong style={{fontFamily:'DM Mono,monospace',fontSize:12.5}}>{s.issue_location}</strong>
+                      </div>
+                      <div style={{fontSize:12.5,color:'var(--gray-500)',marginTop:2}}>{s.issue_problem}</div>
+                    </td>
+                    <td style={{fontSize:12.5,color:'var(--gray-500)'}}>{s.notes || '—'}</td>
+                    <td style={{fontSize:12.5,color:'var(--gray-600)'}}>{s.logged_by_name || '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
 /* Formats a current-vs-previous change: {pct, dir, color}. goodDirection
-   is 'up', 'down', or 'neutral' — determines whether an increase should be
+   is 'up', 'down', or 'neutral' - determines whether an increase should be
    shown as good (green) or bad (red). */
 function analyticsChange(current, previous, goodDirection) {
   if (previous === 0) {
@@ -6663,7 +6860,8 @@ function App() {
     // A collapsible group rather than a destination: it only reveals its
     // children, so it never takes the .active class itself.
     {id:'misc', label:t.miscellaneous, icon:Ic.grid, group:true, children:[
-      {id:'lcu', label:t.lcuTesting, icon:Ic.server},
+      {id:'lcu',     label:t.lcuTesting,   icon:Ic.server},
+      {id:'tvswaps', label:t.tvSwapsNav,   icon:Ic.tv},
     ]},
     {id:'profile',   label:'Profile',    icon:Ic.person},
   ];
@@ -6775,6 +6973,7 @@ function App() {
               token={token} onUsersUpdate={setUsers} setToast={setToast}/>}
             {page==='reports' && <ReportsPage token={token}/>}
             {/* LCU testing — a card reader on trial for a week. */}
+            {page==='tvswaps' && <TVSwapsPage token={token}/>}
             {page==='lcu'     && <LCUPage token={token} setToast={setToast}
               refreshKey={lcuEpoch}
               onLcuRequired={ex=>setLcuPrompt({units:ex.lcuUnits, today:ex.lcuToday})}/>}

@@ -50,21 +50,45 @@ func (app *application) setIssueTVSwaps(w http.ResponseWriter, r *http.Request, 
 	return err
 }
 
-// listTVSwapsHandler returns every recorded TV swap, newest first.
+// listTVSwapsHandler powers the TV swaps page: every recorded swap, newest
+// first, optionally narrowed to one date or a from/to range.
 //
 // Read-only for every authenticated user, like /v1/consumables: swaps are
 // edited through the issue they belong to, which keeps the owner-or-manager
-// permission check in one place. The `issue_id` filter is what a future
-// "TV movements" page would use to scope itself to one issue.
+// permission check in one place.
 func (app *application) listTVSwapsHandler(w http.ResponseWriter, r *http.Request) {
 	qs := r.URL.Query()
 	issueID := int64(app.readInt(qs, "issue_id", 0))
-	limit := app.readInt(qs, "limit", 200)
-	if limit < 1 || limit > 1000 {
-		limit = 200
+	date := app.readString(qs, "date", "")
+	from := app.readString(qs, "from", "")
+	to := app.readString(qs, "to", "")
+
+	// The single-date filter is shorthand for a one-day range, so the page can
+	// offer "Today" and "All dates" as buttons over the same underlying range.
+	if date != "" {
+		from, to = date, date
 	}
 
-	swaps, err := app.models.TVSwaps.GetList(issueID, limit)
+	v := validator.New()
+	for field, value := range map[string]string{"date": date, "from": from, "to": to} {
+		if value != "" {
+			v.Check(datePattern.MatchString(value), field, "must be a date in YYYY-MM-DD format")
+		}
+	}
+	if from != "" && to != "" {
+		v.Check(from <= to, "from", "must be on or before the end date")
+	}
+	if !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	limit := app.readInt(qs, "limit", 500)
+	if limit < 1 || limit > 1000 {
+		limit = 500
+	}
+
+	swaps, err := app.models.TVSwaps.GetList(issueID, from, to, limit)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
