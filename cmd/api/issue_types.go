@@ -24,6 +24,10 @@ func (app *application) listIssueTypesHandler(w http.ResponseWriter, r *http.Req
 func (app *application) createIssueTypeHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name string `json:"name"`
+		// Whether issues of this type offer to record equipment being moved
+		// between rooms. Optional so an older client that doesn't send it
+		// still creates a type that simply doesn't prompt.
+		TracksSwaps bool `json:"tracks_swaps"`
 	}
 	if err := app.readJSON(w, r, &input); err != nil {
 		app.badRequestResponse(w, r, err)
@@ -40,9 +44,10 @@ func (app *application) createIssueTypeHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	it := &data.IssueType{
-		Name:      strings.TrimSpace(input.Name),
-		Color:     color,
-		CreatedBy: &createdBy,
+		Name:        strings.TrimSpace(input.Name),
+		Color:       color,
+		TracksSwaps: input.TracksSwaps,
+		CreatedBy:   &createdBy,
 	}
 
 	v := validator.New()
@@ -90,6 +95,41 @@ func (app *application) updateIssueTypeColorHandler(w http.ResponseWriter, r *ht
 	}
 
 	it, err := app.models.IssueTypes.UpdateColor(id, input.Color)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	app.writeJSON(w, http.StatusOK, envelope{"issue_type": it}, nil)
+}
+
+// updateIssueTypeTracksSwapsHandler turns the "record equipment swaps" prompt
+// on or off for one issue type, from the admin panel.
+//
+// It is separate from the colour endpoint because that one takes a value the
+// admin page always has to send, whereas this one is a boolean a manager
+// toggles on the type's own row.
+func (app *application) updateIssueTypeTracksSwapsHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := app.readIDParam(r)
+	if err != nil {
+		app.notFoundResponse(w, r)
+		return
+	}
+
+	var input struct {
+		TracksSwaps bool `json:"tracks_swaps"`
+	}
+	if err := app.readJSON(w, r, &input); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	it, err := app.models.IssueTypes.UpdateTracksSwaps(id, input.TracksSwaps)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):

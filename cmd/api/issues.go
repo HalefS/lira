@@ -121,6 +121,9 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		// The handovers of the issue to Telnet / Telefonica. Same nil-means-
 		// leave-as-is rule as the consumables.
 		SupportRequests *[]data.SupportRequestUse `json:"support_requests"`
+		// TVs moved between rooms while fixing the issue. Same nil-means-
+		// leave-as-is rule.
+		TVSwaps *[]data.TVSwapUse `json:"tv_swaps"`
 	}
 
 	if err := app.readJSON(w, r, &input); err != nil {
@@ -213,6 +216,10 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	if input.TVSwaps != nil {
+		app.validateTVSwaps(v, *input.TVSwaps)
+	}
+
 	var supportRequests []data.SupportRequestRecord
 	if input.SupportRequests != nil {
 		supportRequests, err = app.validateSupportRequests(v, *input.SupportRequests)
@@ -235,6 +242,12 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 	if input.Consumables != nil {
 		if err := app.models.Consumables.SetForIssue(issue.ID, *input.Consumables, user.ID); err != nil {
 			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
+	if input.TVSwaps != nil {
+		if err := app.setIssueTVSwaps(w, r, issue.ID, *input.TVSwaps, user.ID); err != nil {
 			return
 		}
 	}
@@ -331,6 +344,9 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		// The handovers of the issue to Telnet / Telefonica. Same nil-means-
 		// leave-as-is rule as the consumables.
 		SupportRequests *[]data.SupportRequestUse `json:"support_requests"`
+		// TVs moved between rooms while fixing the issue. Same nil-means-
+		// leave-as-is rule.
+		TVSwaps *[]data.TVSwapUse `json:"tv_swaps"`
 	}
 
 	if err := app.readJSON(w, r, &input); err != nil {
@@ -436,6 +452,10 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	if input.TVSwaps != nil {
+		app.validateTVSwaps(v, *input.TVSwaps)
+	}
+
 	var supportRequests []data.SupportRequestRecord
 	if input.SupportRequests != nil {
 		supportRequests, err = app.validateSupportRequests(v, *input.SupportRequests)
@@ -463,6 +483,12 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 	if input.Consumables != nil {
 		if err := app.models.Consumables.SetForIssue(issue.ID, *input.Consumables, currentUser.ID); err != nil {
 			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
+	if input.TVSwaps != nil {
+		if err := app.setIssueTVSwaps(w, r, issue.ID, *input.TVSwaps, currentUser.ID); err != nil {
 			return
 		}
 	}

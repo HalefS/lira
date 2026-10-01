@@ -77,6 +77,10 @@ func (app *application) routes() http.Handler {
 
 	// Consumable items — the catalog technicians pick from when logging an
 	// issue; list for all authenticated users, mutate for managers only
+	// TV swaps — read-only for everyone, because they are edited through the
+	// issue they belong to, which keeps the owner-or-manager check in one place.
+	router.HandlerFunc(http.MethodGet, "/v1/tv-swaps", app.requireAuth(app.listTVSwapsHandler))
+
 	router.HandlerFunc(http.MethodGet, "/v1/consumable-items", app.requireAuth(app.listConsumableItemsHandler))
 	router.HandlerFunc(http.MethodPost, "/v1/consumable-items", app.requireAuth(app.requireManager(app.createConsumableItemHandler)))
 	router.HandlerFunc(http.MethodPatch, "/v1/consumable-items/:id/icon", app.requireAuth(app.requireManager(app.updateConsumableItemIconHandler)))
@@ -99,6 +103,7 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodGet, "/v1/issue-types", app.requireAuth(app.listIssueTypesHandler))
 	router.HandlerFunc(http.MethodPost, "/v1/issue-types", app.requireAuth(app.requireManager(app.createIssueTypeHandler)))
 	router.HandlerFunc(http.MethodPatch, "/v1/issue-types/:id/color", app.requireAuth(app.requireManager(app.updateIssueTypeColorHandler)))
+	router.HandlerFunc(http.MethodPatch, "/v1/issue-types/:id/tracks-swaps", app.requireAuth(app.requireManager(app.updateIssueTypeTracksSwapsHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/issue-types/:id", app.requireAuth(app.requireManager(app.deleteIssueTypeHandler)))
 
 	// Departments — list for all authenticated users; mutate for managers only

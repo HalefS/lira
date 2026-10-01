@@ -678,6 +678,15 @@ select.form-control { cursor: pointer; }
 .tp-chip-detail  { color: var(--gray-500); font-weight: 400; }
 .tp-chip-telnet     { border-left: 3px solid var(--blue); }
 .tp-chip-telefonica { border-left: 3px solid var(--amber); }
+.tp-chip-swap       { border-left: 3px solid var(--green); }
+/* The set icon inside a swap chip needs to sit on the chip's line box rather
+   than stretch to the text height. */
+.tp-chip-swap svg { width: 13px; height: 13px; }
+
+/* Admin page: the per-type "issues of this type can involve moving equipment
+   between rooms" toggle. */
+.swap-toggle { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: 12.5px; color: var(--gray-600); }
+.swap-toggle input { accent-color: var(--blue); width: 15px; height: 15px; cursor: pointer; }
 
 /* Compact per-issue markers shown in the issue tables. */
 .tp-strip { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
@@ -687,7 +696,10 @@ select.form-control { cursor: pointer; }
 }
 .tp-strip-item.telnet     { background: var(--blue-light);   color: var(--blue); }
 .tp-strip-item.telefonica { background: var(--amber-light);  color: var(--amber); }
+.tp-strip-item.swap       { background: var(--green-light);  color: var(--green); }
 .tp-strip-item svg { width: 11px; height: 11px; }
+/* The arrow is what makes the pair read as a movement rather than two rooms. */
+.tp-swap-arrow { opacity: .7; font-weight: 400; margin: 0 1px; }
 
 /* The company picker inside the third-party support dialog. */
 .tp-company { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -1110,6 +1122,11 @@ function mapIssue(i) {
     })),
     // Handovers to Telnet / Telefonica. The Telnet names are free text — they
     // are whoever we spoke to on the other side, not users of this app.
+    // TVs moved between rooms to fix this issue. Rooms are free text, because
+    // there is no rooms table in this system.
+    tvSwaps: (i.tv_swaps || []).map(s => ({
+      id: s.id, fromRoom: s.from_room, toRoom: s.to_room, notes: s.notes || '',
+    })),
     supportRequests: (i.support_requests || []).map(s => ({
       id:            s.id,
       company:       s.company,
@@ -1361,6 +1378,34 @@ const T = {
     noStockMoves: 'No stock changes recorded yet.',
     toastStockUpdated: 'Stock updated',
     toastReorderSaved: 'Reorder level saved',
+    tvSwapLabel: 'TV swap',
+    tvSwapSub: 'Record a TV that was taken from one room and moved to another.',
+    tvSwapEditSub: 'Say which room it came from and which room it went to.',
+    addTvSwap: 'Record TV swap',
+    editTvSwap: 'Edit TV swap',
+    editTvSwaps: 'Edit TV swaps',
+    tvSwapFrom: 'Source room',
+    tvSwapTo: 'Destination room',
+    tvSwapFromPlaceholder: 'e.g. 1301',
+    tvSwapToPlaceholder: 'e.g. 1204',
+    tvSwapNotes: 'Note',
+    tvSwapNotesPlaceholder: 'e.g. the faulty set went to maintenance',
+    tvSwapHint: 'The destination is usually the room the fault was reported in.',
+    tvSwapRemove: 'Remove TV swap',
+    tvSwapNone: 'No TV swaps recorded yet.',
+    tvSwapFlagOff: 'This issue type does not allow swaps to be recorded.',
+    tvSwapErrNoFrom: 'Say which room the TV came from.',
+    tvSwapErrNoTo: 'Say which room the TV went to.',
+    tvSwapErrSame: 'The source and destination must be different.',
+    tvSwapErrDup: 'That swap is already in the list.',
+    tvSwapErrTooMany: 'An issue cannot hold more than 10 swaps.',
+    tvSwapTitle: 'TV swap',
+    adminSwapsCol: 'Swaps',
+    adminSwapsOn: 'Yes',
+    adminSwapsOff: 'No',
+    adminSwapsHint: 'Issues of this type can involve moving a TV from another room, so the form asks for the source and destination.',
+    toastSwapsEnabled: 'Swap tracking enabled for this type',
+    toastSwapsDisabled: 'Swap tracking disabled for this type',
     pageErrorTitle: 'This page could not be displayed',
     pageErrorBody: 'Something in the data went against what this page expected. The rest of the app still works — you can go to another page, or try this one again.',
     tryAgain: 'Try again',
@@ -1754,6 +1799,34 @@ const T = {
     noStockMoves: 'Ainda não há alterações de stock registadas.',
     toastStockUpdated: 'Stock actualizado',
     toastReorderSaved: 'Nível de reposição guardado',
+    tvSwapLabel: 'Troca de TV',
+    tvSwapSub: 'Registar uma TV que foi retirada de um quarto e levada para outro.',
+    tvSwapEditSub: 'Indique de onde veio a TV e para onde foi.',
+    addTvSwap: 'Registar troca de TV',
+    editTvSwap: 'Editar troca de TV',
+    editTvSwaps: 'Editar trocas de TV',
+    tvSwapFrom: 'Quarto de origem',
+    tvSwapTo: 'Quarto de destino',
+    tvSwapFromPlaceholder: 'ex. 1301',
+    tvSwapToPlaceholder: 'ex. 1204',
+    tvSwapNotes: 'Nota',
+    tvSwapNotesPlaceholder: 'ex. a TV avariada foi para a manutenção',
+    tvSwapHint: 'Normalmente o quarto de destino é o quarto onde a avaria foi reportada.',
+    tvSwapRemove: 'Remover troca de TV',
+    tvSwapNone: 'Ainda não há trocas de TV registadas.',
+    tvSwapFlagOff: 'Este tipo de avaria não permite registar trocas.',
+    tvSwapErrNoFrom: 'Indique de que quarto veio a TV.',
+    tvSwapErrNoTo: 'Indique para que quarto foi a TV.',
+    tvSwapErrSame: 'A origem e o destino têm de ser diferentes.',
+    tvSwapErrDup: 'Esta troca já está na lista.',
+    tvSwapErrTooMany: 'Não é possível registar mais de 10 trocas numa avaria.',
+    tvSwapTitle: 'Troca de TV',
+    adminSwapsCol: 'Trocas',
+    adminSwapsOn: 'Sim',
+    adminSwapsOff: 'Não',
+    adminSwapsHint: 'As avarias deste tipo podem envolver levar uma TV de outro quarto, por isso o formulário pede a origem e o destino.',
+    toastSwapsEnabled: 'Registo de trocas activado para este tipo',
+    toastSwapsDisabled: 'Registo de trocas desactivado para este tipo',
     pageErrorTitle: 'Não foi possível mostrar esta página',
     pageErrorBody: 'Alguma coisa nos dados não corresponde ao que esta página espera. O resto da aplicação continua a funcionar — pode ir para outra página, ou tentar esta outra vez.',
     tryAgain: 'Tentar de novo',
@@ -1954,6 +2027,9 @@ const Ic = {
   upload: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 10V3M5 6l3-3 3 3"/><path d="M2 13h12"/></svg>,
   camera: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 5a1 1 0 011-1h1.5l1-2h5l1 2H13a1 1 0 011 1v7a1 1 0 01-1 1H2a1 1 0 01-1-1z"/><circle cx="8" cy="8.5" r="2.5"/></svg>,
   bell:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2a3 3 0 00-3 3v2c0 1-.5 2-1.3 2.7A.8.8 0 004 11h8a.8.8 0 00.3-1.3C11.5 9 11 8 11 7V5a3 3 0 00-3-3z"/><path d="M6.5 13a1.5 1.5 0 003 0"/></svg>,
+  // A set on a stand, for the TV swap strip. Kept small and legible at the
+  // 11px the strips render at.
+  tv:     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="8" rx="1.6"/><path d="M8 11.5v1.8M5.6 14.2h4.8"/></svg>,
   trending: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 11l4-4 2.5 2.5L14 4"/><path d="M10 4h4v4"/></svg>,
   refresh: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13.7 8a5.7 5.7 0 10-1.7 4.1"/><path d="M13.7 4.3V8h-3.7"/></svg>,
   server: <svg viewBox="0 0 16 16"  fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2.5" width="12" height="4.2" rx="1"/><rect x="2" y="9.3" width="12" height="4.2" rx="1"/><path d="M4.3 4.6h.01M4.3 11.4h.01" strokeWidth="2"/></svg>,
@@ -2338,6 +2414,8 @@ const CONSUMABLE_ICON_TONE = {
 };
 const CONSUMABLE_ICON_KEYS = Object.keys(CONSUMABLE_ICONS);
 const MAX_CONSUMABLE_QTY = 99;
+// Mirrors maxTVSwapsPerIssue in internal/data/tv_swaps.go.
+const MAX_TV_SWAPS = 10;
 
 function ConsumableIcon({ name, size=36 }) {
   const key = CONSUMABLE_ICONS[name] ? name : 'box'; // unknown key → generic box
@@ -2366,6 +2444,24 @@ function ConsumableIconGrid({ value, onChange }) {
 }
 
 /* Small icons (with a quantity badge) shown in the issue tables. */
+/* Renders the TVs moved for an issue: a set icon followed by the room pair,
+   reading as "this set came from here and went there". */
+function TVSwapStrip({ swaps, t }) {
+  if (!swaps || swaps.length === 0) return null;
+  return (
+    <div className="tp-strip">
+      {swaps.map(s=>(
+        <span key={s.id} className="tp-strip-item swap"
+              title={t.tvSwapTitle + (s.notes ? ' — ' + s.notes : '')}>
+          {Ic.tv} <strong>{s.fromRoom}</strong>
+          <span className="tp-swap-arrow">{'\u2194'}</span>
+          <strong>{s.toRoom}</strong>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function ConsumableStrip({ items }) {
   if (!items || items.length === 0) return null;
   return (
@@ -2496,6 +2592,165 @@ function ConsumablePicker({ items, value, onCancel, onDone }) {
           <button type="button" className="btn btn-primary" onClick={()=>onDone(draft)}>
             {Ic.check} {t.consumableDone}{draft.length > 0 ? ` (${draft.length})` : ''}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* The dialog opened by "TV swap" in the issue form: records that a working TV
+   was taken from one room to another because the room's own set was unusable
+   and there was no spare in stock.
+   Works on a draft copy; nothing changes on the issue until Done. `key` is
+   client-only and identifies a swap that doesn't exist on the server yet, so
+   `id` stays the server's own row id (0 for a new one). */
+function TVSwapModal({ swaps, currentRoom, onCancel, onDone }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const [items, setItems] = useState(swaps);
+  const [draft, setDraft] = useState(null);   // null = list view, otherwise the swap being added/edited
+  const [err, setErr] = useState('');
+
+  function blank() {
+    return {key: `new-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, id: 0,
+            fromRoom: '', toRoom: currentRoom || '', notes: ''};
+  }
+  // Adding a swap needs its own trigger. It used to live in the footer, which
+  // meant the only way out of the list view was Done — and Done discards,
+  // so a swap added from there could never be kept.
+  function startAdd()   { setDraft(blank()); setErr(''); }
+  function startEdit(s) { setDraft({...s});  setErr(''); }
+  function cancelEdit() { setDraft(null);    setErr(''); }
+  function patch(k,v)   { setDraft(d=>({...d,[k]:v})); setErr(''); }
+
+  function remove(key) {
+    setItems(list => list.filter(x => x.key !== key));
+    if (draft && draft.key === key) cancelEdit();
+  }
+
+  // Mirrors ValidateTVSwaps on the server, so the user is told here rather than
+  // after a round-trip. The comparison is case-insensitive because room numbers
+  // are typed by hand and "1324" / " 1324 " are the same room.
+  function save() {
+    const from = draft.fromRoom.trim();
+    const to   = draft.toRoom.trim();
+    if (!from)              return setErr(t.tvSwapErrNoFrom);
+    if (!to)                return setErr(t.tvSwapErrNoTo);
+    if (from.toLowerCase() === to.toLowerCase()) return setErr(t.tvSwapErrSame);
+    const dup = items.some(x => x.key !== draft.key
+      && x.fromRoom.trim().toLowerCase() === from.toLowerCase()
+      && x.toRoom.trim().toLowerCase()   === to.toLowerCase());
+    if (dup)                return setErr(t.tvSwapErrDup);
+    if (items.length >= MAX_TV_SWAPS)  return setErr(t.tvSwapErrTooMany);
+
+    const saved = {...draft, fromRoom: from, toRoom: to, notes: draft.notes.trim()};
+    setItems(list => list.some(x => x.key === saved.key)
+      ? list.map(x => x.key === saved.key ? saved : x)
+      : [...list, saved]);
+    cancelEdit();
+  }
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') { draft ? cancelEdit() : onCancel(); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [draft, onCancel]);
+
+  function renderList() {
+    return (
+      <div className="modal-body">
+        {/* Adding lives above the list, not in the footer, so the footer can
+            commit the list. With it in the footer there was no way to add a
+            swap and then keep it. */}
+        <button type="button" className="btn btn-ghost" style={{marginBottom:12}}
+          onClick={startAdd} disabled={items.length >= MAX_TV_SWAPS}>
+          {Ic.plus} {t.addTvSwap}
+        </button>
+        {items.length === 0 ? (
+          <div className="empty-state" style={{padding:'28px 12px'}}>{Ic.tv}<p>{t.tvSwapNone}</p></div>
+        ) : items.map(s=>(
+          <div className="tp-row" key={s.key}
+               onClick={()=>startEdit(s)}
+               role="button" tabIndex={0}
+               onKeyDown={e=>{ if (e.key==='Enter') startEdit(s); }}
+               style={{cursor:'pointer'}}>
+            <span className="tp-row-icon">{Ic.tv}</span>
+            <div style={{minWidth:0,flex:1}}>
+              <div className="tp-row-title">
+                <strong>{s.fromRoom}</strong>
+                <span style={{color:'var(--gray-400)',margin:'0 6px'}}>{'\u2194'}</span>
+                <strong>{s.toRoom}</strong>
+              </div>
+              {s.notes && <div className="tp-row-sub">{s.notes}</div>}
+            </div>
+            <button type="button" className="icon-btn" aria-label={t.tvSwapRemove}
+              onClick={e=>{ e.stopPropagation(); remove(s.key); }}>{Ic.trash}</button>
+          </div>
+        ))}
+        {err && <div style={{fontSize:12.5,color:'var(--red)',marginTop:8}}>{err}</div>}
+      </div>
+    );
+  }
+
+  function renderEditor() {
+    return (
+      <div className="modal-body">
+        <div className="form-group">
+          <label>{t.tvSwapFrom}</label>
+          <input className="form-control" value={draft.fromRoom} maxLength={100} autoFocus
+            placeholder={t.tvSwapFromPlaceholder}
+            onChange={e=>patch('fromRoom', e.target.value)}
+            onKeyDown={e=>{ if (e.key==='Enter') save(); }}/>
+        </div>
+        <div className="form-group">
+          <label>{t.tvSwapTo}</label>
+          <input className="form-control" value={draft.toRoom} maxLength={100}
+            placeholder={currentRoom || t.tvSwapToPlaceholder}
+            onChange={e=>patch('toRoom', e.target.value)}
+            onKeyDown={e=>{ if (e.key==='Enter') save(); }}/>
+        </div>
+        <div className="form-group">
+          <label>{t.tvSwapNotes}</label>
+          <input className="form-control" value={draft.notes} maxLength={500}
+            placeholder={t.tvSwapNotesPlaceholder}
+            onChange={e=>patch('notes', e.target.value)}
+            onKeyDown={e=>{ if (e.key==='Enter') save(); }}/>
+        </div>
+        {/* Which room was actually reported broken is usually the destination,
+            so calling that out saves re-reading the two fields. */}
+        <div style={{fontSize:12,color:'var(--gray-400)'}}>
+          {t.tvSwapHint}
+        </div>
+        {err && <div style={{fontSize:12.5,color:'var(--red)',marginTop:8}}>{err}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && onCancel()}>
+      <div className="modal picker-modal" role="dialog" aria-modal="true" aria-label={t.addTvSwap}>
+        <div className="modal-header">
+          <div>
+            <h2>{draft ? t.editTvSwap : t.addTvSwap}</h2>
+            <div className="picker-sub">{draft ? t.tvSwapEditSub : t.tvSwapSub}</div>
+          </div>
+          <button type="button" className="icon-btn" onClick={onCancel}>{Ic.x}</button>
+        </div>
+        {draft ? renderEditor() : renderList()}
+        <div className="modal-footer">
+          {draft ? (
+            <>
+              <button type="button" className="btn btn-ghost" onClick={cancelEdit}>{t.cancel}</button>
+              <button type="button" className="btn btn-primary" onClick={save}>{Ic.check} {t.saveChanges}</button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="btn btn-ghost" onClick={onCancel}>{t.cancel}</button>
+              <button type="button" className="btn btn-primary" onClick={()=>onDone(items)}>
+                {Ic.check} {t.consumableDone}{items.length > 0 ? ` (${items.length})` : ''}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -2826,6 +3081,13 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const isEdit = !!editIssue;
+  // Whether the selected issue type offers to record equipment being moved
+  // between rooms. Read off the type rather than matched by name, so renaming
+  // a type cannot make the prompt disappear.
+  const swapCapableTypes = useMemo(
+    () => new Set((issueTypes || []).filter(it => it.tracks_swaps).map(it => it.name)),
+    [issueTypes]
+  );
   const typeNames = (issueTypes || []).map(it => it.name);
   if (isEdit && editIssue.type && !typeNames.includes(editIssue.type)) {
     typeNames.unshift(editIssue.type);
@@ -2844,8 +3106,8 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
   const firstType = typeNames[0] || '';
   const catalogById = Object.fromEntries((consumableItems || []).map(ci => [ci.id, ci]));
   const defaults = issueMode==='apt'
-    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[], supportRequests:[]}
-    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[], supportRequests:[]};
+    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[], supportRequests:[], tvSwaps:[]}
+    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[], supportRequests:[], tvSwaps:[]};
   const [form, setForm] = useState(isEdit ? {
     apt:        editIssue.apt||'',
     dept:       editIssue.dept||'',
@@ -2867,9 +3129,19 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
     // is client-only and derived from the server's row id, so the list can be
     // edited in place without an extra round-trip.
     supportRequests: (editIssue.supportRequests || []).map(s => ({...s, key: `srv-${s.id}`})),
+    // TVs already moved for this issue. The `key` is client-only and derived
+    // from the server's row id, so the list can be edited in place without an
+    // extra round-trip.
+    tvSwaps: (editIssue.tvSwaps || []).map(s => ({...s, key: `tvs-${s.id}`})),
   } : defaults);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
+  const [swapOpen, setSwapOpen] = useState(false);
+  // Only offered on an issue type flagged tracks_swaps. Swaps already recorded
+  // stay visible if the flag is later turned off, so the record isn't hidden
+  // from someone editing that issue — but no new one can be added.
+  const swapsOffered = swapCapableTypes.has(form.type);
+  const showSwapBox = swapsOffered || form.tvSwaps.length > 0;
   const selectedConsumables = form.consumables
     .map(c => ({ ...c, ...catalogById[c.itemId] }))     // adds name + icon
     .filter(c => c.name);
@@ -3026,6 +3298,36 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
               </select>
             </div>
           </div>
+          {/* Equipment moved between rooms. Only shown for an issue type flagged
+              tracks_swaps (TV by default), which is how the question "did you
+              have to take a TV from another room?" gets asked at all. */}
+          {showSwapBox && (
+            <div className="form-group">
+              <label>{t.tvSwapLabel}</label>
+              <div className={`tp-box ${form.tvSwaps.length ? 'has-items' : ''}`}>
+                {form.tvSwaps.map(s=>(
+                  <span className="tp-chip tp-chip-swap" key={s.key}>
+                    <span style={{display:'flex',alignItems:'center'}}>{Ic.tv}</span>
+                    <span className="tp-chip-detail">
+                      <strong>{s.fromRoom}</strong>
+                      <span style={{color:'var(--gray-400)',margin:'0 4px'}}>{'\u2194'}</span>
+                      <strong>{s.toRoom}</strong>
+                    </span>
+                    <button type="button" className="consumable-chip-x" aria-label={t.tvSwapRemove}
+                      onClick={()=>set('tvSwaps', form.tvSwaps.filter(x=>x.key!==s.key))}>{Ic.x}</button>
+                  </span>
+                ))}
+                {swapsOffered && (
+                  <button type="button" className="consumable-add-btn" onClick={()=>setSwapOpen(true)}>
+                    {form.tvSwaps.length ? Ic.edit : Ic.plus} {form.tvSwaps.length ? t.editTvSwaps : t.addTvSwap}
+                  </button>
+                )}
+                {!swapsOffered && (
+                  <span style={{fontSize:12,color:'var(--gray-400)'}}>{t.tvSwapFlagOff}</span>
+                )}
+              </div>
+            </div>
+          )}
           <div className="form-group">
             <label>{t.thirdPartyLabel}</label>
             <div className={`tp-box ${form.supportRequests.length ? 'has-items' : ''}`}>
@@ -3063,6 +3365,11 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
       <ConsumablePicker items={consumableItems || []} value={form.consumables}
         onCancel={()=>setPickerOpen(false)}
         onDone={sel=>{ set('consumables', sel); setPickerOpen(false); }}/>
+    )}
+    {swapOpen && (
+      <TVSwapModal swaps={form.tvSwaps} currentRoom={location}
+        onCancel={()=>setSwapOpen(false)}
+        onDone={sel=>{ set('tvSwaps', sel); setSwapOpen(false); }}/>
     )}
     {supportOpen && (
       <SupportRequestModal requests={form.supportRequests}
@@ -3213,7 +3520,7 @@ function IssuesTable({ issues, tableMode, currentUser, newIssueId, onDelete, onE
                   title={canAct(issue) ? t.editIssue : undefined}>
                 <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.apt||issue.dept}</strong></td>
                 <td><TypeBadge type={issue.type}/></td>
-                <td style={{maxWidth:150}}>{issue.problem}{issue.falsePositive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}<ConsumableStrip items={issue.consumables}/><SupportRequestStrip requests={issue.supportRequests} t={t}/></td>
+                <td style={{maxWidth:150}}>{issue.problem}{issue.falsePositive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}<TVSwapStrip swaps={issue.tvSwaps} t={t}/><ConsumableStrip items={issue.consumables}/><SupportRequestStrip requests={issue.supportRequests} t={t}/></td>
                 <td style={{maxWidth:190,color:'var(--gray-600)',fontSize:13}}>{issue.resolution}</td>
                 <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.time}m</td>
                 <td><span className={`badge ${issue.status==='Ok'?'badge-ok':'badge-pending'} ${issue.id===newIssueId ? 'status-highlight' : ''}`}>{issue.status}</span></td>
@@ -3422,7 +3729,8 @@ function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
                   <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>
                     {new Date(issue.created_at).toLocaleString()}
                   </td>
-                  <td>{issue.problem || '—'}</td>
+                  <td>{issue.problem || '—'}
+                    <TVSwapStrip swaps={issue.tv_swaps} t={t}/></td>
                   <td>{issue.resolution || '—'}</td>
                   <td><span className={`badge ${issue.status==='Ok'?'badge-ok':'badge-pending'}`}>{issue.status}</span></td>
                   <td>{issue.logged_by_name}</td>
@@ -5702,6 +6010,17 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
+  // Whether issues of this type offer to record equipment being moved between
+  // rooms. Toggling it only changes whether the prompt appears — swaps already
+  // recorded stay on their issues either way.
+  async function updateTypeTracksSwaps(id, on) {
+    try {
+      const res = await apiFetch(`/issue-types/${id}/tracks-swaps`, {method:'PATCH', body:{tracks_swaps:on}, token});
+      onTypesUpdate(prev => prev.map(it => it.id===id ? res.issue_type : it));
+      setToast(on ? t.toastSwapsEnabled : t.toastSwapsDisabled);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
   async function addDept(e) {
     e.preventDefault();
     const trimmed = deptName.trim();
@@ -5822,12 +6141,22 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
               ? <div className="empty-state">{Ic.list}<p>{t.noIssueTypes}</p></div>
               : <table>
                   <thead>
-                    <tr><th>{t.type}</th><th></th></tr>
+                    <tr><th>{t.type}</th><th style={{width:130}}>{t.adminSwapsCol}</th><th></th></tr>
                   </thead>
                   <tbody>
                     {issueTypes.map(it=>(
                       <tr key={it.id}>
                         <td><TypeBadge type={it.name}/></td>
+                        {/* Turn the "record equipment swaps" prompt on for this
+                            type. A checkbox rather than a button because the
+                            state it shows is the state it sets. */}
+                        <td>
+                          <label className="swap-toggle" title={t.adminSwapsHint}>
+                            <input type="checkbox" checked={!!it.tracks_swaps}
+                              onChange={e=>updateTypeTracksSwaps(it.id, e.target.checked)}/>
+                            <span>{it.tracks_swaps ? t.adminSwapsOn : t.adminSwapsOff}</span>
+                          </label>
+                        </td>
                         <td style={{textAlign:'right'}}>
                           <input type="color" className="color-swatch-input" title={t.changeColor}
                             value={it.color} onChange={e=>updateTypeColor(it.id, e.target.value)}/>
@@ -6192,6 +6521,16 @@ function App() {
   // The third-party handovers as the issue endpoint expects them. Fields that
   // don't belong to a handover's company are dropped here so the server never
   // has to reject the request.
+  function tvSwapBody(list) {
+    return (list || []).map(s => ({
+      // id is the server's row id; a swap added in the form has none yet.
+      id:        s.id || undefined,
+      from_room: s.fromRoom,
+      to_room:   s.toRoom,
+      notes:     s.notes || '',
+    }));
+  }
+
   function supportRequestBody(list) {
     return (list || []).map(s => ({
       id:                  s.id || undefined,
@@ -6231,6 +6570,7 @@ function App() {
         false_positive: !!form.falsePositive,
         consumables: (form.consumables || []).map(c => ({item_id: c.itemId, quantity: c.quantity})),
         support_requests: supportRequestBody(form.supportRequests),
+        tv_swaps: tvSwapBody(form.tvSwaps),
       };
       const res = await apiFetch('/issues', {method:'POST', body, token});
       const issue = mapIssue(res.issue);
@@ -6264,6 +6604,7 @@ function App() {
         false_positive: !!form.falsePositive,
         consumables: (form.consumables || []).map(c => ({item_id: c.itemId, quantity: c.quantity})),
         support_requests: supportRequestBody(form.supportRequests),
+        tv_swaps: tvSwapBody(form.tvSwaps),
       };
       const res = await apiFetch(`/issues/${id}`, {method:'PATCH', body, token});
       const updated = mapIssue(res.issue);

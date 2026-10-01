@@ -44,6 +44,10 @@ type Issue struct {
 	// reference that company gave us. Always an array in the JSON, empty when
 	// the issue was handled entirely in-house.
 	SupportRequests []*SupportRequest `json:"support_requests"`
+	// TVs that were moved between rooms while fixing this issue, because the
+	// room's own set was unusable and no spare was in stock. Always an array in
+	// the JSON, empty when nothing was swapped.
+	TVSwaps []*TVSwap `json:"tv_swaps"`
 }
 
 type IssueFilters struct {
@@ -127,14 +131,17 @@ type IssueModel struct {
 }
 
 // loadIssueChildren fills in the child collections attached to every issue —
-// the consumables used on it and the handovers to Telnet / Telefonica — with
-// one query each, so a whole list of issues costs two extra round-trips rather
-// than two per issue.
+// the consumables used on it, the handovers to Telnet / Telefonica, and the TVs
+// moved between rooms — with one query each, so a whole list of issues costs
+// three extra round-trips rather than three per issue.
 func loadIssueChildren(ctx context.Context, db *sql.DB, issues []*Issue) error {
 	if err := loadIssueConsumables(ctx, db, issues); err != nil {
 		return err
 	}
-	return loadIssueSupportRequests(ctx, db, issues)
+	if err := loadIssueSupportRequests(ctx, db, issues); err != nil {
+		return err
+	}
+	return loadIssueTVSwaps(ctx, db, issues)
 }
 
 func (m IssueModel) Insert(issue *Issue) error {

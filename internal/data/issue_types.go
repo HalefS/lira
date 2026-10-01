@@ -16,7 +16,32 @@ type IssueType struct {
 	CreatedAt time.Time `json:"created_at"`
 	Name      string    `json:"name"`
 	Color     string    `json:"color"`
-	CreatedBy *int64    `json:"created_by,omitempty"`
+	// TracksSwaps marks a type whose issues can involve moving equipment
+	// between rooms — a TV taken from another room because the room's own set
+	// is unusable and there is no spare in stock. When it is set, the issue
+	// form offers to record the swap.
+	//
+	// This is stored on the type rather than inferred from its name so that
+	// renaming the type cannot silently stop the prompt appearing, and so the
+	// same mechanism can be switched on for other equipment later.
+	TracksSwaps bool   `json:"tracks_swaps"`
+	CreatedBy   *int64 `json:"created_by,omitempty"`
+}
+
+// issueTypeColumns is shared by every read of an issue type so the scan order
+// below can never drift from the select list.
+const issueTypeColumns = `id, created_at, name, color, tracks_swaps, created_by`
+
+func scanIssueType(scan func(dest ...any) error) (*IssueType, error) {
+	var it IssueType
+	var createdBy sql.NullInt64
+	if err := scan(&it.ID, &it.CreatedAt, &it.Name, &it.Color, &it.TracksSwaps, &createdBy); err != nil {
+		return nil, err
+	}
+	if createdBy.Valid {
+		it.CreatedBy = &createdBy.Int64
+	}
+	return &it, nil
 }
 
 func ValidateIssueType(v *validator.Validator, it *IssueType) {
@@ -97,14 +122,15 @@ func (m IssueTypeModel) NextAvailableColor() (string, error) {
 func (m IssueTypeModel) Insert(it *IssueType) error {
 	it.Name = strings.TrimSpace(it.Name)
 	query := `
-		INSERT INTO issue_types (name, color, created_by)
-		VALUES ($1, $2, $3)
+		INSERT INTO issue_types (name, color, tracks_swaps, created_by)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id, created_at`
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	err := m.DB.QueryRowContext(ctx, query, it.Name, it.Color, it.CreatedBy).Scan(&it.ID, &it.CreatedAt)
+	err := m.DB.QueryRowContext(ctx, query, it.Name, it.Color, it.TracksSwaps, it.CreatedBy).
+		Scan(&it.ID, &it.CreatedAt)
 	if err != nil {
 		if err.Error() == `pq: duplicate key value violates unique constraint "issue_types_name_key"` {
 			return ErrDuplicateIssueType
@@ -115,8 +141,7 @@ func (m IssueTypeModel) Insert(it *IssueType) error {
 }
 
 func (m IssueTypeModel) GetAll() ([]*IssueType, error) {
-	query := `
-		SELECT id, created_at, name, color, created_by
+	query := `SELECT ` + issueTypeColumns + `
 		FROM issue_types
 		ORDER BY name ASC`
 
@@ -131,43 +156,31 @@ func (m IssueTypeModel) GetAll() ([]*IssueType, error) {
 
 	var types []*IssueType
 	for rows.Next() {
-		var it IssueType
-		var createdBy sql.NullInt64
-		if err := rows.Scan(&it.ID, &it.CreatedAt, &it.Name, &it.Color, &createdBy); err != nil {
+		it, err := scanIssueType(rows.Scan)
+		if err != nil {
 			return nil, err
 		}
-		if createdBy.Valid {
-			it.CreatedBy = &createdBy.Int64
-		}
-		types = append(types, &it)
+		types = append(types, it)
 	}
 	return types, rows.Err()
 }
 
 func (m IssueTypeModel) GetByName(name string) (*IssueType, error) {
-	query := `
-		SELECT id, created_at, name, color, created_by
+	query := `SELECT ` + issueTypeColumns + `
 		FROM issue_types
 		WHERE name = $1`
 
-	var it IssueType
-	var createdBy sql.NullInt64
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	err := m.DB.QueryRowContext(ctx, query, strings.TrimSpace(name)).Scan(
-		&it.ID, &it.CreatedAt, &it.Name, &it.Color, &createdBy,
-	)
+	it, err := scanIssueType(m.DB.QueryRowContext(ctx, query, strings.TrimSpace(name)).Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRecordNotFound
 		}
 		return nil, err
 	}
-	if createdBy.Valid {
-		it.CreatedBy = &createdBy.Int64
-	}
-	return &it, nil
+	return it, nil
 }
 
 // UpdateColor sets a specific issue type's color to a manager-chosen hex
@@ -177,26 +190,41 @@ func (m IssueTypeModel) UpdateColor(id int64, hex string) (*IssueType, error) {
 		UPDATE issue_types
 		SET color = $1
 		WHERE id = $2
-		RETURNING id, created_at, name, color, created_by`
+		RETURNING ` + issueTypeColumns
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	var it IssueType
-	var createdBy sql.NullInt64
-	err := m.DB.QueryRowContext(ctx, query, hex, id).Scan(
-		&it.ID, &it.CreatedAt, &it.Name, &it.Color, &createdBy,
-	)
+	it, err := scanIssueType(m.DB.QueryRowContext(ctx, query, hex, id).Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRecordNotFound
 		}
 		return nil, err
 	}
-	if createdBy.Valid {
-		it.CreatedBy = &createdBy.Int64
+	return it, nil
+}
+
+// UpdateTracksSwaps turns the "can involve moving equipment between rooms"
+// behaviour on or off for one issue type.
+func (m IssueTypeModel) UpdateTracksSwaps(id int64, tracks bool) (*IssueType, error) {
+	query := `
+		UPDATE issue_types
+		SET tracks_swaps = $1
+		WHERE id = $2
+		RETURNING ` + issueTypeColumns
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	it, err := scanIssueType(m.DB.QueryRowContext(ctx, query, tracks, id).Scan)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrRecordNotFound
+		}
+		return nil, err
 	}
-	return &it, nil
+	return it, nil
 }
 
 func (m IssueTypeModel) Delete(id int64) error {
