@@ -1038,9 +1038,25 @@ html.dark .auth-right  { background: var(--gray-50) !important; }
   .auth-card { padding: 28px 22px; }
 }
 
-/* Shown on the "choose a new password" screen to explain why the user is being
-   asked, since it is not something they initiated. Top level, outside the media
-   queries above — this is not a small-screen adjustment. */
+/* Self-service reset: the link under the sign-in button, the six-digit code
+   field, and the note shown when sign-in was blocked rather than wrong.
+   Top level, outside the media queries above — these are not small-screen
+   adjustments. */
+.auth-forgot-link {
+  display: block; width: 100%; margin: 14px 0 0; background: none; border: none;
+  font-family: 'DM Sans', system-ui, sans-serif; font-size: 13px; color: var(--blue);
+  cursor: pointer; text-align: center; padding: 4px;
+}
+.auth-forgot-link:hover { text-decoration: underline; }
+
+/* The selector repeats .form-control on purpose: the generic input styling is
+   declared earlier in this stylesheet, but a single-class rule on an element
+   carrying two classes still needs the pairing to be unambiguous. */
+.form-control.reset-code-input {
+  font-family: 'DM Mono', monospace; font-size: 22px; letter-spacing: 0.42em;
+  text-align: center; padding-left: 0.42em; /* keeps the digits optically centred */
+}
+
 .reset-note {
   display: flex; align-items: flex-start; gap: 8px; margin: 0 0 18px;
   padding: 11px 13px; border-radius: var(--radius-md);
@@ -1048,6 +1064,17 @@ html.dark .auth-right  { background: var(--gray-50) !important; }
   font-size: 12.5px; line-height: 1.5;
 }
 .reset-note svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
+
+/* The code the manager has just been handed. Deliberately the loudest thing on
+   the dialog: it is shown once and never again, so it has to be readable from
+   arm's length across a desk. */
+.reset-code-display {
+  font-family: 'DM Mono', monospace; font-size: 40px; font-weight: 500;
+  letter-spacing: 0.3em; text-align: center; color: var(--blue);
+  padding: 18px 10px 18px 0.3em; margin: 4px 0 14px;
+  background: var(--blue-light); border-radius: var(--radius-md);
+  user-select: all;
+}
 </style>
 </head>
 <body>
@@ -1546,22 +1573,34 @@ const T = {
     lcuGateLogOut: 'Log out',
     lcuGateLocked: 'The app stays locked until every reader is answered.',
     signInBtn: 'Sign in',
-    // Shown at sign-in when a manager has asked this account to change its
-    // password. The user must supply the current one to get this far.
-    newPwTitle: 'Choose a new password',
-    newPwSub: 'A manager asked you to set a new password before you can carry on.',
-    newPwNote: 'Sign in with your current password to confirm it is you, then choose a new one. Every other session has been signed out.',
-    currentPassword: 'Current password',
+    // Self-service reset. The code comes from a manager, not from an email:
+    // this is the path for someone who cannot remember their password at all.
+    forgotPassword: 'Forgot your password?',
+    forgotTitle: 'Reset your password',
+    forgotSub: 'Enter your email address and the reset code a manager gave you, then choose a new password.',
+    resetCodeLabel: 'Reset code',
     newPassword: 'New password',
     changePassword: 'Save and sign in',
     passwordTooShort: 'At least 6 characters.',
     backToSignIn: 'Back to sign in',
+    // Shown instead of the plain form when sign-in was refused because a manager
+    // has asked this account to change its password.
+    needCodeNote: 'A manager has asked you to set a new password, so signing in is blocked until you do. Ask them for a reset code and enter it below.',
+    codeFromManager: 'No code yet? A manager can generate one from the Team panel.',
     // Team panel, manager only.
     resetPassword: 'Reset password',
-    resetPasswordConfirm: 'Ask {name} to choose a new password? They will be signed out of every session and asked for a new password the next time they sign in.',
-    resetPasswordDone: '{name} will be asked to choose a new password',
-    resetPasswordPending: 'Reset needed',
-    resetPasswordUndo: 'Undo reset',
+    resetPasswordConfirm: 'Generate a reset code for {name}? Every session is signed out and they will not be able to sign in until the code is used.',
+    resetPasswordDone: 'Reset code generated for {name}',
+    resetPasswordPending: 'Reset pending',
+    resetPasswordUndo: 'Cancel reset',
+    resetPasswordUndoConfirm: 'Cancel the pending reset for {name}? Their code stops working.',
+    resetPasswordCleared: 'Pending reset cancelled for {name}',
+    // The one place the code is ever shown.
+    resetCodeTitle: 'Reset code for {name}',
+    resetCodeBody: 'Read this out to them now — it is not stored anywhere and cannot be shown again. It works once, and stops working in an hour.',
+    resetCodeCopy: 'Copy',
+    resetCodeCopied: 'Copied',
+    resetCodeDone: 'Done',
     createBtn: 'Create account',
     noAccount: "Don't have an account?",
     signUp: 'Sign up',
@@ -1993,22 +2032,34 @@ const T = {
     lcuGateLogOut: 'Terminar sessão',
     lcuGateLocked: 'A aplicação fica bloqueada até responder para todos os leitores.',
     signInBtn: 'Iniciar sessão',
-    // Shown at sign-in when a manager has asked this account to change its
-    // password. The user must supply the current one to get this far.
-    newPwTitle: 'Defina uma nova palavra-passe',
-    newPwSub: 'Um gestor pediu-lhe que definisse uma nova palavra-passe antes de continuar.',
-    newPwNote: 'Inicie sessão com a palavra-passe actual para confirmar a sua identidade e escolha uma nova. Todas as outras sessões foram encerradas.',
-    currentPassword: 'Palavra-passe actual',
+    // Self-service reset. The code comes from a manager, not from an email:
+    // this is the path for someone who cannot remember their password at all.
+    forgotPassword: 'Esqueceu-se da palavra-passe?',
+    forgotTitle: 'Repor a palavra-passe',
+    forgotSub: 'Escreva o seu email e o código que um gestor lhe deu, e escolha uma nova palavra-passe.',
+    resetCodeLabel: 'Código',
     newPassword: 'Nova palavra-passe',
     changePassword: 'Guardar e iniciar sessão',
     passwordTooShort: 'Pelo menos 6 caracteres.',
     backToSignIn: 'Voltar ao início de sessão',
+    // Shown instead of the plain form when sign-in was refused because a manager
+    // has asked this account to change its password.
+    needCodeNote: 'Um gestor pediu-lhe que defina uma nova palavra-passe, por isso o início de sessão fica bloqueado até o fazer. Peça-lhe um código e escreva-o abaixo.',
+    codeFromManager: 'Ainda não tem código? Um gestor pode gerar um no painel da Equipa.',
     // Team panel, manager only.
     resetPassword: 'Repor palavra-passe',
-    resetPasswordConfirm: 'Pedir a {name} que defina uma nova palavra-passe? Vai ser desconectado de todas as sessões e vai ter de definir uma nova palavra-passe na próxima vez que iniciar sessão.',
-    resetPasswordDone: '{name} terá de definir uma nova palavra-passe',
-    resetPasswordPending: 'Repor necessária',
+    resetPasswordConfirm: 'Gerar um código para {name}? Todas as sessões são encerradas e não conseguirá iniciar sessão até usar o código.',
+    resetPasswordDone: 'Código gerado para {name}',
+    resetPasswordPending: 'Reposição pendente',
     resetPasswordUndo: 'Anular reposição',
+    resetPasswordUndoConfirm: 'Anular a reposição pendente de {name}? O código deixa de funcionar.',
+    resetPasswordCleared: 'Reposição anulada para {name}',
+    // The one place the code is ever shown.
+    resetCodeTitle: 'Código de {name}',
+    resetCodeBody: 'Leia-lhe este código agora — não é guardado em lado nenhum e não poderá ser mostrado outra vez. Só funciona uma vez e expira dentro de uma hora.',
+    resetCodeCopy: 'Copiar',
+    resetCodeCopied: 'Copiado',
+    resetCodeDone: 'Concluído',
     createBtn: 'Criar conta',
     demoAccounts: 'Contas de demonstração',
     noAccount: 'Não tem conta?',
@@ -2259,21 +2310,23 @@ function PwField({ label, value, onChange, placeholder, showPw, onToggleShow }) 
 
 function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
   const t = T[lang];
-  // 'login' | 'register' | 'newpw'
+  // 'login' | 'register' | 'forgot'
   //
-  // 'newpw' is not something the user chose. It is where they land when a
-  // manager asked them to change their password and the sign-in succeeded on the
-  // current one. The server refuses to issue a session in that case, so the only
-  // way out is to set a new password.
+  // 'forgot' is the self-service reset. The code is not emailed: a manager
+  // generates it from the Team panel and reads it out, which is what makes this
+  // usable for someone who cannot remember their password at all.
   const [mode, setMode]       = useState('login');
   const [email, setEmail]     = useState('');
   const [pw, setPw]           = useState('');
-  const [curPw, setCurPw]     = useState('');
+  const [code, setCode]       = useState('');
   const [newPw, setNewPw]     = useState('');
   const [name, setName]       = useState('');
   const [showPw, setShowPw]   = useState(false);
   const [err, setErr]         = useState('');
   const [loading, setLoading] = useState(false);
+  // Set when sign-in was refused because a manager asked for a change, so the
+  // form can explain itself instead of looking like a dead end.
+  const [locked, setLocked]   = useState(false);
 
   // Shared by every PwField, passed down rather than closed over, so the fields
   // stay a single component identity.
@@ -2287,30 +2340,30 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
       });
       onLogin(data.user, data.token);
     } catch(ex) {
-      // The password was right but the account has a pending change. Carry the
-      // email over so it does not have to be typed again, and carry the
-      // current password across too: it was just accepted, and asking for it
-      // twice in a row would be pointless typing.
+      // The password was accepted but a manager has asked for a new one, so the
+      // server issued nothing. Send them to the reset form with the address
+      // already filled in, rather than reporting a failure they cannot act on.
       if (ex.mustResetPassword) {
-        setCurPw(pw);
-        setMode('newpw');
+        setLocked(true);
+        setErr('');
+        setMode('forgot');
       } else {
         setErr(ex.message==='invalid authentication credentials' ? t.errWrongCreds : ex.message);
       }
     } finally { setLoading(false); }
   }
 
-  async function doChangePassword(e) {
+  async function doReset(e) {
     e.preventDefault(); setErr(''); setLoading(true);
     try {
       const data = await apiFetch('/password-change', {
-        method:'POST', body:{ email, current_password:curPw, new_password:newPw }
+        method:'POST', body:{ email, code, new_password:newPw }
       });
-      // Signed in here: the server only hands back a token once the current
-      // password has been re-checked and the new one stored.
+      // Signed in here: the server hands back a token only once a valid code has
+      // been redeemed, and there is no old password left to prove anything with.
       onLogin(data.user, data.token);
     } catch(ex) {
-      setErr(ex.message==='invalid authentication credentials' ? t.errWrongCreds : ex.message);
+      setErr(ex.message);
     } finally { setLoading(false); }
   }
 
@@ -2326,21 +2379,37 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
     } finally { setLoading(false); }
   }
 
-  /* ── the forced password change ── */
-  function renderNewPassword() {
+  /* ── self-service reset: email + manager's code + new password ── */
+  function renderForgot() {
     return (
       <>
-        <div className="auth-card-title">{t.newPwTitle}</div>
-        <div className="auth-card-sub">{t.newPwSub}</div>
-        <div className="reset-note">{Ic.info} <span>{t.newPwNote}</span></div>
-        <form onSubmit={doChangePassword}>
+        <div className="auth-card-title">{t.forgotTitle}</div>
+        <div className="auth-card-sub">{t.forgotSub}</div>
+        {locked && (
+          <div className="reset-note">{Ic.info} <span>{t.needCodeNote}</span></div>
+        )}
+        <form onSubmit={doReset}>
           <div className="form-group">
             <label>{t.email}</label>
-            <input className="form-control" type="email" value={email} readOnly
-              style={{opacity:.75}}/>
+            {/* Arriving from a blocked sign-in, the address is already filled in,
+                so the cursor belongs on the code instead. Coming in cold from the
+                link, it belongs on the address. Exactly one of the two takes
+                autoFocus — both cannot. */}
+            <input className="form-control" type="email" placeholder={t.emailPlaceholder}
+              value={email} onChange={e=>setEmail(e.target.value)} autoFocus={!locked} required/>
           </div>
-          <PwField label={t.currentPassword} value={curPw} onChange={setCurPw}
-            placeholder="••••••••" {...pwProps}/>
+          <div className="form-group">
+            <label>{t.resetCodeLabel}</label>
+            {/* inputMode numeric and a letter-spaced monospace field: the code is
+                six digits and someone is copying it off the back of a manager's
+                hand, often one-handed. */}
+            <input className="form-control reset-code-input" inputMode="numeric"
+              placeholder="000000" maxLength={6} value={code} autoFocus={locked}
+              onChange={e=>setCode(e.target.value.replace(/\D/g,''))}/>
+            <div style={{fontSize:12,color:'var(--gray-500)',marginTop:5}}>
+              {t.codeFromManager}
+            </div>
+          </div>
           <PwField label={t.newPassword} value={newPw} onChange={setNewPw}
             placeholder="••••••••" {...pwProps}/>
           {newPw && newPw.length < 6 && (
@@ -2348,19 +2417,22 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
           )}
           {err && <div className="auth-error">{err}</div>}
           <button type="submit" className="btn btn-primary btn-full" style={{marginTop:4}}
-            disabled={loading || !curPw || newPw.length < 6}>
+            disabled={loading || code.length !== 6 || newPw.length < 6}>
             {loading ? '…' : t.changePassword}
           </button>
         </form>
         <button type="button" className="btn btn-ghost btn-full" style={{marginTop:8}}
-          onClick={()=>{ setCurPw(''); setNewPw(''); setErr(''); setMode('login'); }}>
+          onClick={()=>{ setCode(''); setNewPw(''); setErr(''); setLocked(false); setMode('login'); }}>
           {t.backToSignIn}
         </button>
       </>
     );
   }
 
-  function switchMode(m) { setMode(m); setErr(''); setEmail(''); setPw(''); setName(''); }
+  function switchMode(m) {
+    setMode(m); setErr(''); setEmail(''); setPw(''); setName('');
+    setCode(''); setNewPw(''); setLocked(false);
+  }
 
   return (
     <div className="auth-screen">
@@ -2386,7 +2458,7 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
             <ThemeToggle theme={theme} onChange={onThemeChange}/>
             <LangToggle lang={lang} onChange={onLangChange}/>
           </div>
-          {mode==='newpw' ? renderNewPassword() : (
+          {mode==='forgot' ? renderForgot() : (
           <>
           <div className="auth-card-title">{mode==='login' ? t.welcomeBack : t.createAccount}</div>
           <div className="auth-card-sub">{mode==='login' ? t.signIn : t.joinTeam}</div>
@@ -2411,6 +2483,13 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
               {loading ? '…' : (mode==='login' ? t.signInBtn : t.createBtn)}
             </button>
           </form>
+
+          {mode==='login' && (
+            <button type="button" className="auth-forgot-link"
+              onClick={()=>{ setErr(''); setMode('forgot'); }}>
+              {t.forgotPassword}
+            </button>
+          )}
 
           <div className="auth-toggle">
             {mode==='login'
@@ -5139,11 +5218,83 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
    management table (promote/demote, deactivate/reactivate) that managers only
    get. The management table used to live as a tab on the Profile page, which
    was a strange home for it — administering the team belongs with the team. */
+/* ════════════════ RESET CODE DIALOG ════════════════ */
+/*
+  Shown to a manager immediately after they generate a reset code, and never
+  again. The server keeps a bcrypt hash and returns the plaintext exactly once,
+  so this dialog is the only place the code will ever be visible — if the manager
+  closes it, the fix is another click, not a lookup.
+*/
+function ResetCodeDialog({ code, userName, expiresIn, onDone, t }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      // navigator.clipboard needs a secure context; the fallback covers a plain
+      // http:// host on the hotel's own network, which is where this runs.
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(code);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = code;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+    } catch(e) {
+      // Nothing to recover: the digits are on screen and selectable, so a failed
+      // clipboard is not worth interrupting the manager over.
+      setCopied(false);
+    }
+  }
+
+  const minutes = Math.max(1, Math.round((expiresIn || 3600) / 60));
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && onDone()}>
+      <div className="modal" style={{maxWidth:430}} role="dialog" aria-modal="true"
+        aria-label={t.resetCodeTitle.replace('{name}', userName)}>
+        <div className="modal-header">
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <span style={{color:'var(--blue)',display:'flex'}}>{Ic.shield}</span>
+            <div>
+              <h2>{t.resetCodeTitle.replace('{name}', userName)}</h2>
+            </div>
+          </div>
+        </div>
+        <div className="modal-body">
+          <div className="reset-code-display">{code}</div>
+          <div style={{fontSize:12.5,lineHeight:1.55,color:'var(--gray-600)'}}>
+            {t.resetCodeBody}
+          </div>
+          <div style={{fontSize:12.5,color:'var(--gray-600)'}}>
+            {userName} · {minutes} min
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={copy}>
+            {copied ? <>{Ic.check} {t.resetCodeCopied}</> : t.resetCodeCopy}
+          </button>
+          <button className="btn btn-primary" onClick={onDone}>
+            {t.resetCodeDone}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const canManage = currentUser?.role === 'manager';
   const [view, setView] = useState('members');
+  // The code a manager has just generated, while its dialog is open.
+  const [resetCode, setResetCode] = useState(null);
 
   // If the signed-in user stops being a manager while the management view is
   // open, drop back to the cards rather than showing controls the API will
@@ -5180,9 +5331,9 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
-  /* Asks the server to require a new password. Nothing is chosen here and no
+  /* Asks the server for a reset code for this user. Nothing is chosen here and no
      password is created: the server raises a flag, signs the user out of every
-     session, and they are asked for a new password when they next sign in.
+     session, and returns a six-digit code that the manager reads out to them.
      Called with required=false to take the request back, which matters when a
      manager presses it on the wrong person. */
   async function setPasswordReset(userId, required) {
@@ -5190,9 +5341,14 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
       const res = await apiFetch(`/users/${userId}/reset-password`, {method:'POST', body:{required}, token});
       onUsersUpdate(prev => prev.map(u => u.id === userId
         ? {...u, must_reset_password: res.user.must_reset_password} : u));
-      setToast(required
-        ? t.resetPasswordDone.replace('{name}', res.user.name)
-        : t.resetPasswordUndo);
+      if (required && res.code) {
+        // Only place the code is ever shown, so it is held in component state
+        // and shown in a dialog rather than buried in a toast that disappears.
+        setResetCode({ code: res.code, name: res.user.name, expiresIn: res.expires_in });
+        setToast(t.resetPasswordDone.replace('{name}', res.user.name));
+      } else {
+        setToast(t.resetPasswordCleared.replace('{name}', res.user.name));
+      }
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
@@ -5269,8 +5425,10 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
                           it. */}
                       <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12,whiteSpace:'nowrap'}}
                         onClick={()=>{
-                          if (u.must_reset_password
-                              || confirm(t.resetPasswordConfirm.replace('{name}', u.name))) {
+                          const ask = u.must_reset_password
+                            ? t.resetPasswordUndoConfirm
+                            : t.resetPasswordConfirm;
+                          if (u.must_reset_password || confirm(ask.replace('{name}', u.name))) {
                             setPasswordReset(u.id, !u.must_reset_password);
                           }
                         }}>
@@ -5301,6 +5459,12 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
           )}
         </div>
       </div>
+
+      {resetCode && (
+        <ResetCodeDialog code={resetCode.code} userName={resetCode.name}
+          expiresIn={resetCode.expiresIn} t={t}
+          onDone={()=>setResetCode(null)}/>
+      )}
 
       {view==='manage' && canManage ? manageTable : (
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:16}}>

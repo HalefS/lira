@@ -121,39 +121,31 @@ func (m UserModel) Insert(user *User) error {
 func (m UserModel) Get(id int64) (*User, error) {
 	query := `SELECT id, created_at, name, email, password_hash, role,
 		avatar_idx, avatar_data, language, active, must_reset_password, version FROM users WHERE id=$1`
-	var u User
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	err := m.DB.QueryRowContext(ctx, query, id).Scan(
-		&u.ID, &u.CreatedAt, &u.Name, &u.Email, &u.Password.hash,
-		&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active,
-		&u.MustResetPassword, &u.Version)
+	u, err := scanUser(m.DB.QueryRowContext(ctx, query, id).Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRecordNotFound
 		}
 		return nil, err
 	}
-	return &u, nil
+	return u, nil
 }
 
 func (m UserModel) GetByEmail(email string) (*User, error) {
 	query := `SELECT id, created_at, name, email, password_hash, role,
 		avatar_idx, avatar_data, language, active, must_reset_password, version FROM users WHERE email=$1`
-	var u User
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	err := m.DB.QueryRowContext(ctx, query, email).Scan(
-		&u.ID, &u.CreatedAt, &u.Name, &u.Email, &u.Password.hash,
-		&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active,
-		&u.MustResetPassword, &u.Version)
+	u, err := scanUser(m.DB.QueryRowContext(ctx, query, email).Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRecordNotFound
 		}
 		return nil, err
 	}
-	return &u, nil
+	return u, nil
 }
 
 func (m UserModel) GetAll() ([]*User, error) {
@@ -202,66 +194,15 @@ func (m UserModel) Update(user *User) error {
 	return nil
 }
 
-// SetPasswordResetRequired is the manager's half of a forced password change:
-// it raises the flag so the account cannot get a session until the user picks a
-// new password. It does not touch password_hash, so the account keeps working
-// as it is and the user can still prove they know the current password.
-//
-// Deliberately a targeted single-column write rather than Update: it must not
-// race with a manager editing the same user's role or profile, and it must not
-// bump version and hand either of them an edit conflict.
-func (m UserModel) SetPasswordResetRequired(id int64, required bool) (*User, error) {
-	query := `
-		UPDATE users
-		SET must_reset_password = $1
-		WHERE id = $2
-		RETURNING id, created_at, name, email, password_hash, role,
-			avatar_idx, avatar_data, language, active, must_reset_password, version`
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
+// scanUser reads a users row in the column order every query here uses. Every
+// SELECT and RETURNING on this table goes through it, so adding a column is a
+// one-line change rather than a hunt for a Scan that no longer lines up.
+func scanUser(scan func(...any) error) (*User, error) {
 	var u User
-	err := m.DB.QueryRowContext(ctx, query, required, id).Scan(
-		&u.ID, &u.CreatedAt, &u.Name, &u.Email, &u.Password.hash,
+	err := scan(&u.ID, &u.CreatedAt, &u.Name, &u.Email, &u.Password.hash,
 		&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active,
 		&u.MustResetPassword, &u.Version)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrRecordNotFound
-		}
-		return nil, err
-	}
-	return &u, nil
-}
-
-// SetPasswordAndClearReset is the user's half: it stores the hash they chose
-// and lowers the flag in one statement, so a request that lands between the two
-// writes cannot leave an account that has a new password but is still barred
-// from signing in.
-//
-// version is bumped, unlike SetPasswordResetRequired: a password change
-// invalidates any full-row edit that was prepared from the old row.
-func (m UserModel) SetPasswordAndClearReset(userID int64, hash []byte) (*User, error) {
-	query := `
-		UPDATE users
-		SET password_hash = $1, must_reset_password = false, version = version + 1
-		WHERE id = $2
-		RETURNING id, created_at, name, email, password_hash, role,
-			avatar_idx, avatar_data, language, active, must_reset_password, version`
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	var u User
-	err := m.DB.QueryRowContext(ctx, query, hash, userID).Scan(
-		&u.ID, &u.CreatedAt, &u.Name, &u.Email, &u.Password.hash,
-		&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active,
-		&u.MustResetPassword, &u.Version)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrRecordNotFound
-		}
 		return nil, err
 	}
 	return &u, nil
@@ -279,20 +220,16 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 		WHERE tokens.hash=$1 AND tokens.scope=$2 AND tokens.expiry>$3
 			AND users.active=true AND users.must_reset_password=false`
 	args := []any{tokenHash[:], tokenScope, time.Now()}
-	var u User
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	err := m.DB.QueryRowContext(ctx, query, args...).Scan(
-		&u.ID, &u.CreatedAt, &u.Name, &u.Email, &u.Password.hash,
-		&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active,
-		&u.MustResetPassword, &u.Version)
+	u, err := scanUser(m.DB.QueryRowContext(ctx, query, args...).Scan)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRecordNotFound
 		}
 		return nil, err
 	}
-	return &u, nil
+	return u, nil
 }
 
 func (m UserModel) Count() (int64, error) {
