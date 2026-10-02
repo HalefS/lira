@@ -12,6 +12,12 @@
      React changes the URL and no browser can keep serving a stale copy. -->
 <script src="/vendor/react-18.3.1.production.min.js"></script>
 <script src="/vendor/react-dom-18.3.1.production.min.js"></script>
+<!-- GSAP drives the page transition, the dashboard counters and the bars.
+     Core only: the plugins are not needed for any of them. Served from the
+     binary like React rather than a CDN, because the app should not stop
+     working when the hotel's network does. The version is in the filename, so
+     upgrading it is a new URL and no browser can be holding a stale copy. -->
+<script src="/vendor/gsap-3.15.0.min.js"></script>
 <!-- Babel compiles the JSX below in the browser on every page load, which
      costs ~1.2s and 3MB. It is the single biggest cost in starting this app
      and it disappears entirely once the JSX is precompiled at build time
@@ -1080,7 +1086,11 @@ html.dark .auth-right  { background: var(--gray-50) !important; }
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useMemo, useEffect, useCallback, useRef } = React;
+/* useLayoutEffect rather than useEffect for anything GSAP touches: it runs after
+   the DOM is updated but before the browser paints, so a tween starting from
+   opacity 0 or scaleX 0 is never painted in its final state first. With
+   useEffect that flicker is visible on every navigation. */
+const { useState, useMemo, useEffect, useLayoutEffect, useCallback, useRef } = React;
 
 /* ── API config ── */
 const API = '/v1';
@@ -1119,6 +1129,127 @@ async function apiFetch(path, { method='GET', body, token } = {}) {
     throw err;
   }
   return data;
+}
+
+/* ════════════════ MOTION ════════════════ */
+/*
+  GSAP is used for three things only: the page transition, the dashboard
+  counters, and the bars and gauges. Everything else in this file stays on CSS
+  keyframes. A declarative fade or slide is not worth a library; what GSAP is
+  actually here for is animating values that are only known at runtime -- a
+  number that has been computed from the data, a bar whose length depends on the
+  largest of a set of counts it has never seen before.
+
+  Two rules keep GSAP and React from fighting over the same DOM node:
+
+  1. Every animation is created inside a gsap.matchMedia() query and destroyed
+     with mm.revert() in the effect cleanup. GSAP writes to the DOM directly and
+     React owns the same nodes; without the teardown a tween outlives the
+     component that started it and goes on writing to a detached element.
+
+  2. Every animation is gated on prefers-reduced-motion. This file had no
+     reduced-motion handling of any kind before this, so that is worth having
+     for the animations at least. Under reduce(), no tween is ever created and
+     the DOM is left exactly as React rendered it -- which means the components
+     using these hooks must be able to render their final state on their own.
+     They all can, except CountUp, which is why it renders empty and writes its
+     own text.
+*/
+
+/* Shared tweens. Each takes gsap explicitly rather than reaching for the global,
+   so a call site that passes null (GSAP absent, or motion reduced) is obvious. */
+const MOTION = {
+  /* A page arriving: a short lift and fade. Deliberately under 300ms and with no
+     delay, so it reads as instant but not as a cut. */
+  enter(g, el, opts = {}) {
+    if (!g || opts.reduced || !el) return;
+    g.fromTo(el, { opacity: 0, y: 10 },
+      { opacity: 1, y: 0, duration: 0.28, ease: 'power2.out',
+        overwrite: true, clearProps: 'transform' });
+  },
+
+  /* Bars and gauges are sized with an inline width or height, so the growth is a
+     scale transform layered on top of that rather than a fight with the layout
+     property itself. Capped, because a long list should settle quickly rather
+     than crawl. */
+  grow(g, els, axis = 'x', each = 0.04, cap = 40) {
+    if (!g || !els) return;
+    const list = Array.from(els).slice(0, cap);
+    if (!list.length) return;
+    const prop = axis === 'x' ? 'scaleX' : 'scaleY';
+    g.fromTo(list, { [prop]: 0 },
+      { [prop]: 1, duration: 0.55, ease: 'power2.out',
+        stagger: { each, from: 'start' }, overwrite: true });
+  },
+};
+
+/* Runs build(gsap, element, { reduced }) after the element is on the DOM, again
+   whenever deps change, and cleans up after itself. Returns the ref to attach.
+
+   build is always called, even when there is nothing to animate, so a component
+   can still establish its final state. When motion is not wanted -- reduced
+   motion asked for, or GSAP failed to load -- gsap is handed over as null, which
+   every helper here already treats as "leave the DOM alone". That is what makes
+   the gate a single decision in one place instead of a check at each call site. */
+function useAnimate(build, deps = []) {
+  const root = useRef(null);
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const g = window.gsap;
+    const still = () => build(null, el, { reduced: true });
+    if (!g) { still(); return; }
+    const mm = g.matchMedia();
+    mm.add({
+      still:  '(prefers-reduced-motion: reduce)',
+      motion: '(prefers-reduced-motion: no-preference)',
+    }, (ctx) => {
+      if (ctx.conditions.still) still();
+      else build(g, el, { reduced: false });
+    });
+    return () => mm.revert();
+  }, deps);
+  return root;
+}
+
+/* Counts a number up when its value changes.
+
+   The span is rendered with no children on purpose. If React owned this text,
+   GSAP's onUpdate would replace the text node while React still held a
+   reference to the original, and the next React render would write to the
+   detached one -- leaving the number frozen on screen. Here exactly one owner
+   writes it, which is this function, on every path including the reduced one. */
+function CountUp({ value, decimals = 0, className, style }) {
+  const n = Number(value);
+  const target = Number.isFinite(n) ? n : 0;
+  const ref = useAnimate((g, el, opts) => {
+    const final = target.toFixed(decimals);
+    if (!g || opts.reduced) { el.textContent = final; return; }
+    const proxy = { n: 0 };
+    g.to(proxy, {
+      n: target, duration: 0.8, ease: 'power2.out',
+      onUpdate:    () => { el.textContent = proxy.n.toFixed(decimals); },
+      onComplete:  () => { el.textContent = final; },
+    });
+  }, [target, decimals]);
+  return <span ref={ref} className={className} style={style}/>;
+}
+
+/* ════════════════ PAGE TRANSITION ════════════════ */
+/*
+  Wraps the page area so changing page cross-fades instead of cutting.
+
+  The wrapper element itself stays mounted and only the animation re-runs, keyed
+  on `page`. Remounting the wrapper with a React key would work too, but it would
+  throw away and rebuild the whole subtree on every navigation for no reason.
+*/
+function PageShell({ page, children }) {
+  const ref = useAnimate((g, root, opts) => {
+    // Animate the rendered page, not the wrapper: animating the wrapper would
+    // also fade anything else ever placed alongside the page in here.
+    MOTION.enter(g, root.firstElementChild, opts);
+  }, [page]);
+  return <div ref={ref}>{children}</div>;
 }
 
 /* ── helpers ── */
@@ -3627,38 +3758,53 @@ function Dashboard({ apt, dept, users, stats }) {
   const all = [...apt,...dept];
   const totalIssues  = stats ? stats.total_issues  : all.length;
   const resolved     = stats ? stats.resolved       : all.filter(i=>i.status==='Ok').length;
-  const avgTime      = stats ? stats.avg_minutes.toFixed(1) : (all.length ? (all.reduce((s,i)=>s+Number(i.time),0)/all.length).toFixed(1) : '—');
   const byType       = stats ? stats.by_type        : (() => { const m={}; all.forEach(i=>{m[i.type]=(m[i.type]||0)+1;}); return m; })();
   const byTech       = stats ? stats.by_technician  : [];
   const maxWork      = Math.max(...(byTech.map(t=>t.count)), 1);
   const maxType      = Math.max(...Object.values(byType), 1);
+
+  // Split out from avgTime so the counter has a number to tween. null is the
+  // one case that is not a figure at all — nothing to average yet — and it has
+  // to stay an em dash rather than count up from zero to nothing.
+  const avgNum = stats ? Number(stats.avg_minutes)
+    : (all.length ? all.reduce((s,i)=>s+Number(i.time),0)/all.length : null);
+  const avgText = avgNum === null ? '—' : Number(avgNum).toFixed(1);
   // Everyone who can currently sign in, whatever their role: managers log
   // issues too, and a deactivated account is not active no matter its role.
   // The `active` flag is the same one that gates login in GetForToken, so
   // this is the roster of people who could be working today.
   const activeUsers  = users.filter(u=>u.active);
 
+  // The bars grow once the data behind them is settled. Keyed on the props rather
+  // than on byTech/byType, because both are rebuilt into a fresh object on every
+  // render while stats are still loading -- keying on those would restart the
+  // animation continuously instead of once.
+  const barsRef = useAnimate((g, root, opts) => {
+    MOTION.grow(g, root.querySelectorAll('.bar-fill'), 'x', 0.04);
+  }, [apt, dept, stats, users]);
+
   return (
-    <div>
+    <div ref={barsRef}>
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-label">{t.totalToday}</div>
-          <div className="stat-value">{totalIssues}</div>
+          <div className="stat-value"><CountUp value={totalIssues}/></div>
           <div className="stat-sub"><span className="stat-dot" style={{background:'#1769AA'}}></span>{t.aptsAndDepts}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">{t.resolved}</div>
-          <div className="stat-value" style={{color:'#2E8B57'}}>{resolved}</div>
+          <div className="stat-value" style={{color:'#2E8B57'}}><CountUp value={resolved}/></div>
           <div className="stat-sub"><span className="stat-dot" style={{background:'#639922'}}></span>{totalIssues ? Math.round(resolved/totalIssues*100) : 0}{t.resolutionRate}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">{t.avgTime}</div>
-          <div className="stat-value">{avgTime}<span style={{fontSize:14,fontWeight:400,color:'var(--gray-400)'}}>m</span></div>
+          {/* The em dash case gets no unit: "—m" would read as a figure. */}
+            <div className="stat-value">{avgNum === null ? avgText : <><CountUp value={avgNum} decimals={1}/><span style={{fontSize:14,fontWeight:400,color:'var(--gray-400)'}}>m</span></>}</div>
           <div className="stat-sub"><span className="stat-dot" style={{background:'#EF9F27'}}></span>{t.acrossAll}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">{t.activeUsers}</div>
-          <div className="stat-value">{activeUsers.length}</div>
+          <div className="stat-value"><CountUp value={activeUsers.length}/></div>
           <div className="stat-sub"><span className="stat-dot" style={{background:'#9FE1CB'}}></span>{activeUsers.map(u=>u.name).join(' · ')||'—'}</div>
         </div>
       </div>
@@ -4898,8 +5044,22 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
 
   const lowCount = catalog.filter(ci => ci.low_stock).length;
 
+  // Two kinds of bar on this page, so two passes: the weekly-report rows grow
+  // sideways from the left, the day histogram grows upward from its baseline.
+  //
+  // `view` is in the dependency list and not just `report`, which is the whole
+  // trick. These bars only exist while view==='report', and the report is
+  // fetched on mount -- so keying on `report` alone runs the tween while the Log
+  // tab is still on screen and the bars are not in the DOM, and then nothing
+  // happens when the user actually switches over. Keying on the view as well
+  // means the bars grow as they appear.
+  const barsRef = useAnimate((g, root) => {
+    MOTION.grow(g, root.querySelectorAll('.week-bar-fill'), 'x', 0.04);
+    MOTION.grow(g, root.querySelectorAll('.daychart .fill'), 'y', 0.03, 7);
+  }, [report, view]);
+
   return (
-    <div>
+    <div ref={barsRef}>
       <div className="team-viewbar" style={{marginBottom:16}}>
         <div className="team-segmented">
           <button className={view==='log'?'active':''} onClick={()=>setView('log')}>
@@ -6362,8 +6522,13 @@ function formatUptime(totalSeconds, t) {
 
 // One of the four headline cards: an icon, a big value, and a usage gauge underneath.
 function SysCard({ icon, label, tone, value, unit, gauge, sub, na }) {
+  // The gauge refills every 60s as fresh readings arrive, so it is keyed on the
+  // reading rather than on mount: each new value is worth watching move.
+  const root = useAnimate((g, el, opts) => {
+    MOTION.grow(g, el.querySelectorAll('.sys-gauge-fill'), 'x', 0, 1);
+  }, [gauge]);
   return (
-    <div className="sys-card">
+    <div className="sys-card" ref={root}>
       <div className="sys-card-head">
         <span className="sys-card-label">{label}</span>
         <span className={`sys-icon tone-${tone}`}>{icon}</span>
@@ -7307,7 +7472,7 @@ function App() {
                 it — navigating away clears it and the rest of the app keeps
                 working. */}
             <PageErrorBoundary resetKey={page}>
-            <React.Fragment>
+            <PageShell page={page}>
             {page==='dashboard' && <Dashboard apt={apt} dept={dept} users={users} stats={stats}/>}
             {page==='apt'       && <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='dept'      && <IssuesTable issues={dept} tableMode="dept" currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
@@ -7347,7 +7512,7 @@ function App() {
               lang={lang}
               onLangChange={setLang}
             />}
-            </React.Fragment>
+            </PageShell>
             </PageErrorBoundary>
           </div>
         </div>
