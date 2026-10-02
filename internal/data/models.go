@@ -33,6 +33,7 @@ type Models struct {
 	ConsumableItems ConsumableItemModel
 	SupportRequests SupportRequestModel
 	TVSwaps         TVSwapModel
+	TVSwapAlerts    TVSwapAlertModel
 	LCU             LCUModel
 }
 
@@ -51,6 +52,7 @@ func NewModels(db *sql.DB) Models {
 		ConsumableItems: ConsumableItemModel{DB: db},
 		SupportRequests: SupportRequestModel{DB: db},
 		TVSwaps:         TVSwapModel{DB: db},
+		TVSwapAlerts:    TVSwapAlertModel{DB: db},
 		LCU:             LCUModel{DB: db},
 	}
 }

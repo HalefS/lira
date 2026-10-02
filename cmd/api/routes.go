@@ -80,6 +80,12 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPatch, "/v1/alerts/:id/solve", app.requireAuth(app.requireManager(app.solveAlertHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/alerts/:id", app.requireAuth(app.requireManager(app.deleteAlertHandler)))
 
+	// TV swap alerts — a set carried into a room means that room's own set is
+	// still broken. Listed by the alerts endpoint above; these two only change a
+	// verdict. Managers only, same as the recurring alerts.
+	router.HandlerFunc(http.MethodPatch, "/v1/tv-swap-alerts/:id/solve", app.requireAuth(app.requireManager(app.solveTVSwapAlertHandler)))
+	router.HandlerFunc(http.MethodDelete, "/v1/tv-swap-alerts/:id", app.requireAuth(app.requireManager(app.deleteTVSwapAlertHandler)))
+
 	// Analytics — week/month comparisons, for the Analytics page
 	router.HandlerFunc(http.MethodGet, "/v1/analytics", app.requireAuth(app.getAnalyticsHandler))
 

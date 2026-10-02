@@ -164,8 +164,9 @@ func (app *application) listLCUUnitsHandler(w http.ResponseWriter, r *http.Reque
 	app.writeJSON(w, http.StatusOK, envelope{"units": out}, nil)
 }
 
-// createLCUUnitHandler puts a reader on trial. The seven-day window opens today,
-// so a reader added this morning has to be tested this morning.
+// createLCUUnitHandler puts a reader on trial. The window opens today and runs
+// for whatever length the manager has configured, so a reader added this morning
+// has to be tested this morning.
 func (app *application) createLCUUnitHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Serial string `json:"serial"`
@@ -185,6 +186,14 @@ func (app *application) createLCUUnitHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// The trial length is read at the moment the unit is created and then stored
+	// on it, so a later change to the setting leaves this unit's window alone.
+	settings, err := app.models.Settings.Get()
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 	user := app.contextGetUser(r)
 	unit := &data.LCUUnit{
 		Serial:   input.Serial,
@@ -192,12 +201,12 @@ func (app *application) createLCUUnitHandler(w http.ResponseWriter, r *http.Requ
 		Note:     input.Note,
 		AddedBy:  &user.ID,
 	}
-	if err := app.models.LCU.Insert(unit); err != nil {
+	if err := app.models.LCU.Insert(unit, settings.LCUWindowDays); err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Read it back so the response carries the seven-day log the page expects,
+	// Read it back so the response carries the full daily log the page expects,
 	// rather than a half-built unit.
 	created, err := app.models.LCU.Get(unit.ID)
 	if err != nil {

@@ -1181,6 +1181,28 @@ const MOTION = {
       { [prop]: 1, duration: 0.55, ease: 'power2.out',
         stagger: { each, from: 'start' }, overwrite: true });
   },
+
+  /* A reader's lights coming on, one day after another down the trial strip.
+
+     Only the dots that carry a result are passed in, so the untested grey ones
+     stay where they are and the eye is led along the days that actually
+     happened. A failure is animated exactly like a pass -- what colour a dot ends
+     up is CSS's business, not this -- so a red in the middle of a green run
+     lights on in its own turn rather than being skipped or jumping the queue.
+
+     back.out rather than power2.out, because the overshoot is the point: each
+     light arrives with a small pop, so a fortnight of them reads as a run of
+     little clicks rather than a slide. `delay` offsets whole strips against each
+     other, so several readers fill in one after another instead of all at once. */
+  light(g, dots, opts = {}) {
+    if (!g || !dots) return;
+    const list = Array.from(dots);
+    if (!list.length) return;
+    const { each = 0.055, delay = 0 } = opts;
+    g.fromTo(list, { scale: 0.15, opacity: 0.2 },
+      { scale: 1, opacity: 1, duration: 0.32, ease: 'back.out(2.6)',
+        delay, stagger: { each, from: 'start' }, overwrite: true });
+  },
 };
 
 /* Runs build(gsap, element, { reduced }) after the element is on the DOM, again
@@ -1378,6 +1400,19 @@ const T = {
     alertsPending: 'Pending',
     alertsSolved: 'Solved',
     alertsSolvedEmpty: 'No solved recurring issues yet.',
+    alertsRecurringTitle: 'Recurring issues',
+    // Equipment swapped out. {type} is filled in from the issue's own type, so
+    // this reads "TV" today and stays honest if another type records swaps.
+    tvSwapAlertsTitle: 'Faulty equipment still in place',
+    tvSwapAlertsOf: 'shown',
+    tvSwapAlertsEmpty: 'No rooms are running on a swapped-out set.',
+    tvSwapAlertsSolvedEmpty: 'No swapped-out equipment signed off yet.',
+    tvSwapAlertBody: "This room's {type} is faulty and is still in place. A working set was carried in to cover it, so the faulty one still needs to be dealt with.",
+    tvSwapAlertFrom: 'Working set from',
+    tvSwapAlertTo: 'Carried into',
+    tvSwapSolvedWhat: 'What was done about it',
+    tvSwapSolvedPlaceholder: 'e.g. faulty set replaced with the one from storage',
+    tvSwapAlertSolved: 'Swapped-out equipment signed off',
     markSolved: 'Mark as solved',
     deleteAlert: 'Delete alert',
     alertStale: 'outdated',
@@ -1677,9 +1712,11 @@ const T = {
     // Collapsible group in the sidebar, and LCU testing
     miscellaneous: 'Miscellaneous',
     lcuTesting: 'LCU Testing',
-    lcuIntro: 'A card reader that has gone intermittent is put on trial for seven days before it is scrapped. Each day, hold an RFID card against it: a green light means it read the card and the test passed, a red light means it did not.',
+    // {days} is the configured trial length, filled in per render. The trial
+    // period is a manager setting, so none of this copy can state a number.
+    lcuIntro: 'A card reader that has gone intermittent is put on trial for {days} days before it is scrapped. Each day, hold an RFID card against it: a green light means it read the card and the test passed, a red light means it did not.',
     lcuAddUnit: 'Add test unit',
-    lcuStartTrial: 'Start 7-day trial',
+    lcuStartTrial: 'Start {days}-day trial',
     lcuSerial: 'Serial number',
     lcuSerialPlaceholder: 'e.g. LCU-88231',
     lcuNote: 'Note (optional)',
@@ -1698,7 +1735,7 @@ const T = {
     lcuHowToTest: 'Hold an RFID card against the reader. A green light means it read the card, so the test passed. A red light means it did not.',
     lcuDelete: 'Delete',
     lcuSave: 'Save',
-    lcuDeleteConfirm: 'Delete this test unit and its seven days of results?',
+    lcuDeleteConfirm: 'Delete this test unit and its {days} days of results?',
     lcuGateTitle: "Today's LCU test",
     lcuGateBody: 'Record how each reader behaved today before you can carry on using the app.',
     lcuGateLogOut: 'Log out',
@@ -1783,6 +1820,9 @@ const T = {
     adminAlerts: 'Recurring issue alerts',
     adminAlertsSub: 'When a technician logs an issue, warn them if the same issue type has already happened at that location within this window.',
     duplicateWindowLabel: 'Alert window (hours)',
+    adminLcuWindow: 'LCU testing window',
+    lcuWindowLabel: 'Trial length (days)',
+    lcuWindowHint: 'How long a new card reader is trialled for. Readers already on trial keep the window they were given.',
     settingsSaved: 'Settings saved',
     duplicateAlertTitle: 'Possible recurring issue',
     noIssueTypes: 'No issue types yet.',
@@ -1837,6 +1877,19 @@ const T = {
     alertsPending: 'Pendentes',
     alertsSolved: 'Resolvidas',
     alertsSolvedEmpty: 'Ainda não há avarias recorrentes resolvidas.',
+    alertsRecurringTitle: 'Avarias recorrentes',
+    // {type} é preenchido com o tipo da própria avaria, por isso hoje lê-se o nome
+    // do tipo e continua correto se outro vier a registar trocas.
+    tvSwapAlertsTitle: 'Equipamento avariado ainda no local',
+    tvSwapAlertsOf: 'mostrados',
+    tvSwapAlertsEmpty: 'Nenhum quarto está com um equipamento trocado.',
+    tvSwapAlertsSolvedEmpty: 'Ainda não há equipamento trocado marcado como resolvido.',
+    tvSwapAlertBody: 'O {type} deste quarto está avariado e continua no local. Foi levado equipamento a funcionar para o tapar, por isso o que está avariado ainda precisa de ser tratado.',
+    tvSwapAlertFrom: 'Equipamento a funcionar veio de',
+    tvSwapAlertTo: 'Levado para',
+    tvSwapSolvedWhat: 'O que foi feito',
+    tvSwapSolvedPlaceholder: 'ex. equipamento avariado substituído pelo que estava em armazém',
+    tvSwapAlertSolved: 'Equipamento trocado marcado como resolvido',
     markSolved: 'Marcar como resolvida',
     deleteAlert: 'Eliminar alerta',
     alertStale: 'desactualizada',
@@ -2136,9 +2189,11 @@ const T = {
     // Grupo expansível na barra lateral, e testes LCU
     miscellaneous: 'Diversos',
     lcuTesting: 'Teste LCU',
-    lcuIntro: 'Um leitor de cartões que começou a falhar é posto à prova durante sete dias antes de ser deitado fora. Todos os dias, aproxime um cartão RFID: a luz verde significa que leu o cartão e o teste passou, a luz vermelha significa que não leu.',
+    // {days} é a duração do teste configurada, preenchida em cada desenho. O
+    // período é uma definição de gestor, por isso nada disto pode fixar um número.
+    lcuIntro: 'Um leitor de cartões que começou a falhar é posto à prova durante {days} dias antes de ser deitado fora. Todos os dias, aproxime um cartão RFID: a luz verde significa que leu o cartão e o teste passou, a luz vermelha significa que não leu.',
     lcuAddUnit: 'Adicionar unidade',
-    lcuStartTrial: 'Iniciar teste de 7 dias',
+    lcuStartTrial: 'Iniciar teste de {days} dias',
     lcuSerial: 'Número de série',
     lcuSerialPlaceholder: 'ex. LCU-88231',
     lcuNote: 'Nota (opcional)',
@@ -2157,7 +2212,7 @@ const T = {
     lcuHowToTest: 'Aproxime um cartão RFID do leitor. A luz verde significa que leu o cartão, por isso o teste passou. A luz vermelha significa que não leu.',
     lcuDelete: 'Eliminar',
     lcuSave: 'Guardar',
-    lcuDeleteConfirm: 'Eliminar esta unidade de teste e os seus sete dias de resultados?',
+    lcuDeleteConfirm: 'Eliminar esta unidade de teste e os seus {days} dias de resultados?',
     lcuGateTitle: 'Teste LCU de hoje',
     lcuGateBody: 'Registe como se comportou cada leitor hoje antes de continuar a usar a aplicação.',
     lcuGateLogOut: 'Terminar sessão',
@@ -2243,6 +2298,9 @@ const T = {
     adminAlerts: 'Alertas de avarias recorrentes',
     adminAlertsSub: 'Quando um técnico regista uma avaria, avisá-lo se o mesmo tipo de avaria já ocorreu nesse local dentro desta janela de tempo.',
     duplicateWindowLabel: 'Janela de alerta (horas)',
+    adminLcuWindow: 'Janela de teste LCU',
+    lcuWindowLabel: 'Duração do teste (dias)',
+    lcuWindowHint: 'Durante quantos dias é posto à prova um leitor de cartão novo. Os leitores já em teste mantêm a janela que lhes foi dada.',
     settingsSaved: 'Definições guardadas',
     duplicateAlertTitle: 'Possível avaria recorrente',
     noIssueTypes: 'Ainda não há tipos de avaria.',
@@ -3979,19 +4037,27 @@ function HistoryPage({ apt, dept, currentUser, onDelete, onEdit }) {
 }
 
 /* ════════════════ ALERTS PAGE ════════════════ */
-function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
+function AlertsPage({ alerts, tvSwapAlerts, currentUser, token, onAlertsUpdate, onTvSwapAlertsUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const isManager = currentUser.role === 'manager';
   const [filter, setFilter] = useState('pending');
   const [solvingId, setSolvingId] = useState(null);
+  const [solvingTvId, setSolvingTvId] = useState(null);
   const [solutionText, setSolutionText] = useState('');
   const [saving, setSaving] = useState(false);
 
   const list = alerts || [];
-  const pendingCount = list.filter(a => a.status === 'pending').length;
-  const solvedCount = list.filter(a => a.status === 'solved').length;
+  const tvList = tvSwapAlerts || [];
+  const tvPending = tvList.filter(a => a.status === 'pending');
+  const tvSolved = tvList.filter(a => a.status === 'solved');
   const filtered = list.filter(a => a.status === filter);
+  const tvFiltered = filter === 'pending' ? tvPending : tvSolved;
+  // The chips answer "how much work is outstanding", so they count both kinds.
+  // Each section then breaks its own count down, so "3 pending" is never
+  // ambiguous about what the 3 are.
+  const pendingCount = list.filter(a => a.status === 'pending').length + tvPending.length;
+  const solvedCount = list.filter(a => a.status === 'solved').length + tvSolved.length;
 
   async function submitSolve(id) {
     const trimmed = solutionText.trim();
@@ -4015,6 +4081,22 @@ function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
+  async function submitTvSolve(id) {
+    const trimmed = solutionText.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    try {
+      const res = await apiFetch(`/tv-swap-alerts/${id}/solve`, {method:'PATCH', body:{solution:trimmed}, token});
+      // The server sends the whole alert back, so the merge replaces every field
+      // rather than leaving the joined ones to be guessed at.
+      onTvSwapAlertsUpdate(prev => prev.map(a => a.id===id ? {...a, ...res.alert} : a));
+      setSolvingTvId(null);
+      setSolutionText('');
+      setToast(t.tvSwapAlertSolved);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+    finally { setSaving(false); }
+  }
+
   return (
     <div>
       <div className="table-card" style={{marginBottom:16,padding:'14px 20px'}}>
@@ -4028,6 +4110,100 @@ function AlertsPage({ alerts, currentUser, token, onAlertsUpdate, setToast }) {
         <button className={`chip ${filter==='solved'?'active':''}`} onClick={()=>setFilter('solved')}>
           {t.alertsSolved} ({solvedCount})
         </button>
+      </div>
+
+      {/* ── Equipment swapped out ──
+          Its own section above the recurring ones, because a swap is not the same
+          kind of warning: it says a set was carried in to cover for a fault, so
+          the room's own equipment is still broken. Nothing about it is recurring.
+          The empty case is spelled out rather than left blank, so an absent
+          section does not read as a section that failed to load. */}
+      <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:12}}>
+        <h2 style={{fontSize:15,margin:0}}>{t.tvSwapAlertsTitle}</h2>
+        <span style={{fontSize:12.5,color:'var(--gray-400)'}}>
+          {(filter==='pending' ? tvPending.length : tvSolved.length)} {t.tvSwapAlertsOf}
+        </span>
+      </div>
+
+      {tvFiltered.length === 0 ? (
+        <div className="empty-state">{Ic.tv}
+          <p>{filter==='pending' ? t.tvSwapAlertsEmpty : t.tvSwapAlertsSolvedEmpty}</p>
+        </div>
+      ) : tvFiltered.map(alert => (
+        <div className="table-card" key={'tv'+alert.id} style={{marginBottom:16}}>
+          <div className="table-header">
+            <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
+              <span style={{color: alert.status==='solved' ? 'var(--green)' : 'var(--amber)'}}>{Ic.tv}</span>
+              {/* The room named is the issue's own location, not the swap's to_room:
+                  a bare "1324 -> 1301" does not say which of the two was faulty. */}
+              <span className="table-title">{alert.location}</span>
+              <TypeBadge type={alert.type}/>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              {isManager && alert.status==='pending' && solvingTvId!==alert.id && (
+                <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12}}
+                  onClick={()=>{setSolvingTvId(alert.id); setSolutionText('');}}>
+                  {t.markSolved}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div style={{padding:'13px 20px',borderBottom: alert.status==='solved' || solvingTvId===alert.id ? 'none' : '1px solid var(--gray-200)'}}>
+            {/* One {type} in the sentence, so a single replace covers it. The type is
+                named rather than hard-coded as "TV", so this stays right if
+                another type ever records swaps. */}
+            <p style={{margin:'0 0 9px',fontSize:13.5}}>{t.tvSwapAlertBody.replace('{type}', alert.type)}</p>
+            {alert.problem && (
+              <p style={{margin:'0 0 9px',fontSize:13,color:'var(--gray-600)'}}>{alert.problem}</p>
+            )}
+            <div style={{display:'flex',flexWrap:'wrap',gap:'6px 18px',fontSize:12,color:'var(--gray-400)'}}>
+              <span>{t.tvSwapAlertFrom} <strong style={{color:'var(--gray-900)'}}>{alert.from_room}</strong></span>
+              <span>{t.tvSwapAlertTo} <strong style={{color:'var(--gray-900)'}}>{alert.to_room}</strong></span>
+              <span>{t.date} {new Date(alert.swap_created_at).toLocaleString()}</span>
+              <span>{t.loggedBy} {alert.logged_by_name}</span>
+            </div>
+            {alert.notes && (
+              <p style={{margin:'9px 0 0',fontSize:12.5,color:'var(--gray-600)',fontStyle:'italic'}}>{alert.notes}</p>
+            )}
+          </div>
+
+          {alert.status === 'solved' && (
+            <div style={{padding:'12px 20px',background:'var(--green-light)',borderTop:'1px solid var(--gray-200)'}}>
+              <div style={{fontSize:11,fontWeight:600,color:'var(--green)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:4}}>{t.finalSolution}</div>
+              <div style={{fontSize:13,color:'var(--gray-900)'}}>{alert.solution}</div>
+              <div style={{fontSize:11.5,color:'var(--gray-400)',marginTop:6}}>
+                {t.solvedBy} <strong>{alert.solved_by_name}</strong>
+                {alert.solved_at && <> · {new Date(alert.solved_at).toLocaleString()}</>}
+              </div>
+            </div>
+          )}
+
+          {solvingTvId === alert.id && (
+            <div style={{padding:'14px 20px',background:'var(--gray-50)',borderTop:'1px solid var(--gray-200)'}}>
+              <label style={{fontSize:11,fontWeight:600,color:'var(--gray-600)',textTransform:'uppercase',letterSpacing:'0.07em'}}>{t.tvSwapSolvedWhat}</label>
+              <textarea className="form-control" rows={2} style={{marginTop:6,marginBottom:10,resize:'vertical'}}
+                value={solutionText} onChange={e=>setSolutionText(e.target.value)}
+                placeholder={t.tvSwapSolvedPlaceholder}/>
+              <div style={{display:'flex',gap:8}}>
+                <button className="btn btn-ghost" style={{padding:'6px 14px',fontSize:12.5}}
+                  onClick={()=>{setSolvingTvId(null); setSolutionText('');}}>{t.cancel}</button>
+                <button className="btn btn-primary" style={{padding:'6px 14px',fontSize:12.5}}
+                  disabled={saving || !solutionText.trim()} onClick={()=>submitTvSolve(alert.id)}>
+                  {saving ? '…' : t.confirmSolved}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* ── Recurring issues ── */}
+      <div style={{display:'flex',alignItems:'baseline',gap:8,margin:'24px 0 12px'}}>
+        <h2 style={{fontSize:15,margin:0}}>{t.alertsRecurringTitle}</h2>
+        <span style={{fontSize:12.5,color:'var(--gray-400)'}}>
+          {(filter==='pending' ? list.filter(a=>a.status==='pending').length : list.filter(a=>a.status==='solved').length)} {t.tvSwapAlertsOf}
+        </span>
       </div>
 
       {filtered.length === 0 ? (
@@ -5682,10 +5858,25 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
 */
 
 // One cell per day of the trial. The dot is the reader's light on that day.
-function LCUDayStrip({ unit, today }) {
+function LCUDayStrip({ unit, today, index = 0 }) {
   const lang = React.useContext(LangCtx);
+
+  /* The lights come on in day order as the page is displayed. Keyed on the day
+     count and on how many days carry a verdict, so it re-runs when the strip
+     actually changes shape -- a window that grew, or a day just answered -- and
+     not on every unrelated re-render of the card around it.
+
+     `index` offsets each reader against the last, so a page with four readers on
+     trial fills in one strip after another instead of all four at once. Capped,
+     or a long list would leave the last card waiting seconds to start. */
+  const answered = unit.days.filter(d => d.result).length;
+  const stripRef = useAnimate((g, root) => {
+    MOTION.light(g, root.querySelectorAll('.lcu-day.pass .lcu-day-light, .lcu-day.fail .lcu-day-light'),
+      { delay: Math.min(index, 8) * 0.13 });
+  }, [unit.days.length, answered]);
+
   return (
-    <div className="lcu-strip">
+    <div className="lcu-strip" ref={stripRef}>
       {unit.days.map(day=>{
         const cls = ['lcu-day'];
         if (day.result === 'pass') cls.push('pass');
@@ -5711,7 +5902,7 @@ function LCUDayStrip({ unit, today }) {
   );
 }
 
-function LCUUnitCard({ unit, today, onAnswer, onDelete, t }) {
+function LCUUnitCard({ unit, today, onAnswer, onDelete, t, index }) {
   const [choosing, setChoosing] = useState(false);
   const [choice, setChoice]   = useState('');
   const [saving, setSaving]   = useState(false);
@@ -5750,7 +5941,7 @@ function LCUUnitCard({ unit, today, onAnswer, onDelete, t }) {
         </div>
       </div>
 
-      <LCUDayStrip unit={unit} today={today}/>
+      <LCUDayStrip unit={unit} today={today} index={index}/>
 
       <div className="lcu-row" style={{marginTop:16,marginBottom:0,alignItems:'center'}}>
         <div className="lcu-tally">
@@ -5764,8 +5955,11 @@ function LCUUnitCard({ unit, today, onAnswer, onDelete, t }) {
             </button>
           )}
           {unit.can_answer && (
+            /* The confirm names the unit's own window rather than the current
+               setting, so it stays truthful for a reader that was put on trial
+               under a different length. */
             <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}}
-              onClick={()=>{ if (confirm(t.lcuDeleteConfirm)) onDelete(unit.id); }}>
+              onClick={()=>{ if (confirm(t.lcuDeleteConfirm.replace('{days}', unit.window_days || 7))) onDelete(unit.id); }}>
               {t.lcuDelete}
             </button>
           )}
@@ -5804,7 +5998,7 @@ function LCUUnitCard({ unit, today, onAnswer, onDelete, t }) {
   );
 }
 
-function LCUPage({ token, setToast, onLcuRequired, refreshKey }) {
+function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [units, setUnits]     = useState(null);
@@ -5814,6 +6008,13 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey }) {
   const [serial, setSerial]   = useState('');
   const [note, setNote]       = useState('');
   const [saving, setSaving]   = useState(false);
+
+  // The trial length is a manager setting, so the page copy cannot name a number.
+  // 7 is the same default the server falls back to.
+  const days = windowDays || 7;
+  // Fills the {days} placeholder the shared strings carry. Small enough to run
+  // on every render without mattering.
+  const withDays = s => s.replace('{days}', days);
 
   async function load() {
     try {
@@ -5864,7 +6065,7 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey }) {
     <div style={{maxWidth:900}}>
       <div className="lcu-howto" style={{marginBottom:18}}>
         {Ic.info}
-        <span>{t.lcuIntro}</span>
+        <span>{withDays(t.lcuIntro)}</span>
       </div>
 
       <div className="team-viewbar" style={{marginBottom:16}}>
@@ -5890,7 +6091,7 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey }) {
               {t.cancel}
             </button>
             <button type="submit" className="btn btn-primary" disabled={saving || !serial.trim()}>
-              {saving ? '…' : t.lcuStartTrial}
+              {saving ? '…' : withDays(t.lcuStartTrial)}
             </button>
           </div>
         </form>
@@ -5906,8 +6107,8 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey }) {
         </div>
       )}
 
-      {units !== null && units.map(u=>(
-        <LCUUnitCard key={u.id} unit={u} today={today} t={t}
+      {units !== null && units.map((u, i)=>(
+        <LCUUnitCard key={u.id} unit={u} today={today} t={t} index={i}
           onAnswer={answer} onDelete={remove}/>
       ))}
     </div>
@@ -6673,21 +6874,37 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
   const [editingIconId, setEditingIconId] = useState(null);
 
   const [windowHours, setWindowHours] = useState(settings?.duplicate_window_hours ?? 24);
+  const [lcuDays, setLcuDays] = useState(settings?.lcu_window_days ?? 7);
   const [savingSettings, setSavingSettings] = useState(false);
   useEffect(() => {
-    if (settings) setWindowHours(settings.duplicate_window_hours);
+    if (settings) {
+      setWindowHours(settings.duplicate_window_hours);
+      setLcuDays(settings.lcu_window_days ?? 7);
+    }
   }, [settings]);
 
-  async function saveSettings(e) {
+  // The settings row is written whole, so both sends carry both values. What
+  // differs is intent: one form owns the alert window and the other owns the
+  // LCU trial window, so a saved field never silently carries the other one along
+  // with it from the editor.
+  async function saveSettings(e, which) {
     e.preventDefault();
     setSavingSettings(true);
     try {
-      const res = await apiFetch('/settings', {method:'PATCH', body:{duplicate_window_hours: Number(windowHours)}, token});
+      const res = await apiFetch('/settings', {
+        method:'PATCH',
+        body:{ duplicate_window_hours: Number(windowHours), lcu_window_days: Number(lcuDays) },
+        token});
       onSettingsUpdate(res.settings);
+      if (which === 'alert') setWindowHours(res.settings.duplicate_window_hours);
+      else setLcuDays(res.settings.lcu_window_days);
       setToast(t.settingsSaved);
     } catch(ex) { setToast('Error: ' + ex.message); }
     finally { setSavingSettings(false); }
   }
+
+  const saveAlertWindow = e => saveSettings(e, 'alert');
+  const saveLcuWindow   = e => saveSettings(e, 'lcu');
 
   async function addType(e) {
     e.preventDefault();
@@ -6808,19 +7025,45 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
 
   return (
     <div style={{maxWidth:1360}}>
-      <div className="mini-card" style={{marginBottom:20}}>
-        <div className="mini-card-title" style={{marginBottom:6}}>{t.adminAlerts}</div>
-        <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminAlertsSub}</p>
-        <form onSubmit={saveSettings} className="admin-form">
-          <div className="form-group" style={{maxWidth:180}}>
-            <label>{t.duplicateWindowLabel}</label>
-            <input className="form-control" type="number" min="1" max="720" value={windowHours}
-              onChange={e=>setWindowHours(e.target.value)} />
-          </div>
-          <button type="submit" className="btn btn-primary" disabled={savingSettings || !windowHours}>
-            {Ic.check} {savingSettings ? '…' : t.saveChanges}
-          </button>
-        </form>
+      {/* Two separate cards, because these windows are unrelated settings and
+          saving one should not look like it saved the other. They sit in the
+          same grid as the add-a-type and add-a-department cards below, so the
+          whole page reads as four paired cards rather than one full-width pair
+          stacked on another. Each form sends both values, since the endpoint
+          writes the settings row as a whole -- but the visible outcome of each
+          save is only its own field. */}
+      <div className="admin-grid" style={{marginBottom:20}}>
+        <div className="mini-card">
+          <div className="mini-card-title" style={{marginBottom:6}}>{t.adminAlerts}</div>
+          <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminAlertsSub}</p>
+          <form onSubmit={saveAlertWindow} className="admin-form">
+            <div className="form-group" style={{maxWidth:180}}>
+              <label>{t.duplicateWindowLabel}</label>
+              <input className="form-control" type="number" min="1" max="720" value={windowHours}
+                onChange={e=>setWindowHours(e.target.value)} />
+            </div>
+            <button type="submit" className="btn btn-primary"
+              disabled={savingSettings || !windowHours}>
+              {Ic.check} {savingSettings ? '…' : t.saveChanges}
+            </button>
+          </form>
+        </div>
+
+        <div className="mini-card">
+          <div className="mini-card-title" style={{marginBottom:6}}>{t.adminLcuWindow}</div>
+          <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.lcuWindowHint}</p>
+          <form onSubmit={saveLcuWindow} className="admin-form">
+            <div className="form-group" style={{maxWidth:180}}>
+              <label>{t.lcuWindowLabel}</label>
+              <input className="form-control" type="number" min="1" max="60" value={lcuDays}
+                onChange={e=>setLcuDays(e.target.value)} />
+            </div>
+            <button type="submit" className="btn btn-primary"
+              disabled={savingSettings || !lcuDays}>
+              {Ic.check} {savingSettings ? '…' : t.saveChanges}
+            </button>
+          </form>
+        </div>
       </div>
 
       <div className="admin-grid">
@@ -7102,6 +7345,11 @@ function App() {
   const [consumableItems, setConsumableItems] = useState([]);
   const [settings, setSettings] = useState(null);
   const [alerts, setAlerts] = useState([]);
+  // Kept apart from the recurring alerts rather than merged into one list: a TV
+  // swap alert means one set was carried for one room, which is a different kind
+  // of thing from a location repeating a fault, and the two want different
+  // wording, different evidence and a different way to be signed off.
+  const [tvSwapAlerts, setTvSwapAlerts] = useState([]);
   const alertsPendingCount = useMemo(() => alerts.filter(a => a.status === 'pending').length, [alerts]);
   const typeColorMap = useMemo(
     () => Object.fromEntries(issueTypes.map(it => [it.name, it.color])),
@@ -7197,6 +7445,7 @@ function App() {
       setConnectaAgents(agentsRes.connecta_agents || []);
       setSettings(settingsRes.settings);
       setAlerts(alertsRes.alerts || []);
+    setTvSwapAlerts(alertsRes.tv_swap_alerts || []);
       setConsumableItems(consumableItemsRes.consumable_items || []);
     }).catch(ex => {
       if (ex.lcuRequired) {
@@ -7218,7 +7467,7 @@ function App() {
 
   function logout() {
     setSession(null);
-    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlerts([]);
+    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlerts([]); setTvSwapAlerts([]);
   }
 
   // Called when profile updates come back from API
@@ -7477,16 +7726,19 @@ function App() {
             {page==='apt'       && <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='dept'      && <IssuesTable issues={dept} tableMode="dept" currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='history'   && <HistoryPage apt={apt} dept={dept} currentUser={me} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
-            {page==='alerts'    && <AlertsPage alerts={alerts} currentUser={me} token={token} onAlertsUpdate={setAlerts} setToast={setToast}/>}
+            {page==='alerts'    && <AlertsPage alerts={alerts} tvSwapAlerts={tvSwapAlerts} currentUser={me} token={token} onAlertsUpdate={setAlerts} onTvSwapAlertsUpdate={setTvSwapAlerts} setToast={setToast}/>}
             {page==='analytics' && <AnalyticsPage token={token} alertsPendingCount={alertsPendingCount}/>}
             {page==='consumables' && <ConsumablesPage token={token} currentUser={me} onCatalogUpdate={setConsumableItems} setToast={setToast}/>}
             {page==='support' && <SupportPage token={token}/>}
             {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}
               token={token} onUsersUpdate={setUsers} setToast={setToast}/>}
             {page==='reports' && <ReportsPage token={token}/>}
-            {/* LCU testing — a card reader on trial for a week. */}
+            {/* LCU testing — a card reader on trial for a run of days, the length
+                of which a manager sets on the Admin page. The page needs it
+                because its copy names the period. */}
             {page==='tvswaps' && <TVSwapsPage token={token}/>}
             {page==='lcu'     && <LCUPage token={token} setToast={setToast}
+              windowDays={settings?.lcu_window_days}
               refreshKey={lcuEpoch}
               onLcuRequired={ex=>setLcuPrompt({units:ex.lcuUnits, today:ex.lcuToday})}/>}
             {page==='system' && me.role==='manager' && <SystemStatusPage token={token}/>}

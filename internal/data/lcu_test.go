@@ -11,10 +11,11 @@ func date(y int, m time.Month, d int) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
-// The window is a run of seven calendar days, so it has to stay seven days long
-// even when one of them is a daylight-saving change. Adding 7*24h to a timestamp
-// would give six or eight here; AddDate on a date is what keeps it honest.
-func TestLCUWindowIsSevenConsecutiveDays(t *testing.T) {
+// The window is a run of calendar days, so it has to stay exactly as long as it
+// was asked to be even when one of them is a daylight-saving change. Adding
+// windowDays*24h to a timestamp would give a day either way on a DST boundary;
+// AddDate on a date is what keeps it honest.
+func TestLCUWindowIsConsecutiveCalendarDays(t *testing.T) {
 	tests := []struct {
 		name  string
 		start time.Time
@@ -32,10 +33,10 @@ func TestLCUWindowIsSevenConsecutiveDays(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			days, endsOn := LCUWindow(tc.start)
+			days, endsOn := LCUWindow(tc.start, DefaultLCUWindowDays)
 
-			if len(days) != LCUTestWindowDays {
-				t.Fatalf("got %d days, want %d", len(days), LCUTestWindowDays)
+			if len(days) != DefaultLCUWindowDays {
+				t.Fatalf("got %d days, want %d", len(days), DefaultLCUWindowDays)
 			}
 			if got := days[0].Format("2006-01-02"); got != tc.first {
 				t.Errorf("first day = %s, want %s", got, tc.first)
@@ -61,13 +62,13 @@ func TestLCUWindowIsSevenConsecutiveDays(t *testing.T) {
 }
 
 // A time-of-day on the start date must not shift the window: someone adding a
-// unit at 23:50 still gets the same seven days as someone adding it at 00:01.
+// unit at 23:50 still gets the same days as someone adding it at 00:01.
 func TestLCUWindowIgnoresTimeOfDay(t *testing.T) {
 	morning := time.Date(2026, 9, 30, 0, 1, 0, 0, time.UTC)
 	lateNight := time.Date(2026, 9, 30, 23, 50, 0, 0, time.UTC)
 
-	_, endsMorning := LCUWindow(morning)
-	_, endsLate := LCUWindow(lateNight)
+	_, endsMorning := LCUWindow(morning, DefaultLCUWindowDays)
+	_, endsLate := LCUWindow(lateNight, DefaultLCUWindowDays)
 
 	if !endsMorning.Equal(endsLate) {
 		t.Errorf("ends_on differs by time of day: %v vs %v", endsMorning, endsLate)
@@ -90,9 +91,9 @@ func TestDateOnlyNormalisesToUTCMidnight(t *testing.T) {
 }
 
 // A day with no result must still occupy its slot, so the window always renders
-// as seven cells and a gap is visible rather than silently closing up.
+// in full and a gap is visible rather than silently closing up.
 func TestAttachFillsEveryDayOfTheWindow(t *testing.T) {
-	unit := &LCUUnit{ID: 1, StartsOn: date(2026, 9, 30)}
+	unit := &LCUUnit{ID: 1, StartsOn: date(2026, 9, 30), WindowDays: DefaultLCUWindowDays}
 	owner := int64(7)
 	unit.attach([]*LCUTest{
 		{UnitID: 1, Day: date(2026, 9, 30), Result: LCUResultPass, LoggedBy: &owner},
@@ -101,8 +102,8 @@ func TestAttachFillsEveryDayOfTheWindow(t *testing.T) {
 		{UnitID: 1, Day: date(2026, 10, 9), Result: LCUResultPass, LoggedBy: &owner},
 	}, map[int64]string{7: "ana"})
 
-	if len(unit.Days) != LCUTestWindowDays {
-		t.Fatalf("got %d day cells, want %d", len(unit.Days), LCUTestWindowDays)
+	if len(unit.Days) != DefaultLCUWindowDays {
+		t.Fatalf("got %d day cells, want %d", len(unit.Days), DefaultLCUWindowDays)
 	}
 	if unit.Passes != 1 || unit.Fails != 1 {
 		t.Errorf("tally = %d pass / %d fail, want 1/1", unit.Passes, unit.Fails)
@@ -113,13 +114,93 @@ func TestAttachFillsEveryDayOfTheWindow(t *testing.T) {
 	if unit.Days[1].Result != LCUResultFail {
 		t.Errorf("day 2 result = %q, want fail", unit.Days[1].Result)
 	}
-	for i := 2; i < LCUTestWindowDays; i++ {
+	for i := 2; i < DefaultLCUWindowDays; i++ {
 		if unit.Days[i].Result != "" {
 			t.Errorf("day %d has result %q, want untested", i+1, unit.Days[i].Result)
 		}
 	}
 	if unit.Days[0].LoggedByName != "ana" {
 		t.Errorf("logged_by_name = %q, want 'ana'", unit.Days[0].LoggedByName)
+	}
+}
+
+// The window is now a setting rather than a constant, so a unit has to render the
+// length it was actually given -- and two units in the same list can disagree,
+// because a manager can change the setting while a unit is still on trial.
+func TestAttachUsesTheUnitsOwnWindowLength(t *testing.T) {
+	tests := []struct {
+		name       string
+		windowDays int
+		wantDays   int
+		wantEnd    string
+	}{
+		{"single day", 1, 1, "2026-09-30"},
+		{"default week", DefaultLCUWindowDays, 7, "2026-10-06"},
+		{"fortnight", 14, 14, "2026-10-13"},
+		{"long window", MaxLCUWindowDays, 60, "2026-11-28"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			start := date(2026, 9, 30)
+			unit := &LCUUnit{ID: 1, StartsOn: start, WindowDays: tc.windowDays}
+			unit.attach(nil, nil)
+
+			if len(unit.Days) != tc.wantDays {
+				t.Fatalf("got %d day cells, want %d", len(unit.Days), tc.wantDays)
+			}
+			_, endsOn := LCUWindow(start, tc.windowDays)
+			if got := unit.Days[len(unit.Days)-1].Day.Format("2006-01-02"); got != tc.wantEnd {
+				t.Errorf("last day = %s, want %s", got, tc.wantEnd)
+			}
+			if got := endsOn.Format("2006-01-02"); got != tc.wantEnd {
+				t.Errorf("ends_on = %s, want %s", got, tc.wantEnd)
+			}
+		})
+	}
+}
+
+// A window of zero, or something absurd, must not build an empty or enormous log:
+// a zero-length window would make ends_on fall the day before starts_on and break
+// the column's own CHECK constraint.
+func TestClampLCUWindowDaysHoldsTheSupportedRange(t *testing.T) {
+	tests := []struct {
+		in   int
+		want int
+	}{
+		{0, MinLCUWindowDays},
+		{-5, MinLCUWindowDays},
+		{1, 1},
+		{7, 7},
+		{MaxLCUWindowDays, MaxLCUWindowDays},
+		{MaxLCUWindowDays + 1, MaxLCUWindowDays},
+		{9999, MaxLCUWindowDays},
+	}
+	for _, tc := range tests {
+		if got := ClampLCUWindowDays(tc.in); got != tc.want {
+			t.Errorf("ClampLCUWindowDays(%d) = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+
+	// The clamp has to hold on the window builder too, not just the helper.
+	days, endsOn := LCUWindow(date(2026, 9, 30), 0)
+	if len(days) != MinLCUWindowDays {
+		t.Errorf("a zero window built %d days, want %d", len(days), MinLCUWindowDays)
+	}
+	if endsOn.Before(days[0]) {
+		t.Errorf("ends_on %v is before the first day %v", endsOn, days[0])
+	}
+}
+
+// A unit whose stored length is nonsense still has to render something usable,
+// because it reaches attach without passing through the settings validator.
+func TestAttachSurvivesAnOutOfRangeStoredWindow(t *testing.T) {
+	for _, bad := range []int{0, -1, MaxLCUWindowDays + 1} {
+		unit := &LCUUnit{ID: 1, StartsOn: date(2026, 9, 30), WindowDays: bad}
+		unit.attach(nil, nil)
+		if len(unit.Days) < 1 || len(unit.Days) > MaxLCUWindowDays {
+			t.Errorf("stored window %d produced %d day cells", bad, len(unit.Days))
+		}
 	}
 }
 

@@ -12,10 +12,15 @@ import (
 	"github.com/lib/pq"
 )
 
-// LCUTestWindowDays is how long a reader is trialled before it is judged. Seven
-// calendar days, because a card reader that reads a card today can still be
-// intermittent by the end of the week, and a single good day proves nothing.
-const LCUTestWindowDays = 7
+// The length of a reader's trial is a manager-tunable setting rather than a
+// constant, so these three bound it: the default a fresh install starts on, the
+// shortest window that is still a trial at all, and the longest that keeps the
+// daily log and the prompt usable.
+const (
+	DefaultLCUWindowDays = 7
+	MinLCUWindowDays     = 1
+	MaxLCUWindowDays     = 60
+)
 
 // MaxLCUSerialLength bounds the serial read off the reader. Generous enough for
 // the manufacturer codes in use, short enough that a pasted paragraph is caught.
@@ -53,13 +58,19 @@ type LCUUnit struct {
 	ResolvedAt  *time.Time `json:"resolved_at,omitempty"`
 	Note        string     `json:"note"`
 
-	// Days is the seven-day log, one entry per calendar day of the window. A day
-	// with no result is carried with an empty Result rather than dropped, so the
-	// caller can always render seven and see which days are still outstanding.
+	// WindowDays is how long this unit was put on trial for. It is stored on the
+	// unit rather than read from the current setting, because the log below is
+	// part of the unit's record: a reader trialled for a week stays a week long
+	// even after a manager changes the default.
+	WindowDays int `json:"window_days"`
+
+	// Days is the log, one entry per calendar day of the window. A day with no
+	// result is carried with an empty Result rather than dropped, so the caller
+	// can always render the whole window and see which days are outstanding.
 	Days []LCUDay `json:"days"`
 
-	// Passes and Fails count the recorded days, out of LCUTestWindowDays. The
-	// remainder is how many days went untested.
+	// Passes and Fails count the recorded days, out of WindowDays. The remainder
+	// is how many days went untested.
 	Passes int `json:"passes"`
 	Fails  int `json:"fails"`
 }
@@ -94,19 +105,36 @@ func DateOnly(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-// LCUWindow returns the seven calendar days of a unit's trial beginning on
-// startsOn, and the closing day.
+// LCUWindow returns the calendar days of a unit's trial beginning on startsOn,
+// and the closing day.
 //
 // The window is a run of calendar days, so it is built by adding days to a date
-// rather than by adding 7*24h to a timestamp -- otherwise a DST change inside
-// the week would silently shorten or lengthen it.
-func LCUWindow(startsOn time.Time) (days []time.Time, endsOn time.Time) {
+// rather than by adding windowDays*24h to a timestamp -- otherwise a DST change
+// inside the window would silently shorten or lengthen it.
+//
+// days is clamped into the supported range so a bad setting can never produce a
+// zero-length or absurd window; a zero would divide by nothing and panic.
+func LCUWindow(startsOn time.Time, windowDays int) (days []time.Time, endsOn time.Time) {
+	windowDays = ClampLCUWindowDays(windowDays)
 	start := DateOnly(startsOn)
-	days = make([]time.Time, LCUTestWindowDays)
+	days = make([]time.Time, windowDays)
 	for i := range days {
 		days[i] = start.AddDate(0, 0, i)
 	}
-	return days, start.AddDate(0, 0, LCUTestWindowDays-1)
+	return days, start.AddDate(0, 0, windowDays-1)
+}
+
+// ClampLCUWindowDays forces a window length into the range the feature supports.
+// Used on every path that reads one, so an out-of-range value from settings or
+// from an older row cannot build a window nobody can answer.
+func ClampLCUWindowDays(windowDays int) int {
+	if windowDays < MinLCUWindowDays {
+		return MinLCUWindowDays
+	}
+	if windowDays > MaxLCUWindowDays {
+		return MaxLCUWindowDays
+	}
+	return windowDays
 }
 
 // Today is the current calendar day in the server's local time. Every date the
@@ -141,11 +169,11 @@ type LCUModel struct {
 
 const lcuUnitColumns = `
 	u.id, u.created_at, u.serial, u.added_by, COALESCE(adder.name, ''),
-	u.starts_on, u.ends_on, u.status, u.resolved_at, u.note`
+	u.starts_on, u.ends_on, u.status, u.resolved_at, u.note, u.window_days`
 
 // scanUnitRow reads one unit row, in the column order of lcuUnitColumns. The
-// seven-day log is attached separately by attach, because the rows have to be
-// read before their ids are known.
+// daily log is attached separately by attach, because the rows have to be read
+// before their ids are known.
 func scanUnitRow(sc interface{ Scan(...any) error }) (*LCUUnit, error) {
 	var (
 		u        LCUUnit
@@ -153,7 +181,7 @@ func scanUnitRow(sc interface{ Scan(...any) error }) (*LCUUnit, error) {
 		resolved sql.NullTime
 	)
 	if err := sc.Scan(&u.ID, &u.CreatedAt, &u.Serial, &addedBy, &u.AddedByName,
-		&u.StartsOn, &u.EndsOn, &u.Status, &resolved, &u.Note); err != nil {
+		&u.StartsOn, &u.EndsOn, &u.Status, &resolved, &u.Note, &u.WindowDays); err != nil {
 		return nil, err
 	}
 	if addedBy.Valid {
@@ -163,18 +191,21 @@ func scanUnitRow(sc interface{ Scan(...any) error }) (*LCUUnit, error) {
 		t := resolved.Time
 		u.ResolvedAt = &t
 	}
+	// A row written before the column existed, or by hand with a nonsense value,
+	// still renders a usable window rather than an empty or enormous log.
+	u.WindowDays = ClampLCUWindowDays(u.WindowDays)
 	return &u, nil
 }
 
-// attach fills in a unit's fixed seven-day window from its recorded results,
-// and counts the passes and failures. Untested days are left with an empty
-// Result so the window always renders as seven days.
+// attach fills in a unit's own window from its recorded results, and counts the
+// passes and failures. Untested days are left with an empty Result so the
+// window always renders in full.
 func (u *LCUUnit) attach(tests []*LCUTest, loggedByNames map[int64]string) {
 	byDay := make(map[string]*LCUTest, len(tests))
 	for _, t := range tests {
 		byDay[DateOnly(t.Day).Format("2006-01-02")] = t
 	}
-	window, _ := LCUWindow(u.StartsOn)
+	window, _ := LCUWindow(u.StartsOn, u.WindowDays)
 	u.Days = make([]LCUDay, 0, len(window))
 	u.Passes, u.Fails = 0, 0
 	for _, d := range window {
@@ -290,30 +321,35 @@ func (m LCUModel) userNames(ctx context.Context, tests []*LCUTest) (map[int64]st
 	return names, rows.Err()
 }
 
-// Insert starts a new unit. The window opens today and runs for
-// LCUTestWindowDays calendar days, so a reader added on the 30th is judged on
-// the 6th.
-func (m LCUModel) Insert(u *LCUUnit) error {
+// Insert starts a new unit. The window opens today and runs for windowDays
+// calendar days, so a reader added on the 30th with a seven-day window is judged
+// on the 6th.
+//
+// windowDays comes from the application settings and is stored on the row, so the
+// length this unit was trialled for is fixed from the moment it exists and
+// survives the setting being changed later.
+func (m LCUModel) Insert(u *LCUUnit, windowDays int) error {
 	u.Serial = strings.TrimSpace(u.Serial)
 	u.Note = strings.TrimSpace(u.Note)
 	u.Status = LCUStatusActive
+	u.WindowDays = ClampLCUWindowDays(windowDays)
 
-	_, u.EndsOn = LCUWindow(u.StartsOn)
+	_, u.EndsOn = LCUWindow(u.StartsOn, u.WindowDays)
 	u.StartsOn = DateOnly(u.StartsOn)
 
 	query := `
-		INSERT INTO lcu_units (serial, added_by, starts_on, ends_on, note)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO lcu_units (serial, added_by, starts_on, ends_on, note, window_days)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at`
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	return m.DB.QueryRowContext(ctx, query, u.Serial, u.AddedBy,
-		u.StartsOn, u.EndsOn, u.Note).Scan(&u.ID, &u.CreatedAt)
+		u.StartsOn, u.EndsOn, u.Note, u.WindowDays).Scan(&u.ID, &u.CreatedAt)
 }
 
-// Get returns one unit with its full seven-day log.
+// Get returns one unit with its full log, over the window it was given.
 func (m LCUModel) Get(id int64) (*LCUUnit, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -494,12 +530,15 @@ func (m LCUModel) RecordTest(unitID int64, day time.Time, result, note string, l
 // ResolveDue closes out every unit whose window has ended and gives it a
 // verdict.
 //
-// A unit passes only if all seven days carry a passing result. Because a unit
-// has at most one result per day and only days inside its window can be
-// recorded, seven passes is the same thing as every day passing. A day with no
-// result is not a pass, so a unit the technician forgot about is not signed off
-// -- the safe reading, since the alternative is scrapping a reader that may well
-// have been fine.
+// A unit passes only if every day of *its own* window carries a passing result.
+// Both sides of that comparison are per row: the pass count is bounded to the
+// unit's window, and it is compared against u.window_days rather than a
+// constant, so a hotel that trialled readers for a fortnight and then shortened
+// the window still resolves the old fortnight-long units correctly.
+//
+// A day with no result is not a pass, so a unit the technician forgot about is
+// not signed off -- the safe reading, since the alternative is scrapping a reader
+// that may well have been fine.
 //
 // This runs when someone looks at the data rather than on a timer, so there is
 // no background job to keep alive. Nothing depends on it having run: the gate's
@@ -510,17 +549,18 @@ func (m LCUModel) ResolveDue(today time.Time) (int, error) {
 		SET status = CASE WHEN (
 		        SELECT count(*) FROM lcu_tests t
 		        WHERE t.unit_id = u.id AND t.result = $2
-		    ) = $3
-		    THEN $4 ELSE $5 END,
+		          AND t.day BETWEEN u.starts_on AND u.ends_on
+		    ) = u.window_days
+		    THEN $3 ELSE $4 END,
 		    resolved_at = NOW()
-		WHERE u.status = $6
+		WHERE u.status = $5
 		  AND u.ends_on < $1`
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	result, err := m.DB.ExecContext(ctx, query, DateOnly(today), LCUResultPass,
-		LCUTestWindowDays, LCUStatusPassed, LCUStatusFailed, LCUStatusActive)
+		LCUStatusPassed, LCUStatusFailed, LCUStatusActive)
 	if err != nil {
 		return 0, err
 	}
@@ -530,7 +570,7 @@ func (m LCUModel) ResolveDue(today time.Time) (int, error) {
 
 // Delete removes a unit and, by cascade, its daily log. The owner or a manager
 // may do this; it exists for a reader that turned out to be unrecoverable and
-// not worth a week of prompts.
+// not worth the run of daily prompts.
 func (m LCUModel) Delete(id int64) error {
 	query := `DELETE FROM lcu_units WHERE id = $1`
 

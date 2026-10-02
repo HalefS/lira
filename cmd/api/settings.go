@@ -19,13 +19,17 @@ func (app *application) getSettingsHandler(w http.ResponseWriter, r *http.Reques
 func (app *application) updateSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		DuplicateWindowHours int `json:"duplicate_window_hours"`
+		LCUWindowDays        int `json:"lcu_window_days"`
 	}
 	if err := app.readJSON(w, r, &input); err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
 
-	s := &data.Settings{DuplicateWindowHours: input.DuplicateWindowHours}
+	s := &data.Settings{
+		DuplicateWindowHours: input.DuplicateWindowHours,
+		LCUWindowDays:        input.LCUWindowDays,
+	}
 	v := validator.New()
 	if data.ValidateSettings(v, s); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
@@ -33,7 +37,7 @@ func (app *application) updateSettingsHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	user := app.contextGetUser(r)
-	updated, err := app.models.Settings.Update(s.DuplicateWindowHours, user.ID)
+	updated, err := app.models.Settings.Update(s.DuplicateWindowHours, s.LCUWindowDays, user.ID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
