@@ -1037,6 +1037,17 @@ html.dark .auth-right  { background: var(--gray-50) !important; }
   .auth-right { padding: 20px; }
   .auth-card { padding: 28px 22px; }
 }
+
+/* Shown on the "choose a new password" screen to explain why the user is being
+   asked, since it is not something they initiated. Top level, outside the media
+   queries above — this is not a small-screen adjustment. */
+.reset-note {
+  display: flex; align-items: flex-start; gap: 8px; margin: 0 0 18px;
+  padding: 11px 13px; border-radius: var(--radius-md);
+  background: var(--blue-light); color: var(--blue);
+  font-size: 12.5px; line-height: 1.5;
+}
+.reset-note svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
 </style>
 </head>
 <body>
@@ -1070,6 +1081,13 @@ async function apiFetch(path, { method='GET', body, token } = {}) {
       err.lcuRequired = true;
       err.lcuUnits = data.units || [];
       err.lcuToday  = data.today  || '';
+    }
+    // Sign-in is refused with 403 while a manager has asked this account to
+    // change its password. The password was correct, so this is not a failure:
+    // the auth screen has to notice the flag and move to the change step rather
+    // than showing "incorrect email or password" for correct credentials.
+    if (data.must_reset_password) {
+      err.mustResetPassword = true;
     }
     throw err;
   }
@@ -1528,6 +1546,22 @@ const T = {
     lcuGateLogOut: 'Log out',
     lcuGateLocked: 'The app stays locked until every reader is answered.',
     signInBtn: 'Sign in',
+    // Shown at sign-in when a manager has asked this account to change its
+    // password. The user must supply the current one to get this far.
+    newPwTitle: 'Choose a new password',
+    newPwSub: 'A manager asked you to set a new password before you can carry on.',
+    newPwNote: 'Sign in with your current password to confirm it is you, then choose a new one. Every other session has been signed out.',
+    currentPassword: 'Current password',
+    newPassword: 'New password',
+    changePassword: 'Save and sign in',
+    passwordTooShort: 'At least 6 characters.',
+    backToSignIn: 'Back to sign in',
+    // Team panel, manager only.
+    resetPassword: 'Reset password',
+    resetPasswordConfirm: 'Ask {name} to choose a new password? They will be signed out of every session and asked for a new password the next time they sign in.',
+    resetPasswordDone: '{name} will be asked to choose a new password',
+    resetPasswordPending: 'Reset needed',
+    resetPasswordUndo: 'Undo reset',
     createBtn: 'Create account',
     noAccount: "Don't have an account?",
     signUp: 'Sign up',
@@ -1959,6 +1993,22 @@ const T = {
     lcuGateLogOut: 'Terminar sessão',
     lcuGateLocked: 'A aplicação fica bloqueada até responder para todos os leitores.',
     signInBtn: 'Iniciar sessão',
+    // Shown at sign-in when a manager has asked this account to change its
+    // password. The user must supply the current one to get this far.
+    newPwTitle: 'Defina uma nova palavra-passe',
+    newPwSub: 'Um gestor pediu-lhe que definisse uma nova palavra-passe antes de continuar.',
+    newPwNote: 'Inicie sessão com a palavra-passe actual para confirmar a sua identidade e escolha uma nova. Todas as outras sessões foram encerradas.',
+    currentPassword: 'Palavra-passe actual',
+    newPassword: 'Nova palavra-passe',
+    changePassword: 'Guardar e iniciar sessão',
+    passwordTooShort: 'Pelo menos 6 caracteres.',
+    backToSignIn: 'Voltar ao início de sessão',
+    // Team panel, manager only.
+    resetPassword: 'Repor palavra-passe',
+    resetPasswordConfirm: 'Pedir a {name} que defina uma nova palavra-passe? Vai ser desconectado de todas as sessões e vai ter de definir uma nova palavra-passe na próxima vez que iniciar sessão.',
+    resetPasswordDone: '{name} terá de definir uma nova palavra-passe',
+    resetPasswordPending: 'Repor necessária',
+    resetPasswordUndo: 'Anular reposição',
     createBtn: 'Criar conta',
     demoAccounts: 'Contas de demonstração',
     noAccount: 'Não tem conta?',
@@ -2181,15 +2231,53 @@ function ThemeToggle({ theme, onChange }) {
 }
 
 /* ════════════════ AUTH SCREEN ════════════════ */
+
+/* Password field with a show/hide toggle, shared by sign-in, sign-up and the
+   forced password change so the interaction is identical in all three.
+
+   This lives at module scope, not inside AuthScreen, and that is load-bearing.
+   A component defined inside another component's body is a *new function* on
+   every render, so React sees a different element type each time, throws the
+   old one away and mounts a fresh one. The input is therefore recreated on
+   every keystroke and loses focus after the first character. Keep it here. */
+function PwField({ label, value, onChange, placeholder, showPw, onToggleShow }) {
+  return (
+    <div className="form-group">
+      <label>{label}</label>
+      <div className="pw-wrap">
+        <input className="form-control" type={showPw?'text':'password'}
+          placeholder={placeholder} value={value}
+          onChange={e=>onChange(e.target.value)} required/>
+        <button type="button" className="pw-toggle" onClick={onToggleShow}
+          aria-label={showPw ? 'hide password' : 'show password'}>
+          {showPw ? Ic.eyeoff : Ic.eye}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
   const t = T[lang];
+  // 'login' | 'register' | 'newpw'
+  //
+  // 'newpw' is not something the user chose. It is where they land when a
+  // manager asked them to change their password and the sign-in succeeded on the
+  // current one. The server refuses to issue a session in that case, so the only
+  // way out is to set a new password.
   const [mode, setMode]       = useState('login');
   const [email, setEmail]     = useState('');
   const [pw, setPw]           = useState('');
+  const [curPw, setCurPw]     = useState('');
+  const [newPw, setNewPw]     = useState('');
   const [name, setName]       = useState('');
   const [showPw, setShowPw]   = useState(false);
   const [err, setErr]         = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Shared by every PwField, passed down rather than closed over, so the fields
+  // stay a single component identity.
+  const pwProps = { showPw, onToggleShow: () => setShowPw(s => !s) };
 
   async function doLogin(e) {
     e.preventDefault(); setErr(''); setLoading(true);
@@ -2197,6 +2285,29 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
       const data = await apiFetch('/tokens/authentication', {
         method:'POST', body:{ email, password:pw }
       });
+      onLogin(data.user, data.token);
+    } catch(ex) {
+      // The password was right but the account has a pending change. Carry the
+      // email over so it does not have to be typed again, and carry the
+      // current password across too: it was just accepted, and asking for it
+      // twice in a row would be pointless typing.
+      if (ex.mustResetPassword) {
+        setCurPw(pw);
+        setMode('newpw');
+      } else {
+        setErr(ex.message==='invalid authentication credentials' ? t.errWrongCreds : ex.message);
+      }
+    } finally { setLoading(false); }
+  }
+
+  async function doChangePassword(e) {
+    e.preventDefault(); setErr(''); setLoading(true);
+    try {
+      const data = await apiFetch('/password-change', {
+        method:'POST', body:{ email, current_password:curPw, new_password:newPw }
+      });
+      // Signed in here: the server only hands back a token once the current
+      // password has been re-checked and the new one stored.
       onLogin(data.user, data.token);
     } catch(ex) {
       setErr(ex.message==='invalid authentication credentials' ? t.errWrongCreds : ex.message);
@@ -2213,6 +2324,40 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
     } catch(ex) {
       setErr(ex.message);
     } finally { setLoading(false); }
+  }
+
+  /* ── the forced password change ── */
+  function renderNewPassword() {
+    return (
+      <>
+        <div className="auth-card-title">{t.newPwTitle}</div>
+        <div className="auth-card-sub">{t.newPwSub}</div>
+        <div className="reset-note">{Ic.info} <span>{t.newPwNote}</span></div>
+        <form onSubmit={doChangePassword}>
+          <div className="form-group">
+            <label>{t.email}</label>
+            <input className="form-control" type="email" value={email} readOnly
+              style={{opacity:.75}}/>
+          </div>
+          <PwField label={t.currentPassword} value={curPw} onChange={setCurPw}
+            placeholder="••••••••" {...pwProps}/>
+          <PwField label={t.newPassword} value={newPw} onChange={setNewPw}
+            placeholder="••••••••" {...pwProps}/>
+          {newPw && newPw.length < 6 && (
+            <div style={{fontSize:12,color:'var(--amber)',marginTop:4}}>{t.passwordTooShort}</div>
+          )}
+          {err && <div className="auth-error">{err}</div>}
+          <button type="submit" className="btn btn-primary btn-full" style={{marginTop:4}}
+            disabled={loading || !curPw || newPw.length < 6}>
+            {loading ? '…' : t.changePassword}
+          </button>
+        </form>
+        <button type="button" className="btn btn-ghost btn-full" style={{marginTop:8}}
+          onClick={()=>{ setCurPw(''); setNewPw(''); setErr(''); setMode('login'); }}>
+          {t.backToSignIn}
+        </button>
+      </>
+    );
   }
 
   function switchMode(m) { setMode(m); setErr(''); setEmail(''); setPw(''); setName(''); }
@@ -2241,6 +2386,8 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
             <ThemeToggle theme={theme} onChange={onThemeChange}/>
             <LangToggle lang={lang} onChange={onLangChange}/>
           </div>
+          {mode==='newpw' ? renderNewPassword() : (
+          <>
           <div className="auth-card-title">{mode==='login' ? t.welcomeBack : t.createAccount}</div>
           <div className="auth-card-sub">{mode==='login' ? t.signIn : t.joinTeam}</div>
 
@@ -2257,19 +2404,8 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
               <label>{t.email}</label>
               <input className="form-control" type="email" placeholder={t.emailPlaceholder} value={email} onChange={e=>setEmail(e.target.value)} required />
             </div>
-            <div className="form-group">
-              <label>{t.password}</label>
-              <div className="pw-wrap">
-                <input
-                  className="form-control" type={showPw?'text':'password'}
-                  placeholder={mode==='register'?t.passwordPlaceholder:'••••••••'}
-                  value={pw} onChange={e=>setPw(e.target.value)} required
-                />
-                <button type="button" className="pw-toggle" onClick={()=>setShowPw(s=>!s)}>
-                  {showPw ? Ic.eyeoff : Ic.eye}
-                </button>
-              </div>
-            </div>
+            <PwField label={t.password} value={pw} onChange={setPw}
+              placeholder={mode==='register'?t.passwordPlaceholder:'••••••••'} {...pwProps}/>
 
             <button type="submit" className="btn btn-primary btn-full" style={{marginTop:4}} disabled={loading}>
               {loading ? '…' : (mode==='login' ? t.signInBtn : t.createBtn)}
@@ -2281,11 +2417,14 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
               ? <>{t.noAccount} <button onClick={()=>switchMode('register')}>{t.signUp}</button></>
               : <>{t.haveAccount} <button onClick={()=>switchMode('login')}>{t.signInBtn}</button></>}
           </div>
+          </>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
 
 /* ════════════════ ISSUE MODAL ════════════════ */
 /* Builds the recurring-issue warning sentence in the active language. */
@@ -4439,6 +4578,62 @@ function StockAdjustDialog({ item, onCancel, onSave, saving, t }) {
   report" is the Monday-to-Sunday roll-up — what was used, where, on which
   issue and by whom — with a PDF download.
 */
+/* One of the two consumable usage tables (apartments / departments).
+   At module scope on purpose: nested inside ConsumablesPage it would be a new
+   function on every render, so both tables would be torn down and rebuilt
+   whenever anything else on the page changed — typing in the item editor
+   included. Reads its strings from LangCtx, like every other table here. */
+function EntryTable({ rows, locationHeader }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  if (!rows.length) return null;
+  return (
+    <div className="table-card" style={{marginBottom:20}}>
+      <div className="table-header">
+        <span className="table-title">{locationHeader} <span style={{fontSize:12,color:'var(--gray-400)',fontWeight:400}}>({rows.length})</span></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>{t.date}</th><th>{t.item}</th><th>{t.qty}</th>
+            <th>{t.location}</th><th>{t.issueType}</th><th>{t.issues}</th><th>{t.loggedBy}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(c=>(
+            <tr key={c.id}>
+              <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>
+                {new Date(c.created_at).toLocaleDateString(lang==='pt'?'pt-PT':'en-GB',{day:'2-digit',month:'short'})}
+                {' '}{new Date(c.created_at).toLocaleTimeString(lang==='pt'?'pt-PT':'en-GB',{hour:'2-digit',minute:'2-digit'})}
+              </td>
+              <td>
+                <div style={{display:'flex',alignItems:'center',gap:9}}>
+                  <ConsumableIcon name={c.icon} size={26}/>
+                  <span style={{fontWeight:500}}>{c.item}</span>
+                </div>
+              </td>
+              <td style={{fontFamily:'DM Mono,monospace',fontSize:13,textAlign:'right'}}>×{c.quantity}</td>
+              <td style={{fontFamily: c.mode==='apt' ? 'DM Mono,monospace' : 'DM Sans,sans-serif', fontSize:13}}>{c.location}</td>
+              <td><TypeBadge type={c.issue_type}/></td>
+              <td style={{fontSize:12,color:'var(--gray-600)',maxWidth:220}}>
+                <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={c.issue_problem}>
+                  #{c.issue_id} {c.issue_problem}
+                </div>
+              </td>
+              <td>
+                <div style={{display:'flex',alignItems:'center',gap:7}}>
+                  <Avatar name={c.logged_by_name} idx={c.logged_by_idx||0} size="sm"/>
+                  <span style={{fontSize:13,color:'var(--gray-600)'}}>{c.logged_by_name}</span>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
@@ -4584,55 +4779,6 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
     { label: t.weekDistinctItems,value: report.distinct_items, sub: t.byItem,           color: '#2E8B57' },
     { label: t.weekLocations,    value: report.locations_count,sub: t.byLocation,       color: '#D88A18' },
   ] : [];
-
-  function EntryTable({ rows, locationHeader }) {
-    if (!rows.length) return null;
-    return (
-      <div className="table-card" style={{marginBottom:20}}>
-        <div className="table-header">
-          <span className="table-title">{locationHeader} <span style={{fontSize:12,color:'var(--gray-400)',fontWeight:400}}>({rows.length})</span></span>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>{t.date}</th><th>{t.item}</th><th>{t.qty}</th>
-              <th>{t.location}</th><th>{t.issueType}</th><th>{t.issues}</th><th>{t.loggedBy}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(c=>(
-              <tr key={c.id}>
-                <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>
-                  {new Date(c.created_at).toLocaleDateString(lang==='pt'?'pt-PT':'en-GB',{day:'2-digit',month:'short'})}
-                  {' '}{new Date(c.created_at).toLocaleTimeString(lang==='pt'?'pt-PT':'en-GB',{hour:'2-digit',minute:'2-digit'})}
-                </td>
-                <td>
-                  <div style={{display:'flex',alignItems:'center',gap:9}}>
-                    <ConsumableIcon name={c.icon} size={26}/>
-                    <span style={{fontWeight:500}}>{c.item}</span>
-                  </div>
-                </td>
-                <td style={{fontFamily:'DM Mono,monospace',fontSize:13,textAlign:'right'}}>×{c.quantity}</td>
-                <td style={{fontFamily: c.mode==='apt' ? 'DM Mono,monospace' : 'DM Sans,sans-serif', fontSize:13}}>{c.location}</td>
-                <td><TypeBadge type={c.issue_type}/></td>
-                <td style={{fontSize:12,color:'var(--gray-600)',maxWidth:220}}>
-                  <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={c.issue_problem}>
-                    #{c.issue_id} {c.issue_problem}
-                  </div>
-                </td>
-                <td>
-                  <div style={{display:'flex',alignItems:'center',gap:7}}>
-                    <Avatar name={c.logged_by_name} idx={c.logged_by_idx||0} size="sm"/>
-                    <span style={{fontSize:13,color:'var(--gray-600)'}}>{c.logged_by_name}</span>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
 
   async function saveStock(body) {
     setSaving(true);
@@ -5034,6 +5180,22 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
+  /* Asks the server to require a new password. Nothing is chosen here and no
+     password is created: the server raises a flag, signs the user out of every
+     session, and they are asked for a new password when they next sign in.
+     Called with required=false to take the request back, which matters when a
+     manager presses it on the wrong person. */
+  async function setPasswordReset(userId, required) {
+    try {
+      const res = await apiFetch(`/users/${userId}/reset-password`, {method:'POST', body:{required}, token});
+      onUsersUpdate(prev => prev.map(u => u.id === userId
+        ? {...u, must_reset_password: res.user.must_reset_password} : u));
+      setToast(required
+        ? t.resetPasswordDone.replace('{name}', res.user.name)
+        : t.resetPasswordUndo);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
   if (!users.length) {
     return (
       <div className="table-card">
@@ -5077,6 +5239,14 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
                   <span className={`badge ${u.active?'badge-ok':'badge-pending'}`}>
                     {u.active ? t.activeStatus : t.inactive}
                   </span>
+                  {/* A pending change is a separate fact from the account being
+                      active, so it gets its own badge rather than overloading the
+                      status column. */}
+                  {u.must_reset_password && (
+                    <span className="badge badge-pending" style={{marginLeft:4}}>
+                      {t.resetPasswordPending}
+                    </span>
+                  )}
                 </td>
                 {/* 250px keeps "Make technician" + "Deactivate" on one line;
                     at 190 they wrapped and made the rows uneven. */}
@@ -5092,6 +5262,19 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
                       <button className={`btn ${u.active?'btn-ghost':'btn-primary'}`} style={{padding:'4px 10px',fontSize:12,whiteSpace:'nowrap'}}
                         onClick={()=>toggleActive(u.id, !u.active)}>
                         {u.active ? t.deactivate : t.reactivate}
+                      </button>
+                      {/* Pending state flips the button to an undo, since a
+                          manager who pressed it on the wrong person needs a way
+                          back that does not involve a second person agreeing to
+                          it. */}
+                      <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12,whiteSpace:'nowrap'}}
+                        onClick={()=>{
+                          if (u.must_reset_password
+                              || confirm(t.resetPasswordConfirm.replace('{name}', u.name))) {
+                            setPasswordReset(u.id, !u.must_reset_password);
+                          }
+                        }}>
+                        {u.must_reset_password ? t.resetPasswordUndo : t.resetPassword}
                       </button>
                     </div>
                   ) : <span style={{fontSize:12,color:'var(--gray-300)'}}>—</span>}

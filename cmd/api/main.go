@@ -51,6 +51,12 @@ type application struct {
 	// browserErr is why browser is nil, kept so the PDF endpoint can tell the
 	// user whether no browser is installed or the one they pointed at is wrong.
 	browserErr error
+	// passwordChangeThrottles how often one address may attempt the forced
+	// password change. It is keyed on the email rather than the client,
+	// because that is what actually bounds the abuse: the endpoint is
+	// unauthenticated and verifies a password, so without it a single caller
+	// could grind guesses from one connection no matter how many it opens.
+	passwordChangeThrottle *throttle
 }
 
 func main() {
@@ -93,6 +99,8 @@ func main() {
 		logger: logger,
 		models: data.NewModels(db),
 	}
+
+	app.passwordChangeThrottle = newThrottle()
 
 	// Resolved once here so a misconfigured path is reported at boot rather
 	// than on someone's first report download. Neither failure is fatal:

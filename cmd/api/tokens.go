@@ -53,6 +53,19 @@ func (app *application) createAuthTokenHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// A manager asked this account to choose a new password. The password was
+	// right, but the sign-in still does not complete: no token is issued, so
+	// there is no window in which the old password is good for anything. The
+	// flag tells the client to show the "choose a new password" step instead of
+	// treating this as a failure.
+	if user.MustResetPassword {
+		app.writeJSON(w, http.StatusForbidden, envelope{
+			"error":              "a new password is required before you can sign in",
+			"must_reset_password": true,
+		}, nil)
+		return
+	}
+
 	// Delete any existing auth tokens for this user (single-session)
 	app.models.Tokens.DeleteAllForUser(data.ScopeAuthentication, user.ID)
 

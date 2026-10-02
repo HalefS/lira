@@ -24,7 +24,10 @@ type User struct {
 	AvatarData string    `json:"avatar_data"`
 	Language   string    `json:"language"`
 	Active     bool      `json:"active"`
-	Version    int       `json:"-"`
+	// MustResetPassword is set by a manager and makes the next sign-in stop
+	// and ask for a new password before any session is issued.
+	MustResetPassword bool `json:"must_reset_password"`
+	Version           int  `json:"-"`
 }
 
 func (u *User) IsAnonymous() bool { return u == AnonymousUser }
@@ -43,6 +46,28 @@ func (p *password) Set(plaintextPassword string) error {
 	p.hash = hash
 	return nil
 }
+
+// NewPassword is a password built from a plaintext string, for the paths that
+// set one without going through a User struct -- the forced password change
+// being the current example. It hashes immediately; the caller is expected to
+// validate the plaintext separately with validator.ValidatePasswordPlaintext.
+type NewPassword struct {
+	password
+}
+
+// NewPasswordFrom builds a NewPassword from plaintext, or the hashing error.
+func NewPasswordFrom(plaintext string) (*NewPassword, error) {
+	var p NewPassword
+	if err := p.Set(plaintext); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// Hash returns the bcrypt hash, for the callers that store a password without
+// carrying a whole User around -- the forced password change updates
+// `users.password_hash` directly.
+func (p *password) Hash() []byte { return p.hash }
 
 func (p *password) Matches(plaintextPassword string) (bool, error) {
 	err := bcrypt.CompareHashAndPassword(p.hash, []byte(plaintextPassword))
@@ -95,13 +120,14 @@ func (m UserModel) Insert(user *User) error {
 
 func (m UserModel) Get(id int64) (*User, error) {
 	query := `SELECT id, created_at, name, email, password_hash, role,
-		avatar_idx, avatar_data, language, active, version FROM users WHERE id=$1`
+		avatar_idx, avatar_data, language, active, must_reset_password, version FROM users WHERE id=$1`
 	var u User
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	err := m.DB.QueryRowContext(ctx, query, id).Scan(
 		&u.ID, &u.CreatedAt, &u.Name, &u.Email, &u.Password.hash,
-		&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active, &u.Version)
+		&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active,
+		&u.MustResetPassword, &u.Version)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRecordNotFound
@@ -113,13 +139,14 @@ func (m UserModel) Get(id int64) (*User, error) {
 
 func (m UserModel) GetByEmail(email string) (*User, error) {
 	query := `SELECT id, created_at, name, email, password_hash, role,
-		avatar_idx, avatar_data, language, active, version FROM users WHERE email=$1`
+		avatar_idx, avatar_data, language, active, must_reset_password, version FROM users WHERE email=$1`
 	var u User
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	err := m.DB.QueryRowContext(ctx, query, email).Scan(
 		&u.ID, &u.CreatedAt, &u.Name, &u.Email, &u.Password.hash,
-		&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active, &u.Version)
+		&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active,
+		&u.MustResetPassword, &u.Version)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRecordNotFound
@@ -130,7 +157,8 @@ func (m UserModel) GetByEmail(email string) (*User, error) {
 }
 
 func (m UserModel) GetAll() ([]*User, error) {
-	query := `SELECT id, created_at, name, email, role, avatar_idx, avatar_data, language, active, version
+	query := `SELECT id, created_at, name, email, role, avatar_idx, avatar_data, language, active,
+		must_reset_password, version
 		FROM users ORDER BY created_at ASC`
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -143,7 +171,8 @@ func (m UserModel) GetAll() ([]*User, error) {
 	for rows.Next() {
 		var u User
 		if err := rows.Scan(&u.ID, &u.CreatedAt, &u.Name, &u.Email,
-			&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active, &u.Version); err != nil {
+			&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active,
+			&u.MustResetPassword, &u.Version); err != nil {
 			return nil, err
 		}
 		users = append(users, &u)
@@ -173,19 +202,90 @@ func (m UserModel) Update(user *User) error {
 	return nil
 }
 
+// SetPasswordResetRequired is the manager's half of a forced password change:
+// it raises the flag so the account cannot get a session until the user picks a
+// new password. It does not touch password_hash, so the account keeps working
+// as it is and the user can still prove they know the current password.
+//
+// Deliberately a targeted single-column write rather than Update: it must not
+// race with a manager editing the same user's role or profile, and it must not
+// bump version and hand either of them an edit conflict.
+func (m UserModel) SetPasswordResetRequired(id int64, required bool) (*User, error) {
+	query := `
+		UPDATE users
+		SET must_reset_password = $1
+		WHERE id = $2
+		RETURNING id, created_at, name, email, password_hash, role,
+			avatar_idx, avatar_data, language, active, must_reset_password, version`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	var u User
+	err := m.DB.QueryRowContext(ctx, query, required, id).Scan(
+		&u.ID, &u.CreatedAt, &u.Name, &u.Email, &u.Password.hash,
+		&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active,
+		&u.MustResetPassword, &u.Version)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrRecordNotFound
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
+// SetPasswordAndClearReset is the user's half: it stores the hash they chose
+// and lowers the flag in one statement, so a request that lands between the two
+// writes cannot leave an account that has a new password but is still barred
+// from signing in.
+//
+// version is bumped, unlike SetPasswordResetRequired: a password change
+// invalidates any full-row edit that was prepared from the old row.
+func (m UserModel) SetPasswordAndClearReset(userID int64, hash []byte) (*User, error) {
+	query := `
+		UPDATE users
+		SET password_hash = $1, must_reset_password = false, version = version + 1
+		WHERE id = $2
+		RETURNING id, created_at, name, email, password_hash, role,
+			avatar_idx, avatar_data, language, active, must_reset_password, version`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	var u User
+	err := m.DB.QueryRowContext(ctx, query, hash, userID).Scan(
+		&u.ID, &u.CreatedAt, &u.Name, &u.Email, &u.Password.hash,
+		&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active,
+		&u.MustResetPassword, &u.Version)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrRecordNotFound
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
 func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error) {
 	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
+	// must_reset_password=false is not redundant with revoking tokens on reset.
+	// A token issued in the instant before the reset commits would otherwise
+	// stay usable, which is the one case the reset exists to close.
 	query := `SELECT users.id, users.created_at, users.name, users.email, users.password_hash,
-		users.role, users.avatar_idx, users.avatar_data, users.language, users.active, users.version
+		users.role, users.avatar_idx, users.avatar_data, users.language, users.active,
+		users.must_reset_password, users.version
 		FROM users INNER JOIN tokens ON users.id = tokens.user_id
-		WHERE tokens.hash=$1 AND tokens.scope=$2 AND tokens.expiry>$3 AND users.active=true`
+		WHERE tokens.hash=$1 AND tokens.scope=$2 AND tokens.expiry>$3
+			AND users.active=true AND users.must_reset_password=false`
 	args := []any{tokenHash[:], tokenScope, time.Now()}
 	var u User
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	err := m.DB.QueryRowContext(ctx, query, args...).Scan(
 		&u.ID, &u.CreatedAt, &u.Name, &u.Email, &u.Password.hash,
-		&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active, &u.Version)
+		&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active,
+		&u.MustResetPassword, &u.Version)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRecordNotFound

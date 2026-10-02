@@ -147,6 +147,11 @@ func readProcMeminfo() (MemReading, bool) {
 		}
 		values[key] = v * 1024 // kB -> bytes
 	}
+	// A read that failed part way through leaves a short map, and the checks
+	// below would report whatever it managed to collect as a real reading.
+	if err := scanner.Err(); err != nil {
+		return MemReading{}, false
+	}
 
 	total, hasTotal := values["MemTotal"]
 	avail, hasAvail := values["MemAvailable"]

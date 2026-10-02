@@ -40,6 +40,16 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPost, "/v1/users", app.registerUserHandler)
 	router.HandlerFunc(http.MethodPost, "/v1/tokens/authentication", app.createAuthTokenHandler)
 
+	// Password change. Deliberately outside authenticate: the account has been
+	// signed out of every session and has no token to present.
+	//
+	// No extra rateLimit wrapper here: the global limiter already wraps the whole
+	// router, and a second one would double-count. The control this endpoint
+	// actually needs is per-address, which the handler enforces itself (see
+	// passwordChangeWindow) -- a shared per-IP bucket does nothing to stop one
+	// caller grinding passwords from a single connection.
+	router.HandlerFunc(http.MethodPost, "/v1/password-change", app.changePasswordHandler)
+
 	// Current user profile — /v1/profile to avoid conflict with /v1/users/:id
 	router.HandlerFunc(http.MethodGet, "/v1/profile", app.requireAuth(app.getMeHandler))
 	router.HandlerFunc(http.MethodPatch, "/v1/profile", app.requireAuth(app.updateMeHandler))
@@ -51,6 +61,7 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodGet, "/v1/users/:id", app.requireAuth(app.getUserHandler))
 	router.HandlerFunc(http.MethodPatch, "/v1/users/:id/role", app.requireAuth(app.requireManager(app.updateUserRoleHandler)))
 	router.HandlerFunc(http.MethodPatch, "/v1/users/:id/deactivate", app.requireAuth(app.requireManager(app.deactivateUserHandler)))
+	router.HandlerFunc(http.MethodPost, "/v1/users/:id/reset-password", app.requireAuth(app.requireManager(app.resetUserPasswordHandler)))
 
 	// Issues (protected)
 	router.HandlerFunc(http.MethodGet, "/v1/issues", app.requireAuth(app.listIssuesHandler))
