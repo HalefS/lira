@@ -35,6 +35,18 @@ type config struct {
 	cors struct {
 		trustedOrigins []string
 	}
+	tls struct {
+		// cert and key are PEM paths. Set together they make this process serve
+		// HTTPS; set neither and it serves plain HTTP, which is how a deployment
+		// behind a reverse proxy runs. See tls.go.
+		cert string
+		key  string
+		// redirectPort optionally opens a plain HTTP listener that redirects to
+		// the HTTPS port. Zero disables it, because opening a second port by
+		// default is a surprise and only the operator knows whether anything is
+		// still pointing at http://.
+		redirectPort int
+	}
 	report struct {
 		// chromeBin optionally pins the Chromium-based browser used to print
 		// PDF reports. Empty means "discover it", which searches PATH and the
@@ -82,9 +94,32 @@ func main() {
 	flag.StringVar(&cfg.report.chromeBin, "report-chrome-bin", os.Getenv("LIRA_CHROME_BIN"),
 		"Path to the Chromium-based browser used to print PDF reports (default: auto-detect)")
 
+	// Serving HTTPS. Both paths are needed, and neither is generated: see tls.go
+	// for why a half-configured setup is a fatal error rather than a fallback.
+	flag.StringVar(&cfg.tls.cert, "tls-cert", os.Getenv(tlsCertEnv),
+		"PEM certificate path; enables HTTPS when given together with -tls-key")
+	flag.StringVar(&cfg.tls.key, "tls-key", os.Getenv(tlsKeyEnv),
+		"PEM private key path for -tls-cert")
+	flag.IntVar(&cfg.tls.redirectPort, "tls-redirect-port", 0,
+		"Plain HTTP port that 308-redirects to the HTTPS port (0 disables). Only useful when this process terminates TLS")
+
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	if err := validateTLSFlags(cfg); err != nil {
+		logger.Error("invalid tls configuration", "error", err)
+		os.Exit(1)
+	}
+
+	// Resolved before the database is opened so a broken certificate is the first
+	// thing in the log rather than something discovered after a successful
+	// connection to Postgres.
+	certFile, keyFile, err := resolveTLS(cfg, logger)
+	if err != nil {
+		logger.Error("tls configuration is not usable", "error", err)
+		os.Exit(1)
+	}
 
 	db, err := openDB(cfg)
 	if err != nil {
@@ -134,7 +169,31 @@ func main() {
 		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
 
-	logger.Info("starting server", "addr", srv.Addr, "env", cfg.env)
+	// The scheme is stated explicitly in the startup line rather than left to be
+	// inferred from the address. "starting server addr=:4000" reads the same either
+	// way, which is exactly the ambiguity that matters when someone believes they
+	// deployed HTTPS.
+	if certFile != "" {
+		logger.Info("starting server", "addr", srv.Addr, "scheme", "https", "env", cfg.env)
+
+		if cfg.tls.redirectPort > 0 {
+			go serveTLSRedirect(cfg.tls.redirectPort, cfg.port, logger)
+		}
+
+		if err := srv.ListenAndServeTLS(certFile, keyFile); err != nil {
+			logger.Error(err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+
+	logger.Info("starting server", "addr", srv.Addr, "scheme", "http", "env", cfg.env)
+	if cfg.tls.redirectPort > 0 {
+		// Not fatal: the flag is harmless without TLS, and refusing to start would
+		// turn a stray value in a config file into an outage.
+		logger.Warn("-tls-redirect-port is set but this server is not terminating TLS, so it is ignored",
+			"hint", "the redirect belongs on the reverse proxy when TLS terminates in front of the app")
+	}
 	if err := srv.ListenAndServe(); err != nil {
 		logger.Error(err.Error())
 		os.Exit(1)
