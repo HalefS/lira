@@ -382,6 +382,47 @@ tbody tr.row-clickable { cursor: pointer; }
 .loadmore-count { font-size: 12.5px; color: var(--gray-400); }
 .loadmore-note  { font-size: 11.5px; color: var(--amber); }
 
+/* ── Maintenance ──
+   A row, not a card: the queue is scanned rather than read, so the device, what
+   state it is in and the action all sit on one line. Overdue gets a red left
+   edge rather than a red fill -- a page of them would otherwise be unreadable. */
+.maint-card {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 13px 16px; margin-bottom: 8px;
+  background: var(--white); border: 1px solid var(--gray-200); border-radius: 10px;
+  border-left: 3px solid var(--gray-200);
+}
+.maint-card.maint-late   { border-left-color: var(--red); }
+.maint-card.maint-retired { opacity: 0.62; }
+.maint-card-main { flex: 1; min-width: 240px; }
+.maint-card-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.maint-card-actions svg { width: 13px; height: 13px; }
+
+/* ── Maintenance: equipment type choice ──
+   Tiles rather than chips. These set a form value rather than filtering a list,
+   so they want the affordance of something you pick, and two across fills the
+   row exactly -- where the five cadence presets would not, and left them
+   stranding "Every N days" on a row of its own. */
+.maint-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.maint-choice {
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 12px; cursor: pointer; text-align: left;
+  border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+  background: #fff; font-size: 13.5px; color: var(--gray-700);
+  font-family: inherit; transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.maint-choice:hover { border-color: var(--blue-mid); }
+.maint-choice.on {
+  border-color: var(--blue); background: var(--blue-light); color: var(--blue); font-weight: 500;
+}
+.maint-choice svg { width: 16px; height: 16px; flex-shrink: 0; }
+html.dark .maint-choice      { background: var(--gray-50); border-color: var(--gray-300); color: var(--gray-600); }
+html.dark .maint-choice.on   { background: var(--blue-light); border-color: var(--blue-mid); color: var(--blue); }
+
+/* The name field's own hint. Sits under the input rather than as a placeholder
+   alone, so the guidance is still there once a real name is being typed. */
+.maint-hint { font-size: 11.5px; color: var(--gray-400); }
+
 .admin-form { display: grid; gap: 10px; }
 .admin-form .form-control { height: 36px; }
 .admin-form .btn { height: 36px; white-space: nowrap; justify-self: end; }
@@ -1559,6 +1600,68 @@ const T = {
     alertsSolved: 'Solved',
     alertsSolvedEmpty: 'No solved recurring issues yet.',
     alertsRecurringTitle: 'Recurring issues',
+  // ── Preventive maintenance ──
+  maintenance: 'Maintenance',
+  maintenanceSubtitle: 'Department printers and phones, looked at on a schedule. A check that finds nothing is recorded here and nowhere else — it does not become an issue.',
+  maintenanceOverdue: 'Overdue',
+  maintenanceDueSoon: 'Due soon',
+  maintenanceScheduled: 'Scheduled',
+  maintenanceRetired: 'Retired',
+  maintenanceNone: 'No equipment is being maintained yet.',
+  maintenanceNoneFiltered: 'Nothing here.',
+  maintenanceDueToday: 'due today',
+  maintenanceDaysOverdue: '{days} days overdue',
+  maintenanceDayOverdue: '1 day overdue',
+  maintenanceNotYet: 'due {date}',
+  maintenanceNeverChecked: 'Never checked',
+  maintenanceLastCheck: 'Last check',
+  maintenanceAllFine: 'all fine',
+  maintenanceFault: 'a fault',
+  maintenanceBy: 'by {name}',
+  maintenanceMarkDone: 'Mark done',
+  maintenanceHistory: 'History',
+  maintenanceAddDevice: 'Add equipment',
+  maintenanceEditDevice: 'Edit equipment',
+  maintenanceInterval: 'How often',
+  maintenanceIntervalDays: 'every {days} days',
+  maintenanceDeviceName: 'Name',
+  maintenanceDeviceNameHint: 'What the technician calls it — e.g. “Reception front desk”',
+  maintenanceEquipment: 'Equipment',
+  maintenanceDepartment: 'Department',
+  maintenanceAssignTo: 'Assigned to',
+  maintenanceAllTechnicians: 'All technicians',
+  maintenanceAssignHint: 'Nobody in particular means any technician can pick it up.',
+  maintenancePrinter: 'Printer',
+  maintenancePhone: 'Phone',
+  maintenanceRecent: 'Recent activity',
+  maintenanceRecentEmpty: 'No checks recorded yet.',
+  maintenanceScheduleSaved: 'Equipment saved.',
+  maintenanceScheduleDeleted: 'Equipment removed.',
+  maintenanceDelete: 'Remove equipment',
+  maintenanceCheckSaved: 'Check recorded.',
+  maintenanceIssueLogged: 'Issue logged and linked to the check.',
+  maintenanceCompleteTitle: 'Record a check',
+  maintenanceCompleteFor: 'Checking {name}',
+  maintenanceOutcome: 'Outcome',
+  maintenanceOutcomeOk: 'All fine',
+  maintenanceOutcomeFault: 'Fault found',
+  maintenanceNote: 'Note',
+  maintenanceNoteOkHint: 'Optional — what you cleaned, adjusted or checked.',
+  maintenanceNoteFaultHint: 'Optional — what is wrong. A fault put right on the spot is fine to record here without an issue.',
+  maintenanceAlsoLogIssue: 'Also log this as an issue',
+  maintenanceAlsoLogIssueHint: 'Opens the normal issue form, filled in with this department and equipment type.',
+  maintenanceDoneOn: 'Done on',
+  maintenanceDoneOnHint: 'Leave as today unless the work was done earlier.',
+  maintenanceDeleteConfirm: 'Remove {name} from maintenance? Its {count} recorded checks are deleted with it. Retire it instead to keep the history.',
+  maintenanceRetireHint: 'Turn this off to keep the device and its history but take it out of the queue.',
+  maintenanceInQueue: 'In the maintenance queue',
+  maintenanceNoHistory: 'No checks recorded for this yet.',
+  maintenanceIntervalWeekly: 'Weekly',
+  maintenanceIntervalMonthly: 'Monthly',
+  maintenanceIntervalQuarterly: 'Quarterly',
+  maintenanceIntervalBiannual: 'Twice a year',
+  maintenanceIntervalYearly: 'Yearly',
+  maintenanceIntervalCustom: 'Every N days',
     // Equipment swapped out. {type} is filled in from the issue's own type, so
     // this reads "TV" today and stays honest if another type records swaps.
     tvSwapAlertsTitle: 'Faulty equipment still in place',
@@ -2040,6 +2143,68 @@ const T = {
     alertsSolved: 'Resolvidas',
     alertsSolvedEmpty: 'Ainda não há avarias recorrentes resolvidas.',
     alertsRecurringTitle: 'Avarias recorrentes',
+  // ── Manutenção preventiva ──
+  maintenance: 'Manutenção',
+  maintenanceSubtitle: 'Impressoras e telefones dos serviços, verificados com regularidade. Uma verificação que não encontra nada fica registada aqui e em mais lado nenhum — não vira avaria.',
+  maintenanceOverdue: 'Em atraso',
+  maintenanceDueSoon: 'A seguir',
+  maintenanceScheduled: 'Agendadas',
+  maintenanceRetired: 'Retiradas',
+  maintenanceNone: 'Ainda não há equipamento em manutenção.',
+  maintenanceNoneFiltered: 'Nada aqui.',
+  maintenanceDueToday: 'para hoje',
+  maintenanceDaysOverdue: '{days} dias em atraso',
+  maintenanceDayOverdue: '1 dia em atraso',
+  maintenanceNotYet: 'para {date}',
+  maintenanceNeverChecked: 'Nunca verificado',
+  maintenanceLastCheck: 'Última verificação',
+  maintenanceAllFine: 'tudo bem',
+  maintenanceFault: 'uma avaria',
+  maintenanceBy: 'por {name}',
+  maintenanceMarkDone: 'Marcar como feita',
+  maintenanceHistory: 'Histórico',
+  maintenanceAddDevice: 'Adicionar equipamento',
+  maintenanceEditDevice: 'Editar equipamento',
+  maintenanceInterval: 'Com que frequência',
+  maintenanceIntervalDays: 'a cada {days} dias',
+  maintenanceDeviceName: 'Nome',
+  maintenanceDeviceNameHint: 'Como o técnico lhe chama — ex. “Receção da frente”',
+  maintenanceEquipment: 'Equipamento',
+  maintenanceDepartment: 'Serviço',
+  maintenanceAssignTo: 'Atribuído a',
+  maintenanceAllTechnicians: 'Todos os técnicos',
+  maintenanceAssignHint: 'Ninguém em concreto significa que qualquer técnico pode pegar nele.',
+  maintenancePrinter: 'Impressora',
+  maintenancePhone: 'Telefone',
+  maintenanceRecent: 'Atividade recente',
+  maintenanceRecentEmpty: 'Ainda não há verificações registadas.',
+  maintenanceScheduleSaved: 'Equipamento guardado.',
+  maintenanceScheduleDeleted: 'Equipamento removido.',
+  maintenanceDelete: 'Remover equipamento',
+  maintenanceCheckSaved: 'Verificação registada.',
+  maintenanceIssueLogged: 'Avaria registada e ligada à verificação.',
+  maintenanceCompleteTitle: 'Registar uma verificação',
+  maintenanceCompleteFor: 'A verificar {name}',
+  maintenanceOutcome: 'Resultado',
+  maintenanceOutcomeOk: 'Tudo bem',
+  maintenanceOutcomeFault: 'A avaria encontrada',
+  maintenanceNote: 'Nota',
+  maintenanceNoteOkHint: 'Opcional — o que limpaste, ajustaste ou verificaste.',
+  maintenanceNoteFaultHint: 'Opcional — o que está mal. Uma avaria resolvida no momento pode ficar registada aqui sem abrir avaria.',
+  maintenanceAlsoLogIssue: 'Registar também como avaria',
+  maintenanceAlsoLogIssueHint: 'Abre o formulário normal de avarias, já preenchido com este serviço e tipo de equipamento.',
+  maintenanceDoneOn: 'Feita em',
+  maintenanceDoneOnHint: 'Deixa como hoje, a não ser que o trabalho tenha sido feito antes.',
+  maintenanceDeleteConfirm: 'Remover {name} da manutenção? As {count} verificações registadas são apagadas com ela. Em vez disso, retira-a para manter o histórico.',
+  maintenanceRetireHint: 'Desliga para manter o equipamento e o histórico, mas tirá-lo da fila.',
+  maintenanceInQueue: 'Na fila de manutenção',
+  maintenanceNoHistory: 'Ainda não há verificações registadas para este equipamento.',
+  maintenanceIntervalWeekly: 'Semanal',
+  maintenanceIntervalMonthly: 'Mensal',
+  maintenanceIntervalQuarterly: 'Trimestral',
+  maintenanceIntervalBiannual: 'Semestral',
+  maintenanceIntervalYearly: 'Anual',
+  maintenanceIntervalCustom: 'A cada N dias',
     // {type} é preenchido com o tipo da própria avaria, por isso hoje lê-se o nome
     // do tipo e continua correto se outro vier a registar trocas.
     tvSwapAlertsTitle: 'Equipamento avariado ainda no local',
@@ -2513,6 +2678,20 @@ const Ic = {
   download: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 13h12"/></svg>,
   calendar: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="3" width="14" height="12" rx="1"/><path d="M1 7h14M5 1v4M11 1v4"/></svg>,
   chevron: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3.5l4.5 4.5L6 12.5"/></svg>,
+  // Printer: paper standing out of the top tray, the body with its status light,
+  // and the sheet coming out of the front. Drawn to read at 16px, which is why the
+  // tray is a separate outlined path rather than filled.
+  printer: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4.6 5.7V2.5a.9.9 0 0 1 .9-.9h5a.9.9 0 0 1 .9.9v3.2"/>
+    <rect x="1.7" y="5.7" width="12.6" height="4.9" rx="1.3"/>
+    <path d="M4.4 9.5h7.2v4.9H4.4z"/>
+    <path d="M12.3 7.7h.01" strokeWidth="2.1"/>
+  </svg>,
+  // Phone: the handset silhouette rather than a handset-shaped blob, so it still
+  // reads as a phone at 16px and beside the printer's squared-off shape.
+  phone: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4.7 1.7 3.3 3.1a1.7 1.7 0 0 0-.3 2c1.7 3.8 4.8 6.9 8.6 8.6a1.7 1.7 0 0 0 2-.3l1.4-1.4a1.2 1.2 0 0 0 0-1.7l-1.9-1.9a1.2 1.2 0 0 0-1.7 0l-.7.7a11 11 0 0 1-4.5-4.5l.7-.7a1.2 1.2 0 0 0 0-1.7L5.6 1.7a1.2 1.2 0 0 0-1.7 0Z"/>
+  </svg>,
 };
 
 /* ── Avatar ──
@@ -3666,7 +3845,7 @@ function initialClockTimes(issue) {
   return { startTime: toHM(start), endTime: toHM(end) };
 }
 
-function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments, connectaAgents, consumableItems, token, onClose, onSave }) {
+function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, departments, connectaAgents, consumableItems, token, onClose, onSave }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const isEdit = !!editIssue;
@@ -3697,6 +3876,10 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
   const defaults = issueMode==='apt'
     ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[], supportRequests:[], tvSwaps:[]}
     : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[], supportRequests:[], tvSwaps:[]};
+  // prefill lets another page open this form with some of it already answered --
+  // the Maintenance page does, so a fault found during a check does not have to
+  // have its department and equipment type typed out again.
+  const initial = prefill ? {...defaults, ...prefill} : defaults;
   const [form, setForm] = useState(isEdit ? {
     apt:        editIssue.apt||'',
     dept:       editIssue.dept||'',
@@ -3722,7 +3905,7 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
     // from the server's row id, so the list can be edited in place without an
     // extra round-trip.
     tvSwaps: (editIssue.tvSwaps || []).map(s => ({...s, key: `tvs-${s.id}`})),
-  } : defaults);
+  } : initial);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
@@ -6447,6 +6630,666 @@ function LCUPrompt({ units, token, onDone, onLogout }) {
   );
 }
 
+/* ════════════════ MAINTENANCE PAGE ════════════════ */
+/*
+  Preventive maintenance on department printers and phones.
+
+  This is a work queue, not a report: what matters is what is due and who is
+  going to do it, so the page opens on the overdue list and everything else
+  follows in order of urgency.
+
+  The one rule that shapes everything here: recording a check is not the same as
+  logging an issue. Almost every check finds nothing, and if each of those became
+  an issue the counts and averages everywhere else in the app would quietly
+  change. So "Mark done" writes a check, and only a fault offers to also write an
+  issue — and that offer can be declined, because a fault put right on the spot
+  is a real thing worth recording that is not anybody's problem to track.
+*/
+const MAINTENANCE_PRESETS = [
+  {days:7,    key:'weekly'},
+  {days:30,   key:'monthly'},
+  {days:90,   key:'quarterly'},
+  {days:180,  key:'biannual'},
+  {days:365,  key:'yearly'},
+];
+
+// The issue type a piece of equipment raises, so a fault logged from here lands
+// in the normal tables already categorised.
+const maintenanceIssueType = eq => eq === 'phone' ? 'Phone' : 'Printer';
+
+function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit }) {
+  const late = s.due_state === 'overdue';
+  const soon = s.due_state === 'due_soon';
+  const typeLabel = s.equipment_type === 'phone' ? t.maintenancePhone : t.maintenancePrinter;
+
+  let dueText;
+  if (late) {
+    dueText = s.days_overdue === 1
+      ? t.maintenanceDayOverdue
+      : t.maintenanceDaysOverdue.replace('{days}', s.days_overdue);
+  } else if (soon) {
+    dueText = s.next_due_on === s.last_done_on
+      ? t.maintenanceDueToday
+      : t.maintenanceNotYet.replace('{date}', formatDateShort(s.next_due_on));
+  } else {
+    dueText = t.maintenanceNotYet.replace('{date}', formatDateShort(s.next_due_on));
+  }
+
+  const lastLine = s.last_done_on
+    ? `${t.maintenanceLastCheck} ${formatDateShort(s.last_done_on)} — ${
+        s.last_outcome === 'fault' ? t.maintenanceFault : t.maintenanceAllFine}`
+    : t.maintenanceNeverChecked;
+
+  return (
+    <div className={`maint-card ${late ? 'maint-late' : ''} ${!s.active ? 'maint-retired' : ''}`}>
+      <div className="maint-card-main">
+        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          <strong style={{fontSize:14}}>{s.device_name}</strong>
+          <span className="badge badge-type">{typeLabel}</span>
+          {late && <span className="badge badge-pending">{dueText}</span>}
+          {!late && soon && <span className="badge badge-ok" style={{background:'var(--amber-light)',color:'var(--amber)'}}>{dueText}</span>}
+          {!s.active && <span className="badge badge-slate">{t.maintenanceRetired}</span>}
+        </div>
+        <div style={{fontSize:12.5,color:'var(--gray-500)',marginTop:5}}>
+          {s.department_name} · {t.maintenanceIntervalDays.replace('{days}', s.interval_days)}
+          {/* Shown only when someone owns it. A manager needs to see who, because
+              they are the ones who reassign; a technician can only ever see their
+              own or a shared one, and "all technicians" on every row would just
+              be noise. */}
+          {s.assignee_name && ` · ${s.assignee_name}`}
+        </div>
+        <div style={{fontSize:12,color:'var(--gray-400)',marginTop:3}}>
+          {lastLine}
+          {s.last_done_by_name && ` · ${t.maintenanceBy.replace('{name}', s.last_done_by_name)}`}
+        </div>
+        {s.last_note && s.active && (
+          <div style={{fontSize:12,color:'var(--gray-500)',marginTop:3,fontStyle:'italic'}}>
+            “{s.last_note}”
+          </div>
+        )}
+      </div>
+      <div className="maint-card-actions">
+        {s.active && (
+          <button className="btn btn-primary" style={{padding:'6px 14px',fontSize:12.5}}
+            onClick={()=>onComplete(s)}>
+            {Ic.check} {t.maintenanceMarkDone}
+          </button>
+        )}
+        <button className="btn btn-ghost" style={{padding:'6px 12px',fontSize:12.5}}
+          onClick={()=>onHistory(s)}>
+          {t.maintenanceHistory}
+        </button>
+        {canManage && (
+          <button className="icon-btn" title={t.maintenanceEditDevice} onClick={()=>onEdit(s)}>{Ic.edit}</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// formatDateShort renders a YYYY-MM-DD date for display. Parsed as local midnight
+// on purpose: new Date('2026-10-03') is UTC midnight, which in Lisbon is still
+// the 2nd, and the due date would read a day early for anyone east of Greenwich.
+function formatDateShort(iso) {
+  if (!iso) return '';
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return String(iso);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {day:'numeric', month:'short'});
+}
+
+function MaintenanceQueue({ title, list, t, emptyText, canManage, handlers, testId }) {
+  if (!list.length) return null;
+  return (
+    <div style={{marginBottom:22}} data-maint-section={testId}>
+      <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:10}}>
+        <h2 style={{fontSize:15,margin:0}}>{title}</h2>
+        <span style={{fontSize:12.5,color:'var(--gray-400)'}}>{list.length}</span>
+      </div>
+      {list.map((s, i) => (
+        <MaintenanceDeviceCard key={s.id} s={s} t={t} index={i} canManage={canManage} {...handlers}/>
+      ))}
+      {emptyText && <div className="empty-state">{Ic.box}<p>{emptyText}</p></div>}
+    </div>
+  );
+}
+
+function MaintenancePage({ token, currentUser, departments, setToast, onCountsUpdate, onRequestIssue }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const canManage = currentUser?.role === 'manager';
+  const todayStr = localISODate(new Date());
+
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const [epoch, setEpoch] = useState(0);
+  const [editing, setEditing] = useState(null);   // a schedule, or 'new'
+  const [completing, setCompleting] = useState(null);
+  const [historyFor, setHistoryFor] = useState(null);
+  // Who each check can be assigned to. Fetched here rather than taken from the
+  // app's user list, which is a page of its own -- a truncated roster would leave
+  // a technician silently missing from the dropdown and their checks quietly
+  // stuck on "all technicians".
+  const [staff, setStaff] = useState([]);
+
+  const refresh = () => setEpoch(n => n + 1);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    apiFetch('/maintenance/schedules?recent=10', {token})
+      .then(res => {
+        if (cancelled) return;
+        setData(res);
+        setErr('');
+        if (onCountsUpdate) onCountsUpdate(res.due_count || 0);
+      })
+      .catch(ex => { if (!cancelled) setErr(ex.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [token, epoch]);
+
+  // Only a manager assigns anybody, so only a manager pays for the roster.
+  useEffect(() => {
+    if (!canManage) return;
+    let cancelled = false;
+    apiFetch('/users?limit=1000', {token})
+      .then(res => { if (!cancelled) setStaff((res.users || []).filter(u => u.active)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [token, canManage]);
+
+  if (loading && !data) {
+    return <div className="table-card"><div className="empty-state">{Ic.tool}<p>{t.analyticsLoading}</p></div></div>;
+  }
+
+  if (err) {
+    return <div className="table-card"><div className="empty-state">{Ic.tool}<p>{err}</p></div></div>;
+  }
+
+  const all        = data?.schedules || [];
+  const active     = all.filter(s => s.active);
+  const overdue    = active.filter(s => s.due_state === 'overdue');
+  const dueSoon    = active.filter(s => s.due_state === 'due_soon');
+  const scheduled  = active.filter(s => s.due_state === 'scheduled');
+  const retired    = all.filter(s => !s.active);
+  const recent     = data?.recent || [];
+
+  const handlers = {
+    onComplete: setCompleting,
+    onHistory:  setHistoryFor,
+    onEdit:     setEditing,
+  };
+
+  // The check is filed the moment the dialog is saved, before the issue question
+  // is even asked. Recording it second meant closing the issue form could lose a
+  // fault the technician had already reported, and left the check dialog sitting
+  // on top of the issue form. Filing first also means cancelling the issue form is
+  // harmless: the fault is on record with its note, just not linked to a ticket.
+  async function complete({schedule, outcome, note, doneOn, raiseIssue}) {
+    setCompleting(null);
+
+    let check;
+    try {
+      const res = await apiFetch(`/maintenance/schedules/${schedule.id}/checks`, {method:'POST', token,
+        body:{outcome, note, done_on: doneOn || todayStr}});
+      check = res.check;
+    } catch(ex) {
+      setToast('Error: ' + ex.message);
+      return;
+    }
+    setToast(t.maintenanceCheckSaved);
+    refresh();
+
+    if (!raiseIssue) return;
+
+    onRequestIssue({
+      prefill: {
+        dept: schedule.department_name,
+        type:  maintenanceIssueType(schedule.equipment_type),
+        // Named first so the issue says which machine it is about; the check it
+        // links to says the rest.
+        problem: `${schedule.device_name} — `,
+      },
+      onLinked: async issueId => {
+        try {
+          await apiFetch(`/maintenance/checks/${check.id}/link`, {method:'POST', token,
+            body:{issue_id: issueId}});
+          setToast(t.maintenanceIssueLogged);
+          refresh();
+        } catch(ex) { setToast('Error: ' + ex.message); }
+      },
+    });
+  }
+
+  return (
+    <div>
+      <div className="table-card" style={{marginBottom:18,padding:'14px 20px',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+        <p style={{fontSize:13,color:'var(--gray-400)',margin:0,flex:1,minWidth:260}}>{t.maintenanceSubtitle}</p>
+        {canManage && (
+          <button className="btn btn-primary" style={{padding:'7px 14px',fontSize:12.5}}
+            onClick={()=>setEditing('new')}>
+            {Ic.plus} {t.maintenanceAddDevice}
+          </button>
+        )}
+      </div>
+
+      {!active.length && !retired.length ? (
+        <div className="empty-state">{Ic.tool}<p>{t.maintenanceNone}</p></div>
+      ) : (
+        <>
+          <MaintenanceQueue title={t.maintenanceOverdue}  list={overdue}   t={t} canManage={canManage} handlers={handlers} testId="overdue"/>
+          <MaintenanceQueue title={t.maintenanceDueSoon}  list={dueSoon}   t={t} canManage={canManage} handlers={handlers} testId="soon"/>
+          <MaintenanceQueue title={t.maintenanceScheduled} list={scheduled} t={t} canManage={canManage} handlers={handlers} testId="scheduled"/>
+          <MaintenanceQueue title={t.maintenanceRetired}   list={retired}   t={t} canManage={canManage} handlers={handlers} testId="retired"/>
+        </>
+      )}
+
+      {all.length > 0 && (
+        <div style={{marginTop:26}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:10}}>
+            <h2 style={{fontSize:15,margin:0}}>{t.maintenanceRecent}</h2>
+          </div>
+          {!recent.length ? (
+            <div className="empty-state">{Ic.clock}<p>{t.maintenanceRecentEmpty}</p></div>
+          ) : (
+            <div className="table-card">
+              <div style={{overflowX:'auto'}}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t.date}</th><th>{t.maintenanceEquipment}</th><th>{t.maintenanceOutcome}</th>
+                      <th>{t.maintenanceNote}</th><th>{t.loggedBy}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recent.map(c => {
+                      const device = all.find(s => s.id === c.schedule_id);
+                      return (
+                        <tr key={c.id}>
+                          <td style={{whiteSpace:'nowrap',fontSize:12.5,color:'var(--gray-500)'}}>
+                            {formatDateShort(c.done_on)}
+                          </td>
+                          <td>
+                            {device ? (
+                              <span style={{fontSize:12.5}}>
+                                {device.device_name}
+                                <span style={{color:'var(--gray-400)'}}> · {device.department_name}</span>
+                              </span>
+                            ) : '—'}
+                          </td>
+                          <td>
+                            <span className={`badge ${c.outcome==='fault' ? 'badge-pending' : 'badge-ok'}`}>
+                              {c.outcome==='fault' ? t.maintenanceFault : t.maintenanceAllFine}
+                            </span>
+                            {c.issue_label && (
+                              <div style={{fontSize:11.5,color:'var(--gray-400)',marginTop:2}}>{c.issue_label}</div>
+                            )}
+                          </td>
+                          <td style={{maxWidth:260,fontSize:12.5,color:'var(--gray-600)'}}>{c.note || '—'}</td>
+                          <td style={{fontSize:12.5}}>{c.done_by_name}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {completing && (
+        <MaintenanceCheckDialog schedule={completing} t={t} today={todayStr}
+          onCancel={()=>setCompleting(null)} onSave={complete}/>
+      )}
+      {editing && (
+        <MaintenanceScheduleDialog schedule={editing === 'new' ? null : editing}
+            departments={departments} staff={staff} t={t} token={token} setToast={setToast}
+          onDone={()=>{setEditing(null); refresh();}} onDeleted={()=>{setEditing(null); refresh();}}/>
+      )}
+      {historyFor && (
+        <MaintenanceHistoryDialog schedule={historyFor} token={token} t={t} onClose={()=>setHistoryFor(null)}/>
+      )}
+    </div>
+  );
+}
+
+// ── Record a check ──
+function MaintenanceCheckDialog({ schedule, t, today, onCancel, onSave }) {
+  const [outcome, setOutcome] = useState('ok');
+  const [note, setNote] = useState('');
+  const [doneOn, setDoneOn] = useState(today);
+  const [raiseIssue, setRaiseIssue] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await onSave({schedule, outcome, note, doneOn, raiseIssue: outcome === 'fault' && raiseIssue});
+    } finally { setSaving(false); }
+  }
+
+  const typeLabel = schedule.equipment_type === 'phone' ? t.maintenancePhone : t.maintenancePrinter;
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && onCancel()}>
+      <div className="modal" style={{maxWidth:460}} role="dialog" aria-modal="true"
+        aria-label={t.maintenanceCompleteTitle}>
+        <div className="modal-header">
+          <div>
+            <div style={{fontSize:15,fontWeight:600}}>{t.maintenanceCompleteTitle}</div>
+            <div style={{fontSize:12.5,color:'var(--gray-400)',marginTop:2}}>
+              {t.maintenanceCompleteFor.replace('{name}', `${schedule.device_name} · ${typeLabel} · ${schedule.department_name}`)}
+            </div>
+          </div>
+          <button className="icon-btn" onClick={onCancel}>{Ic.x}</button>
+        </div>
+        <div className="modal-body" style={{display:'grid',gap:14}}>
+          <div>
+            <label style={{fontSize:12.5,fontWeight:600,color:'var(--gray-600)'}}>{t.maintenanceOutcome}</label>
+            <div style={{display:'flex',gap:8,marginTop:6}}>
+              <button className={`chip ${outcome==='ok' ? 'active' : ''}`} onClick={()=>setOutcome('ok')}>
+                {Ic.check} {t.maintenanceOutcomeOk}
+              </button>
+              <button className={`chip ${outcome==='fault' ? 'active' : ''}`} onClick={()=>setOutcome('fault')}>
+                {Ic.bell} {t.maintenanceOutcomeFault}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label style={{fontSize:12.5,fontWeight:600,color:'var(--gray-600)'}}>{t.maintenanceNote}</label>
+            <textarea className="form-control" style={{marginTop:6,minHeight:70}} maxLength={500}
+              value={note} onChange={e=>setNote(e.target.value)}
+              placeholder={outcome === 'fault' ? t.maintenanceNoteFaultHint : t.maintenanceNoteOkHint}/>
+          </div>
+
+          {outcome === 'fault' && (
+            <label style={{display:'flex',gap:9,alignItems:'flex-start',fontSize:13,cursor:'pointer'}}>
+              <input type="checkbox" checked={raiseIssue} onChange={e=>setRaiseIssue(e.target.checked)}
+                style={{marginTop:2}}/>
+              <span>
+                <strong style={{fontWeight:500}}>{t.maintenanceAlsoLogIssue}</strong>
+                <div style={{fontSize:12,color:'var(--gray-400)',marginTop:2}}>{t.maintenanceAlsoLogIssueHint}</div>
+              </span>
+            </label>
+          )}
+
+          <div>
+            <label style={{fontSize:12.5,fontWeight:600,color:'var(--gray-600)'}}>{t.maintenanceDoneOn}</label>
+            <input type="date" className="form-control" style={{marginTop:6,width:'auto'}} max={today}
+              value={doneOn} onChange={e=>setDoneOn(e.target.value)}/>
+            <div style={{fontSize:12,color:'var(--gray-400)',marginTop:3}}>{t.maintenanceDoneOnHint}</div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onCancel} disabled={saving}>{t.cancel}</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? '…' : t.maintenanceMarkDone}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Add or edit a device ──
+function MaintenanceScheduleDialog({ schedule, departments, staff, t, token, setToast, onDone, onDeleted }) {
+  const isNew = !schedule;
+  const [name, setName] = useState(schedule?.device_name || '');
+  const [type, setType] = useState(schedule?.equipment_type || 'printer');
+  const [deptId, setDeptId] = useState(schedule?.department_id || (departments[0]?.id ?? ''));
+  const [interval, setInterval] = useState(schedule?.interval_days ?? 30);
+  const [custom, setCustom] = useState(
+    schedule ? !MAINTENANCE_PRESETS.some(p => p.days === schedule.interval_days) : false);
+  const [days, setDays] = useState(schedule?.interval_days ?? 30);
+  // Retirement lives here rather than on the card: taking a device out of the
+  // queue while keeping its history is a deliberate choice about one device, so
+  // it belongs beside the other settings for that device. It has to be settable
+  // both ways -- a device retired by mistake has to be recoverable.
+  const [active, setActive] = useState(schedule ? schedule.active !== false : true);
+  // ' means every technician. A string rather than a number so the empty case is
+  // distinct from id 0, and so it maps straight onto the option's value.
+  const [assignee, setAssignee] = useState(schedule && schedule.assignee_id ? String(schedule.assignee_id) : '');
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (saving) return;
+    setSaving(true);
+    setErr('');
+    const body = {
+      device_name: name,
+      equipment_type: type,
+      department_id: Number(deptId),
+      interval_days: Number(custom ? days : interval),
+      // Only meaningful on an edit: a new device is always active, and sending
+      // it as retired would create something nobody can find.
+      ...(isNew ? {} : {active}),
+      assignee_id: assignee ? Number(assignee) : null,
+    };
+    try {
+      if (isNew) {
+        await apiFetch('/maintenance/schedules', {method:'POST', token, body});
+      } else {
+        await apiFetch(`/maintenance/schedules/${schedule.id}`, {method:'PATCH', token, body});
+      }
+      setToast(t.maintenanceScheduleSaved);
+      onDone();
+    } catch(ex) {
+      // A validation failure comes back keyed by field; show the first message
+      // rather than a bare "request failed", which tells the reader nothing.
+      setErr(ex.message || 'Error');
+    } finally { setSaving(false); }
+  }
+
+  // Printers and phones do not come round at the same rate, so picking the class
+  // moves the cadence with it -- but only when the cadence is still one of the
+  // presets. Overriding an interval the manager deliberately chose would be rude,
+  // and a custom one cannot be guessed at in the other direction either.
+  function pickType(next) {
+    setType(next);
+    if (custom) return;
+    if (next === 'printer' && interval !== 30 && MAINTENANCE_PRESETS.some(p => p.days === interval)) {
+      setInterval(30);
+    }
+    if (next === 'phone' && interval !== 90 && MAINTENANCE_PRESETS.some(p => p.days === interval)) {
+      setInterval(90);
+    }
+  }
+
+  async function remove() {
+    // The count comes off the schedule row, so the prompt can say what deleting it
+    // costs rather than quoting a number nobody kept.
+    const count = schedule && schedule.check_count != null ? schedule.check_count : 0;
+    if (!confirm(t.maintenanceDeleteConfirm.replace('{name}', schedule.device_name).replace('{count}', count))) return;
+    setSaving(true);
+    try {
+      await apiFetch(`/maintenance/schedules/${schedule.id}`, {method:'DELETE', token});
+      setToast(t.maintenanceScheduleDeleted);
+      onDeleted();
+    } catch(ex) { setErr(ex.message); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && onDone()}>
+      <div className="modal" style={{maxWidth:460}} role="dialog" aria-modal="true"
+        aria-label={isNew ? t.maintenanceAddDevice : t.maintenanceEditDevice}>
+        <div className="modal-header">
+          <div style={{fontSize:15,fontWeight:600}}>
+            {isNew ? t.maintenanceAddDevice : t.maintenanceEditDevice}
+          </div>
+          <button className="icon-btn" onClick={onDone}>{Ic.x}</button>
+        </div>
+        <div className="modal-body" style={{gap:16}}>
+          <div className="form-group">
+            <label>{t.maintenanceDeviceName}</label>
+            <input className="form-control" maxLength={80} autoFocus
+              value={name} onChange={e=>setName(e.target.value)} placeholder={t.maintenanceDeviceNameHint}/>
+            <div className="maint-hint">{t.maintenanceDeviceNameHint}</div>
+          </div>
+
+          <div className="form-group">
+            <label>{t.maintenanceEquipment}</label>
+            <div className="maint-choices">
+              <button type="button" className={`maint-choice ${type==='printer' ? 'on' : ''}`}
+                aria-pressed={type==='printer'}
+                onClick={()=>pickType('printer')}>
+                {Ic.printer} {t.maintenancePrinter}
+              </button>
+              <button type="button" className={`maint-choice ${type==='phone' ? 'on' : ''}`}
+                aria-pressed={type==='phone'}
+                onClick={()=>pickType('phone')}>
+                {Ic.phone} {t.maintenancePhone}
+              </button>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>{t.maintenanceDepartment}</label>
+            <select className="form-control" value={deptId}
+              onChange={e=>setDeptId(e.target.value)}>
+              {(departments || []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+
+          {/* A select, not chips. Five presets plus a custom escape will not fill a
+              row evenly however they wrap, and this sits directly under another
+              select -- so the same control twice reads as deliberate rather than
+              as a fallback for the one field that happened to run out of room. */}
+          <div className="form-group">
+            <label>{t.maintenanceInterval}</label>
+            <select className="form-control" value={custom ? 'custom' : String(interval)}
+              onChange={e=>{
+                if (e.target.value === 'custom') { setCustom(true); setDays(interval); }
+                else { setCustom(false); setInterval(Number(e.target.value)); }
+              }}>
+              {MAINTENANCE_PRESETS.map(p => (
+                <option key={p.key} value={p.days}>
+                  {t['maintenanceInterval' + p.key.charAt(0).toUpperCase() + p.key.slice(1)]}
+                </option>
+              ))}
+              <option value="custom">{t.maintenanceIntervalCustom}</option>
+            </select>
+            {custom && (
+              <>
+                <input type="number" className="form-control" min={7} max={730}
+                  value={days} onChange={e=>setDays(e.target.value)}/>
+                <div className="maint-hint">
+                  {t.maintenanceIntervalDays.replace('{days}', days || '—')}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label>{t.maintenanceAssignTo}</label>
+            <select className="form-control" value={assignee} onChange={e=>setAssignee(e.target.value)}>
+              <option value="">{t.maintenanceAllTechnicians}</option>
+              {(staff || []).map(u => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+            <div className="maint-hint">{t.maintenanceAssignHint}</div>
+          </div>
+
+          {!isNew && (
+            <label style={{display:'flex',gap:9,alignItems:'flex-start',fontSize:13,cursor:'pointer',
+              borderTop:'1px solid var(--gray-200)',paddingTop:16}}>
+              <input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)}
+                style={{marginTop:2}}/>
+              <span>
+                <strong style={{fontWeight:500}}>{t.maintenanceInQueue}</strong>
+                <div className="maint-hint" style={{marginTop:2}}>{t.maintenanceRetireHint}</div>
+              </span>
+            </label>
+          )}
+
+          {err && <div style={{fontSize:12.5,color:'var(--red)'}}>{err}</div>}
+        </div>
+        <div className="modal-footer">
+          {!isNew && (
+            <button className="btn btn-ghost" style={{marginRight:'auto',color:'var(--red)'}}
+              onClick={remove} disabled={saving}>{t.maintenanceDelete}</button>
+          )}
+          <button className="btn btn-ghost" onClick={onDone} disabled={saving}>{t.cancel}</button>
+          <button className="btn btn-primary" onClick={save}
+            disabled={saving || !name.trim() || !deptId}>
+            {/* Named for what it does rather than always "Save changes", which on an
+                empty form reads as saving something. */}
+            {saving ? '…' : isNew ? t.maintenanceAddDevice : t.saveChanges}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── One device's history ──
+function MaintenanceHistoryDialog({ schedule, token, t, onClose }) {
+  const [checks, setChecks] = useState(null);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch(`/maintenance/schedules/${schedule.id}/checks`, {token})
+      .then(res => { if (!cancelled) setChecks(res.checks || []); })
+      .catch(ex => { if (!cancelled) setErr(ex.message); });
+    return () => { cancelled = true; };
+  }, [schedule.id, token]);
+
+  const typeLabel = schedule.equipment_type === 'phone' ? t.maintenancePhone : t.maintenancePrinter;
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && onClose()}>
+      <div className="modal" style={{maxWidth:520}} role="dialog" aria-modal="true"
+        aria-label={t.maintenanceHistory}>
+        <div className="modal-header">
+          <div>
+            <div style={{fontSize:15,fontWeight:600}}>{schedule.device_name}</div>
+            <div style={{fontSize:12.5,color:'var(--gray-400)',marginTop:2}}>
+              {typeLabel} · {schedule.department_name} · {t.maintenanceIntervalDays.replace('{days}', schedule.interval_days)}
+            </div>
+          </div>
+          <button className="icon-btn" onClick={onClose}>{Ic.x}</button>
+        </div>
+        <div className="modal-body">
+          {err ? <div style={{fontSize:12.5,color:'var(--red)'}}>{err}</div>
+            : !checks ? <p style={{color:'var(--gray-400)',fontSize:13}}>{t.analyticsLoading}</p>
+            : !checks.length ? <p style={{color:'var(--gray-400)',fontSize:13}}>{t.maintenanceNoHistory}</p>
+            : (
+              <div style={{display:'grid',gap:9}}>
+                {checks.map(c => (
+                  <div key={c.id} style={{display:'flex',gap:11,alignItems:'flex-start',paddingBottom:9,borderBottom:'1px solid var(--gray-200)'}}>
+                    <span className={`badge ${c.outcome==='fault' ? 'badge-pending' : 'badge-ok'}`}
+                      style={{flexShrink:0,minWidth:62,justifyContent:'center'}}>
+                      {c.outcome==='fault' ? t.maintenanceFault : t.maintenanceAllFine}
+                    </span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12.5,color:'var(--gray-500)'}}>
+                        {formatDateShort(c.done_on)} · {t.maintenanceBy.replace('{name}', c.done_by_name)}
+                      </div>
+                      {c.note && <div style={{fontSize:13,marginTop:2}}>{c.note}</div>}
+                      {c.issue_label && (
+                        <div style={{fontSize:11.5,color:'var(--blue)',marginTop:2}}>↳ {c.issue_label}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose}>{t.cancel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ════════════════ REPORTS PAGE ════════════════ */
 function ReportsPage({ token }) {
   const lang = React.useContext(LangCtx);
@@ -7605,6 +8448,14 @@ function App() {
   // Counts only, straight from the alerts endpoint. The alert lists are the
   // Alerts page's business and are fetched there, a pageful at a time.
   const [alertsPendingCount, setAlertsPendingCount] = useState(0);
+  // How many devices are due or overdue, for the nav badge. Counted by the server
+  // over the whole active set rather than taken from whatever the Maintenance page
+  // last loaded, so the badge and the page can never disagree.
+  const [maintenanceDueCount, setMaintenanceDueCount] = useState(0);
+  // Set while the Maintenance page wants an issue opened on its behalf: the
+  // prefill to apply, and what to do once the issue exists. The modal itself stays
+  // rendered here, where every other one is.
+  const [maintIssue, setMaintIssue] = useState(null);
   // All-time per-member issue totals for the Team page, which used to count them
   // out of every issue App held in memory.
   const [userIssueStats, setUserIssueStats] = useState([]);
@@ -7710,7 +8561,10 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
       // asks for its own pageful.
       apiFetch('/consumable-items?limit=1000', {token}),
       apiFetch('/user-issue-stats', {token}),
-    ]).then(([usersRes, statsRes, typesRes, deptsRes, agentsRes, settingsRes, alertsRes, consumableItemsRes, userStatsRes]) => {
+      // Only the count is wanted from here, for the nav badge. The queue itself is
+      // the Maintenance page's, fetched when it is opened.
+      apiFetch('/maintenance/schedules?recent=0', {token}),
+    ]).then(([usersRes, statsRes, typesRes, deptsRes, agentsRes, settingsRes, alertsRes, consumableItemsRes, userStatsRes, maintRes]) => {
       setUsers(usersRes.users || []);
       setStats(statsRes.stats);
       setIssueTypes(typesRes.issue_types || []);
@@ -7725,6 +8579,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
       setAlertsPendingCount(alertsRes.pending_count || 0);
       setConsumableItems(consumableItemsRes.consumable_items || []);
       setUserIssueStats(userStatsRes.stats || []);
+      setMaintenanceDueCount(maintRes.due_count || 0);
     }).catch(ex => {
       if (ex.lcuRequired) {
         // The gate closed mid-session -- a unit was added, or the day rolled over
@@ -7745,7 +8600,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
 
   function logout() {
     setSession(null);
-    setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlertsPendingCount(0); setUserIssueStats([]);
+    setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlertsPendingCount(0); setUserIssueStats([]); setMaintenanceDueCount(0); setMaintIssue(null);
   }
 
   // Called when profile updates come back from API
@@ -7823,6 +8678,10 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
       const todayStr = localISODate(new Date());
       apiFetch(`/stats?date=${todayStr}`, {token}).then(r=>setStats(r.stats)).catch(()=>{});
       setToast(t.toastLogged);
+      // Returned so a caller that opened this form on someone's behalf can go on
+      // to do something with the issue it just created -- the Maintenance page
+      // needs the id to link a check to it.
+      return issue.id;
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
@@ -7891,6 +8750,9 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     {id:'dept',      label:t.deptIssues, icon:Ic.edit },
     {id:'history',   label:t.history,    icon:Ic.clock},
     {id:'alerts',    label:t.alerts,     icon:Ic.bell },
+    // Maintenance sits next to Alerts because both are work waiting on somebody,
+    // not a record to read back.
+    {id:'maintenance', label:t.maintenance, icon:Ic.tool },
     {id:'analytics', label:t.analytics,  icon:Ic.trending},
     {id:'consumables', label:t.consumables, icon:Ic.box},
     {id:'support',    label:t.supportPage,  icon:Ic.tool},
@@ -7952,12 +8814,19 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
               </div>
             ) : (
               <button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>setPage(n.id)}>
-                {n.id==='alerts' && alertsPendingCount > 0 ? (
-                  <span className="nav-icon-wrap">
-                    {n.icon}
-                    <span className="nav-badge">{alertsPendingCount > 99 ? '99+' : alertsPendingCount}</span>
-                  </span>
-                ) : n.icon}
+                {(() => {
+                  // Alerts counts outstanding recurring issues; Maintenance counts
+                  // devices due or overdue. Different questions, so each nav entry
+                  // asks for its own rather than sharing one number.
+                  const badge = n.id === 'alerts' ? alertsPendingCount
+                              : n.id === 'maintenance' ? maintenanceDueCount : 0;
+                  return badge > 0 ? (
+                    <span className="nav-icon-wrap">
+                      {n.icon}
+                      <span className="nav-badge">{badge > 99 ? '99+' : badge}</span>
+                    </span>
+                  ) : n.icon;
+                })()}
                 <span>{n.label}</span>
               </button>
             ))}
@@ -8011,6 +8880,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             {page==='dept'      && <IssuesTable token={token} issueTypes={issueTypes} tableMode="dept" epoch={issuesEpoch} currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='history'   && <HistoryPage token={token} issueTypes={issueTypes} epoch={issuesEpoch} currentUser={me} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='alerts'    && <AlertsPage currentUser={me} token={token} onCountsUpdate={setAlertsPendingCount} setToast={setToast}/>}
+            {page==='maintenance' && <MaintenancePage token={token} currentUser={me} departments={departments} setToast={setToast} onCountsUpdate={setMaintenanceDueCount} onRequestIssue={req => setMaintIssue(req)}/>}
             {page==='analytics' && <AnalyticsPage token={token} alertsPendingCount={alertsPendingCount}/>}
             {page==='consumables' && <ConsumablesPage token={token} currentUser={me} onCatalogUpdate={setConsumableItems} setToast={setToast}/>}
             {page==='support' && <SupportPage token={token}/>}
@@ -8056,6 +8926,26 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
         {modal && (
           <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)}/>
         )}
+        {/* Opened by the Maintenance page when a check found a fault worth logging.
+            onLinked runs once the issue exists, with its id, so the check that
+            prompted it can point at it. */}
+        {maintIssue && <IssueModal
+          issueMode="dept"
+          prefill={maintIssue.prefill}
+          currentUser={me}
+          issueTypes={issueTypes}
+          departments={departments}
+          connectaAgents={connectaAgents}
+          consumableItems={consumableItems}
+          token={token}
+          onClose={()=>setMaintIssue(null)}
+          onSave={async form => {
+            const id = await addIssue(form, 'dept');
+            const linked = maintIssue.onLinked;
+            setMaintIssue(null);
+            if (id && linked) await linked(id);
+          }}
+        />}
         {lcuPrompt && (
           <LCUPrompt units={lcuPrompt.units} token={token}
             onDone={()=>{ setLcuPrompt(null); setLcuEpoch(e=>e+1); loadEverything(); }}

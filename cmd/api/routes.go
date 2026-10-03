@@ -154,7 +154,23 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodGet, "/v1/reports/consumables/weekly", app.requireAuth(app.weeklyConsumablesReportHandler))
 	router.HandlerFunc(http.MethodGet, "/v1/reports/consumables/weekly.pdf", app.requireAuth(app.weeklyConsumablesPDFHandler))
 
-	// LCU testing — a failed door card reader is trialled for a week before it is
+	// Preventive maintenance on department printers and phones. Reading the
+	// queue and recording a check are open to any signed-in user, because the
+	// people doing the work are the technicians; only the configuration of what
+	// gets maintained is manager-only.
+	//
+	// /v1/maintenance/checks/:id sits before /v1/maintenance/schedules/:id is
+	// irrelevant here -- they are different path lengths, so httprouter has no
+	// literal/wildcard clash to resolve.
+	router.HandlerFunc(http.MethodGet, "/v1/maintenance/schedules", app.requireAuth(app.listMaintenanceSchedulesHandler))
+	router.HandlerFunc(http.MethodPost, "/v1/maintenance/schedules", app.requireAuth(app.requireManager(app.createMaintenanceScheduleHandler)))
+	router.HandlerFunc(http.MethodPatch, "/v1/maintenance/schedules/:id", app.requireAuth(app.requireManager(app.updateMaintenanceScheduleHandler)))
+	router.HandlerFunc(http.MethodDelete, "/v1/maintenance/schedules/:id", app.requireAuth(app.requireManager(app.deleteMaintenanceScheduleHandler)))
+	router.HandlerFunc(http.MethodPost, "/v1/maintenance/schedules/:id/checks", app.requireAuth(app.recordMaintenanceCheckHandler))
+	router.HandlerFunc(http.MethodGet, "/v1/maintenance/schedules/:id/checks", app.requireAuth(app.listMaintenanceChecksHandler))
+	router.HandlerFunc(http.MethodPost, "/v1/maintenance/checks/:id/link", app.requireAuth(app.linkMaintenanceCheckHandler))
+
+	// LCU testing - a failed door card reader is trialled for a week before it is
 	// scrapped. /v1/lcu/today is what the frontend asks on load, and the
 	// gate-exempt pair here is what the daily prompt needs to do its job.
 	router.HandlerFunc(http.MethodGet, "/v1/lcu/today", app.requireAuth(app.lcuTodayHandler))

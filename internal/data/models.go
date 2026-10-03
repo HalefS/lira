@@ -35,6 +35,7 @@ type Models struct {
 	TVSwaps         TVSwapModel
 	TVSwapAlerts    TVSwapAlertModel
 	LCU             LCUModel
+	Maintenance     MaintenanceModel
 }
 
 func NewModels(db *sql.DB) Models {
@@ -54,5 +55,6 @@ func NewModels(db *sql.DB) Models {
 		TVSwaps:         TVSwapModel{DB: db},
 		TVSwapAlerts:    TVSwapAlertModel{DB: db},
 		LCU:             LCUModel{DB: db},
+		Maintenance:     MaintenanceModel{DB: db},
 	}
 }

@@ -77,6 +77,38 @@ func (m DepartmentModel) GetAll() ([]*Department, error) {
 	return depts, rows.Err()
 }
 
+// Get returns one department by id, or ErrRecordNotFound.
+//
+// Exists alongside GetByName because rows that reference a department hold its
+// id, not its name -- so validating such a reference needs to fetch by id, and
+// finding that id among everything would be both slower and a worse error.
+func (m DepartmentModel) Get(id int64) (*Department, error) {
+	query := `
+		SELECT id, created_at, name, created_by
+		FROM departments
+		WHERE id = $1`
+
+	var d Department
+	var createdBy sql.NullInt64
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := m.DB.QueryRowContext(ctx, query, id).Scan(
+		&d.ID, &d.CreatedAt, &d.Name, &createdBy,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrRecordNotFound
+		}
+		return nil, err
+	}
+	if createdBy.Valid {
+		v := createdBy.Int64
+		d.CreatedBy = &v
+	}
+	return &d, nil
+}
+
 func (m DepartmentModel) GetByName(name string) (*Department, error) {
 	query := `
 		SELECT id, created_at, name, created_by
