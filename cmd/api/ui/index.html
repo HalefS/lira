@@ -1807,6 +1807,11 @@ const T = {
   maintenanceAssignHint: 'Nobody in particular means any technician can pick it up.',
   maintenancePrinter: 'Printer',
   maintenancePhone: 'Phone',
+  maintenanceFilterAll: 'All',
+  maintenancePrinters: 'Printers',
+  maintenancePhones: 'Phones',
+  maintenanceNoPrinters: 'No printers on the schedule.',
+  maintenanceNoPhones: 'No phones on the schedule.',
   maintenanceRecent: 'Recent activity',
   maintenanceRecentEmpty: 'No checks recorded yet.',
   maintenanceScheduleSaved: 'Equipment saved.',
@@ -2354,6 +2359,11 @@ const T = {
   maintenanceAssignHint: 'Ninguém em concreto significa que qualquer técnico pode pegar nele.',
   maintenancePrinter: 'Impressora',
   maintenancePhone: 'Telefone',
+  maintenanceFilterAll: 'Tudo',
+  maintenancePrinters: 'Impressoras',
+  maintenancePhones: 'Telefones',
+  maintenanceNoPrinters: 'Sem impressoras agendadas.',
+  maintenanceNoPhones: 'Sem telefones agendados.',
   maintenanceRecent: 'Atividade recente',
   maintenanceRecentEmpty: 'Ainda não há verificações registadas.',
   maintenanceScheduleSaved: 'Equipamento guardado.',
@@ -6995,6 +7005,9 @@ function MaintenancePage({ token, currentUser, departments, setToast, onCountsUp
   // a technician silently missing from the dropdown and their checks quietly
   // stuck on "all technicians".
   const [staff, setStaff] = useState([]);
+  // Which kind of equipment the queue is showing: '' for all, or a type. Reset
+  // when the page is left, like every other filter in the app.
+  const [equipFilter, setEquipFilter] = useState('');
 
   const refresh = () => setEpoch(n => n + 1);
 
@@ -7032,12 +7045,37 @@ function MaintenancePage({ token, currentUser, departments, setToast, onCountsUp
   }
 
   const all        = data?.schedules || [];
-  const active     = all.filter(s => s.active);
+
+  // The equipment type filter is applied here rather than asked of the server.
+  // This list is the one listing that is not paginated -- ListSchedules takes no
+  // limit and the whole schedule arrives in one response -- so every device is
+  // already in hand and there is nothing a server round trip would add.
+  //
+  // It also keeps the sidebar badge honest: due_count is computed over every
+  // active device the caller may see, so narrowing the view cannot narrow the
+  // count of work waiting. The badge answers "is anything due", the tiles answer
+  // "what am I looking at", and only the second one follows the filter.
+  const shown      = equipFilter ? all.filter(s => s.equipment_type === equipFilter) : all;
+  const active     = shown.filter(s => s.active);
   const overdue    = active.filter(s => s.due_state === 'overdue');
   const dueSoon    = active.filter(s => s.due_state === 'due_soon');
   const scheduled  = active.filter(s => s.due_state === 'scheduled');
-  const retired    = all.filter(s => !s.active);
-  const recent     = data?.recent || [];
+  const retired    = shown.filter(s => !s.active);
+
+  // Recent checks follow the filter too, so the table under the queue describes
+  // the same equipment the queue does. The device is looked up in the unfiltered
+  // list: a check whose device is currently filtered out still needs its name if
+  // it is going to be shown, and a check on a hidden device must not resolve to a
+  // bare dash.
+  const shownIds   = new Set(shown.map(s => s.id));
+  const recent     = (data?.recent || []).filter(c => shownIds.has(c.schedule_id));
+
+  // Counts on the chips, so the filter says what is behind it before it is used.
+  const typeChips = [
+    { key: '',        label: t.maintenanceFilterAll, n: all.length },
+    { key: 'printer', label: t.maintenancePrinters,  n: all.filter(s => s.equipment_type === 'printer').length },
+    { key: 'phone',   label: t.maintenancePhones,    n: all.filter(s => s.equipment_type === 'phone').length },
+  ];
 
   const handlers = {
     onComplete: setCompleting,
@@ -7090,6 +7128,18 @@ function MaintenancePage({ token, currentUser, departments, setToast, onCountsUp
     <div>
       <div className="table-card" style={{marginBottom:18,padding:'14px 20px',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
         <p style={{fontSize:13,color:'var(--gray-400)',margin:0,flex:1,minWidth:260}}>{t.maintenanceSubtitle}</p>
+        {/* Hidden until there is something to filter: with no equipment at all,
+            one chip that can only be selected is a control that does nothing. */}
+        {all.length > 0 && (
+          <div className="filter-chips" role="group" aria-label={t.maintenanceEquipment}>
+            {typeChips.map(c => (
+              <button key={c.key || '__all__'} className={`chip ${equipFilter === c.key ? 'active' : ''}`}
+                aria-pressed={equipFilter === c.key} onClick={()=>setEquipFilter(c.key)}>
+                {c.label} <span style={{opacity:0.6}}>{c.n}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {canManage && (
           <button className="btn btn-primary" style={{padding:'7px 14px',fontSize:12.5}}
             onClick={()=>setEditing('new')}>
@@ -7116,8 +7166,16 @@ function MaintenancePage({ token, currentUser, departments, setToast, onCountsUp
         </div>
       )}
 
-      {!active.length && !retired.length ? (
+      {/* Two different emptinesses, and they need different words: nothing is on
+          the schedule at all, versus nothing of the kind just filtered to. The
+          second names the type so it is obvious the filter is what emptied the
+          page rather than the schedule being lost. */}
+      {!all.length ? (
         <div className="empty-state">{Ic.tool}<p>{t.maintenanceNone}</p></div>
+      ) : !shown.length ? (
+        <div className="empty-state">{Ic.tool}
+          <p>{equipFilter === 'phone' ? t.maintenanceNoPhones : t.maintenanceNoPrinters}</p>
+        </div>
       ) : (
         <>
           <MaintenanceQueue title={t.maintenanceOverdue}  list={overdue}   t={t} canManage={canManage} handlers={handlers} testId="overdue"/>
@@ -7127,7 +7185,9 @@ function MaintenancePage({ token, currentUser, departments, setToast, onCountsUp
         </>
       )}
 
-      {all.length > 0 && (
+      {/* Hidden when the filter matched nothing: "no checks recorded yet" would be
+          a lie, there are plenty -- just none for this equipment. */}
+      {shown.length > 0 && (
         <div style={{marginTop:26}}>
           <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:10}}>
             <h2 style={{fontSize:15,margin:0}}>{t.maintenanceRecent}</h2>
