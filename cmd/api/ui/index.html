@@ -383,22 +383,25 @@ tbody tr.row-clickable { cursor: pointer; }
 .loadmore-note  { font-size: 11.5px; color: var(--amber); }
 
 /* ── Maintenance ──
-   A row, not a card: the queue is scanned rather than read, so the device, what
-   state it is in and the action all sit on one line.
+   A tile, not a full-width row. One device per row left most of each line empty
+   and pushed the queue several screens down, so the queue is a grid: three or four
+   across, and the detail that does not fit a tile -- the technician's own note,
+   who recorded a check -- lives in the history dialog where it already was.
 
    Colour on this page answers the one question it exists to answer -- how urgent
    is this -- so intensity tracks urgency. Overdue shouts in red, due soon says so
    once in amber, scheduled is a quiet teal edge and stops there. A page where
-   every row shouted equally would say nothing at all.
+   every tile shouted equally would say nothing at all.
 
    The urgency wash is a pseudo-element rather than a background so it layers over
    the card's own surface: dark mode forces card backgrounds with !important, and
    this way the tint needs no !important of its own to survive that. It also fades
-   to nothing by 58%, so the row's text stays on white instead of on red. */
+   to nothing by 58%, so the tile's text stays on white instead of on red. */
+.maint-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .maint-card {
   position: relative; overflow: hidden;
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  padding: 13px 16px; margin-bottom: 8px;
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 12px 13px 11px;
   background: #fff; border: 1px solid var(--gray-200); border-radius: 10px;
   border-left: 3px solid var(--gray-200);
   transition: border-color 0.25s ease;
@@ -416,17 +419,51 @@ tbody tr.row-clickable { cursor: pointer; }
 .maint-card.maint-scheduled { border-left-color: var(--teal-mid); }
 .maint-card.maint-overdue::before { opacity: 1; }
 .maint-card.maint-retired { opacity: 0.62; }
-.maint-card-main { flex: 1; min-width: 240px; }
-.maint-card-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* Icon and name share the top line. align-items flex-start rather than center so a
+   name that wraps to two lines still sits against the top of the icon instead of
+   floating beside its midpoint. */
+.maint-head { display: flex; align-items: flex-start; gap: 9px; }
+.maint-name { font-size: 13.5px; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
+.maint-tags { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.maint-sub  { font-size: 11.5px; color: var(--gray-500); overflow-wrap: anywhere; }
+/* The last result as a dot and a date rather than a sentence. Whether the previous
+   check found something is the part worth carrying on the tile; the wording and
+   who wrote it are one click away. */
+.maint-last { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--gray-400); }
+.maint-last-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--gray-300); }
+.maint-last-dot.fault { background: var(--red); }
+.maint-last-dot.ok    { background: var(--green); }
+/* margin-top auto pins the buttons to the bottom, so the actions line up across a
+   row of tiles whose text is one or two lines different in height.
+
+   History is an icon here rather than a labelled button. Three labelled controls
+   need about 196px and a tile at three across is 179px inside its border, so the
+   last one wrapped onto a second line on every tile -- which cost more vertical
+   space than the label ever saved. Mark done keeps its label because it is the
+   action the page exists to be used for. */
+.maint-card-actions { margin-top: auto; padding-top: 2px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .maint-card-actions svg { width: 13px; height: 13px; }
+.maint-card-actions .btn { padding: 5px 9px; font-size: 11.5px; white-space: nowrap; }
+/* Deliberately no min-width: 0 here. The default min-width:auto is what stops the
+   nowrap label shrinking below its own text, so when a tile really is too narrow
+   the strip wraps onto a second line instead of quietly clipping the words. The
+   sidebar does not collapse, so a window around 620-700px wide does produce tiles
+   that narrow. */
+.maint-card-actions .btn:first-child { flex: 1 1 auto; justify-content: center; }
+.maint-card-actions .icon-btn { width: 26px; height: 26px; flex-shrink: 0; }
+
+@media (max-width: 1400px) { .maint-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px)  { .maint-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px)  { .maint-grid { grid-template-columns: 1fr; } }
 
 /* Printer and phone are the only two kinds, so they get the two strongest tints
    and a reader can tell them apart before they read a word. */
 .maint-chip {
-  width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.maint-chip svg { width: 17px; height: 17px; }
+.maint-chip svg { width: 16px; height: 16px; }
 .maint-chip-printer { background: var(--blue-light); color: var(--blue); }
 .maint-chip-phone   { background: var(--teal-light);  color: var(--teal); }
 .badge-maint-printer { background: var(--blue-light); color: var(--blue); border: 1px solid var(--blue-mid); }
@@ -436,9 +473,11 @@ tbody tr.row-clickable { cursor: pointer; }
    next_due_on both arrive with the row, so this is arithmetic on data already
    loaded rather than a new endpoint. The fill is the same urgency language as
    everything above, so one glance answers both "when" and "how bad". */
-.maint-meter { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.maint-meter { display: flex; align-items: center; gap: 7px; }
+/* The track takes whatever the label leaves, rather than a fixed width that would
+   either overflow a narrow tile or leave a stub on a wide one. */
 .maint-meter-track {
-  flex: 0 1 150px; height: 4px; border-radius: 3px;
+  flex: 1 1 auto; min-width: 40px; height: 4px; border-radius: 3px;
   background: var(--gray-100); overflow: hidden;
 }
 .maint-meter-fill {
@@ -447,7 +486,7 @@ tbody tr.row-clickable { cursor: pointer; }
 }
 .maint-meter-fill.soon { background: var(--amber); }
 .maint-meter-fill.late { background: var(--red); }
-.maint-meter-label { font-size: 11px; color: var(--gray-400); white-space: nowrap; }
+.maint-meter-label { font-size: 11px; color: var(--gray-400); white-space: nowrap; flex-shrink: 0; }
 
 /* The summary strip. Four tiles that hold their positions whatever the numbers
    are, so the page does not reshuffle itself as checks are recorded. A tile at
@@ -1749,7 +1788,6 @@ const T = {
   maintenanceDayOverdue: '1 day overdue',
   maintenanceNotYet: 'due {date}',
   maintenanceNeverChecked: 'Never checked',
-  maintenanceLastCheck: 'Last check',
   maintenanceAllFine: 'all fine',
   maintenanceFault: 'a fault',
   maintenanceBy: 'by {name}',
@@ -2297,7 +2335,6 @@ const T = {
   maintenanceDayOverdue: '1 dia em atraso',
   maintenanceNotYet: 'para {date}',
   maintenanceNeverChecked: 'Nunca verificado',
-  maintenanceLastCheck: 'Última verificação',
   maintenanceAllFine: 'tudo bem',
   maintenanceFault: 'uma avaria',
   maintenanceBy: 'por {name}',
@@ -6822,7 +6859,7 @@ function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit,
   }
 
   const lastLine = s.last_done_on
-    ? `${t.maintenanceLastCheck} ${formatDateShort(s.last_done_on)} — ${
+    ? `${formatDateShort(s.last_done_on)} · ${
         s.last_outcome === 'fault' ? t.maintenanceFault : t.maintenanceAllFine}`
     : t.maintenanceNeverChecked;
 
@@ -6845,60 +6882,54 @@ function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit,
       // Staggered by position so the queue arrives in order instead of all at
       // once. Capped: a long overdue queue should not take a second to appear.
       style={{animationDelay: `${Math.min(index, 8) * 30}ms`}}>
-      <span className={`maint-chip maint-chip-${isPhone ? 'phone' : 'printer'}`} aria-hidden="true">
-        {isPhone ? Ic.phone : Ic.printer}
-      </span>
-      <div className="maint-card-main">
-        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-          <strong style={{fontSize:14}}>{s.device_name}</strong>
-          <span className={`badge badge-maint-${isPhone ? 'phone' : 'printer'}`}>{typeLabel}</span>
-          {late && <span className="badge badge-pending">{dueText}</span>}
-          {!late && soon && <span className="badge badge-ok" style={{background:'var(--amber-light)',color:'var(--amber)'}}>{dueText}</span>}
-          {!s.active && <span className="badge badge-slate">{t.maintenanceRetired}</span>}
-        </div>
-        <div style={{fontSize:12.5,color:'var(--gray-500)',marginTop:5}}>
-          {s.department_name} · {t.maintenanceIntervalDays.replace('{days}', s.interval_days)}
-          {/* Shown only when someone owns it. A manager needs to see who, because
-              they are the ones who reassign; a technician can only ever see their
-              own or a shared one, and "all technicians" on every row would just
-              be noise. */}
-          {s.assignee_name && ` · ${s.assignee_name}`}
-        </div>
-        <div style={{fontSize:12,color:'var(--gray-400)',marginTop:3}}>
-          {lastLine}
-          {s.last_done_by_name && ` · ${t.maintenanceBy.replace('{name}', s.last_done_by_name)}`}
-        </div>
-        {/* A retired device has no round left to run, so it gets no meter. */}
-        {s.active && daysUsed !== null && (
-          <div className="maint-meter">
-            <div className="maint-meter-track">
-              <div className={`maint-meter-fill ${late ? 'late' : soon ? 'soon' : ''}`}
-                style={{width: `${Math.round(daysUsed / round * 100)}%`}}/>
-            </div>
-            <span className="maint-meter-label">
-              {t.maintenanceRound.replace('{used}', daysUsed).replace('{total}', round)}
-            </span>
+      <div className="maint-head">
+        <span className={`maint-chip maint-chip-${isPhone ? 'phone' : 'printer'}`} aria-hidden="true">
+          {isPhone ? Ic.phone : Ic.printer}
+        </span>
+        <strong className="maint-name">{s.device_name}</strong>
+      </div>
+      <div className="maint-tags">
+        <span className={`badge badge-maint-${isPhone ? 'phone' : 'printer'}`}>{typeLabel}</span>
+        {late && <span className="badge badge-pending">{dueText}</span>}
+        {!late && soon && <span className="badge badge-ok" style={{background:'var(--amber-light)',color:'var(--amber)'}}>{dueText}</span>}
+        {!s.active && <span className="badge badge-slate">{t.maintenanceRetired}</span>}
+      </div>
+      <div className="maint-sub">
+        {s.department_name} · {t.maintenanceIntervalDays.replace('{days}', s.interval_days)}
+        {/* Shown only when someone owns it. A manager needs to see who, because
+            they are the ones who reassign; a technician can only ever see their
+            own or a shared one, and "all technicians" on every tile would just
+            be noise. */}
+        {s.assignee_name && ` · ${s.assignee_name}`}
+      </div>
+      {/* A retired device has no round left to run, so it gets no meter. */}
+      {s.active && daysUsed !== null && (
+        <div className="maint-meter">
+          <div className="maint-meter-track">
+            <div className={`maint-meter-fill ${late ? 'late' : soon ? 'soon' : ''}`}
+              style={{width: `${Math.round(daysUsed / round * 100)}%`}}/>
           </div>
-        )}
-        {s.last_note && s.active && (
-          <div style={{fontSize:12,color:'var(--gray-500)',marginTop:3,fontStyle:'italic'}}>
-            “{s.last_note}”
-          </div>
-        )}
+          <span className="maint-meter-label">
+            {t.maintenanceRound.replace('{used}', daysUsed).replace('{total}', round)}
+          </span>
+        </div>
+      )}
+      <div className="maint-last">
+        <span className={`maint-last-dot ${
+          !s.last_done_on ? '' : s.last_outcome === 'fault' ? 'fault' : 'ok'}`}/>
+        {lastLine}
       </div>
       <div className="maint-card-actions">
         {s.active && (
-          <button className="btn btn-primary" style={{padding:'6px 14px',fontSize:12.5}}
-            onClick={()=>onComplete(s)}>
+          <button className="btn btn-primary" onClick={()=>onComplete(s)}>
             {Ic.check} {t.maintenanceMarkDone}
           </button>
         )}
-        <button className="btn btn-ghost" style={{padding:'6px 12px',fontSize:12.5}}
-          onClick={()=>onHistory(s)}>
-          {t.maintenanceHistory}
-        </button>
+        <button className="icon-btn" title={t.maintenanceHistory} aria-label={t.maintenanceHistory}
+          onClick={()=>onHistory(s)}>{Ic.clock}</button>
         {canManage && (
-          <button className="icon-btn" title={t.maintenanceEditDevice} onClick={()=>onEdit(s)}>{Ic.edit}</button>
+          <button className="icon-btn" title={t.maintenanceEditDevice} aria-label={t.maintenanceEditDevice}
+            onClick={()=>onEdit(s)}>{Ic.edit}</button>
         )}
       </div>
     </div>
@@ -6936,9 +6967,11 @@ function MaintenanceQueue({ title, list, t, emptyText, canManage, handlers, test
         <h2>{title}</h2>
         <span className="maint-queue-count">{list.length}</span>
       </div>
-      {list.map((s, i) => (
-        <MaintenanceDeviceCard key={s.id} s={s} t={t} index={i} canManage={canManage} {...handlers}/>
-      ))}
+      <div className="maint-grid">
+        {list.map((s, i) => (
+          <MaintenanceDeviceCard key={s.id} s={s} t={t} index={i} canManage={canManage} {...handlers}/>
+        ))}
+      </div>
       {emptyText && <div className="empty-state">{Ic.box}<p>{emptyText}</p></div>}
     </div>
   );
