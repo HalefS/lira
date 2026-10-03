@@ -112,10 +112,20 @@ func (m RecurringAlertModel) Sync(windowHours int) error {
 // List returns tracked recurring alerts (optionally filtered by status —
 // "pending", "solved", or "" for all), each with the full history of
 // matching issues (not limited to the detection window, since a solved
-// alert's occurrences may have aged out of it).
-func (m RecurringAlertModel) List(status string) ([]*RecurringAlert, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// alert's occurrences may have aged out of it), plus the total number of
+// alerts matching the filter.
+func (m RecurringAlertModel) List(status string, limit int) ([]*RecurringAlert, int, error) {
+	ctx, cancel := listContext()
 	defer cancel()
+
+	fromWhere := `
+		FROM recurring_alerts ra
+		WHERE ($1 = '' OR ra.status = $1)`
+
+	total, err := CountMatching(ctx, m.DB, fromWhere, []any{status})
+	if err != nil {
+		return nil, 0, err
+	}
 
 	query := `
 		SELECT ra.id, ra.mode, ra.location, ra.type, ra.status, ra.solution,
@@ -123,13 +133,14 @@ func (m RecurringAlertModel) List(status string) ([]*RecurringAlert, error) {
 		FROM recurring_alerts ra
 		LEFT JOIN users u ON ra.solved_by = u.id
 		WHERE ($1 = '' OR ra.status = $1)
-		ORDER BY ra.status ASC, ra.updated_at DESC`
+		ORDER BY ra.status ASC, ra.updated_at DESC, ra.id DESC
+		LIMIT $2`
 
-	rows, err := m.DB.QueryContext(ctx, query, status)
+	rows, err := m.DB.QueryContext(ctx, query, status, limit)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	var alerts []*RecurringAlert
+	alerts := []*RecurringAlert{}
 	for rows.Next() {
 		var a RecurringAlert
 		var solution, solvedByName sql.NullString
@@ -140,7 +151,7 @@ func (m RecurringAlertModel) List(status string) ([]*RecurringAlert, error) {
 			&solvedBy, &solvedByName, &solvedAt, &a.CreatedAt, &a.UpdatedAt,
 		); err != nil {
 			rows.Close()
-			return nil, err
+			return nil, 0, err
 		}
 		if solution.Valid {
 			a.Solution = &solution.String
@@ -158,7 +169,7 @@ func (m RecurringAlertModel) List(status string) ([]*RecurringAlert, error) {
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
-		return nil, err
+		return nil, 0, err
 	}
 	rows.Close()
 
@@ -172,7 +183,7 @@ func (m RecurringAlertModel) List(status string) ([]*RecurringAlert, error) {
 	for _, a := range alerts {
 		irows, err := m.DB.QueryContext(ctx, issueQuery, a.Mode, a.Location, a.Type)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		// Initialised rather than left nil on purpose: a nil slice marshals to
 		// JSON null, and the Alerts page reads issues.length, so a single
@@ -185,27 +196,30 @@ func (m RecurringAlertModel) List(status string) ([]*RecurringAlert, error) {
 			var gi RecurringGroupIssue
 			if err := irows.Scan(&gi.ID, &gi.CreatedAt, &gi.Problem, &gi.Resolution, &gi.Status, &gi.LoggedByName); err != nil {
 				irows.Close()
-				return nil, err
+				return nil, 0, err
 			}
 			issues = append(issues, &gi)
 		}
 		if err := irows.Err(); err != nil {
 			irows.Close()
-			return nil, err
+			return nil, 0, err
 		}
 		irows.Close()
 		a.Issues = issues
 	}
-	return alerts, nil
+	return alerts, total, nil
 }
 
-// CountPending is used for the sidebar's unread-style badge count.
-func (m RecurringAlertModel) CountPending() (int, error) {
+// CountByStatus totals the alerts in one status. The Alerts page's chips need
+// both figures at once -- whichever chip is not selected still has to say how
+// many are behind it -- so this is asked for twice rather than once per filter.
+func (m RecurringAlertModel) CountByStatus(status string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	var count int
-	err := m.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM recurring_alerts WHERE status = 'pending'`).Scan(&count)
+	err := m.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM recurring_alerts WHERE status = $1`, status).Scan(&count)
 	return count, err
 }
 

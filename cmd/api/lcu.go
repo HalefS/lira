@@ -132,14 +132,16 @@ func (app *application) listLCUUnitsHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	user := app.contextGetUser(r)
+	limit, capped := app.readLimit(r)
 	var (
 		units []*data.LCUUnit
+		total int
 		err   error
 	)
 	if user.Role == "manager" {
-		units, err = app.models.LCU.ListAll()
+		units, total, err = app.models.LCU.ListAll(limit)
 	} else {
-		units, err = app.models.LCU.ListForUser(user.ID)
+		units, total, err = app.models.LCU.ListForUser(user.ID, limit)
 	}
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -161,7 +163,12 @@ func (app *application) listLCUUnitsHandler(w http.ResponseWriter, r *http.Reque
 		out = append(out, withPermission{LCUUnit: u, CanAnswer: canAnswerFor(user, u)})
 	}
 
-	app.writeJSON(w, http.StatusOK, envelope{"units": out}, nil)
+	app.writeJSON(w, http.StatusOK, envelope{
+		"units":        out,
+		"total":        total,
+		"limit":        limit,
+		"limit_capped": capped,
+	}, nil)
 }
 
 // createLCUUnitHandler puts a reader on trial. The window opens today and runs

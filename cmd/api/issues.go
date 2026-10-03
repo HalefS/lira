@@ -51,13 +51,25 @@ func (app *application) listIssuesHandler(w http.ResponseWriter, r *http.Request
 		Date:   app.readString(qs, "date", ""),
 	}
 
-	issues, err := app.models.Issues.GetAll(filters)
+	limit, capped := app.readLimit(r)
+
+	issues, total, err := app.models.Issues.GetAll(filters, limit)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
+	if issues == nil {
+		// Always an array: the tables map over this without a nil check, and a
+		// null here reads as a broken response rather than an empty list.
+		issues = []*data.Issue{}
+	}
 
-	app.writeJSON(w, http.StatusOK, envelope{"issues": issues}, nil)
+	app.writeJSON(w, http.StatusOK, envelope{
+		"issues":       issues,
+		"total":        total,
+		"limit":        limit,
+		"limit_capped": capped,
+	}, nil)
 }
 
 // checkDuplicateIssuesHandler powers the recurring-issue alert shown while

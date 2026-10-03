@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/HalefS/lira/internal/data"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -101,4 +102,26 @@ func (app *application) readInt(qs url.Values, key string, defaultValue int) int
 		return defaultValue
 	}
 	return i
+}
+
+// readLimit reads the "how many rows so far" a listing request is asking for.
+//
+// Listings load on demand by growing this number: 20, then 40, then 60. That is
+// why it is a ceiling on the whole list rather than a page size with an offset --
+// the client keeps one number and re-asks for everything it already has plus a
+// page more, so rows already on screen keep their order and their place instead of
+// being re-fetched and possibly re-ordered underneath the reader.
+//
+// capped says the request asked for more than the max, so the handler can tell
+// the reader that this is as much as one request will return and the filters are
+// the way further. Silently returning 1000 of 4000 reads as "that is all of them".
+func (app *application) readLimit(r *http.Request) (limit int, capped bool) {
+	limit = app.readInt(r.URL.Query(), "limit", data.DefaultListLimit)
+	if limit < 1 {
+		return data.DefaultListLimit, false
+	}
+	if limit > data.MaxListLimit {
+		return data.MaxListLimit, true
+	}
+	return limit, false
 }

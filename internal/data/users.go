@@ -148,28 +148,88 @@ func (m UserModel) GetByEmail(email string) (*User, error) {
 	return u, nil
 }
 
-func (m UserModel) GetAll() ([]*User, error) {
-	query := `SELECT id, created_at, name, email, role, avatar_idx, avatar_data, language, active,
-		must_reset_password, version
-		FROM users ORDER BY created_at ASC`
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+// UserIssueStats is one member's all-time issue totals, for the Team page's
+// per-member figures.
+//
+// This exists because those figures used to be counted in the browser out of
+// every issue the app had loaded. Once the issue lists page their results, the
+// browser no longer holds every issue and counting them there would silently
+// under-report -- a member with 40 issues would show 3, and nothing would look
+// broken. The count belongs next to the rows.
+type UserIssueStats struct {
+	UserID   int64 `json:"user_id"`
+	Total    int   `json:"total"`
+	Resolved int   `json:"resolved"`
+	Minutes  int   `json:"minutes"`
+}
+
+// GetIssueStats returns all-time per-member totals, one row per user who has
+// logged something. Members with no issues are absent rather than zero-filled,
+// so the caller can tell "nobody" from "nobody has logged anything yet" and
+// decide its own fallback.
+func (m UserModel) GetIssueStats() ([]*UserIssueStats, error) {
+	query := `
+		SELECT logged_by,
+		       COUNT(*) AS total,
+		       COUNT(*) FILTER (WHERE status = 'Ok') AS resolved,
+		       COALESCE(SUM(time_minutes), 0) AS minutes
+		FROM issues
+		GROUP BY logged_by
+		ORDER BY logged_by`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	rows, err := m.DB.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var users []*User
+
+	stats := []*UserIssueStats{}
+	for rows.Next() {
+		var s UserIssueStats
+		if err := rows.Scan(&s.UserID, &s.Total, &s.Resolved, &s.Minutes); err != nil {
+			return nil, err
+		}
+		stats = append(stats, &s)
+	}
+	return stats, rows.Err()
+}
+
+// GetAll returns up to limit users, plus the total number of accounts.
+//
+// Ordered oldest-first so the list is stable between requests: with only
+// created_at as a tiebreaker two accounts created in the same transaction could
+// swap places, and "load more" would then show one of them twice.
+func (m UserModel) GetAll(limit int) ([]*User, int, error) {
+	ctx, cancel := listContext()
+	defer cancel()
+
+	total, err := CountMatching(ctx, m.DB, `FROM users`, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	query := `SELECT id, created_at, name, email, role, avatar_idx, avatar_data, language, active,
+		must_reset_password, version
+		FROM users ORDER BY created_at ASC, id ASC
+		LIMIT $1`
+	rows, err := m.DB.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	users := []*User{}
 	for rows.Next() {
 		var u User
 		if err := rows.Scan(&u.ID, &u.CreatedAt, &u.Name, &u.Email,
 			&u.Role, &u.AvatarIdx, &u.AvatarData, &u.Language, &u.Active,
 			&u.MustResetPassword, &u.Version); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		users = append(users, &u)
 	}
-	return users, rows.Err()
+	return users, total, rows.Err()
 }
 
 func (m UserModel) Update(user *User) error {

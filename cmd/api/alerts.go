@@ -38,8 +38,9 @@ func (app *application) listAlertsHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	status := app.readString(r.URL.Query(), "status", "")
+	limit, capped := app.readLimit(r)
 
-	alerts, err := app.models.RecurringAlerts.List(status)
+	alerts, alertsTotal, err := app.models.RecurringAlerts.List(status, limit)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -48,7 +49,15 @@ func (app *application) listAlertsHandler(w http.ResponseWriter, r *http.Request
 		alerts = []*data.RecurringAlert{}
 	}
 
-	pendingCount, err := app.models.RecurringAlerts.CountPending()
+	// Over every status, not the filtered one: these four counts are what the chips
+	// and the sidebar badge are drawn from, and a chip that emptied itself when you
+	// opened the other one would be telling the reader there is nothing to do.
+	pendingCount, err := app.models.RecurringAlerts.CountByStatus("pending")
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	solvedCount, err := app.models.RecurringAlerts.CountByStatus("solved")
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -56,12 +65,17 @@ func (app *application) listAlertsHandler(w http.ResponseWriter, r *http.Request
 
 	// Both lists take the same ?status filter, so the two sections stay in step
 	// when the page switches between pending and solved.
-	tvSwapAlerts, err := app.models.TVSwapAlerts.List(status)
+	tvSwapAlerts, tvSwapTotal, err := app.models.TVSwapAlerts.List(status, limit)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
-	tvSwapPendingCount, err := app.models.TVSwapAlerts.CountPending()
+	tvSwapPendingCount, err := app.models.TVSwapAlerts.CountByStatus("pending")
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	tvSwapSolvedCount, err := app.models.TVSwapAlerts.CountByStatus("solved")
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -70,9 +84,15 @@ func (app *application) listAlertsHandler(w http.ResponseWriter, r *http.Request
 	app.writeJSON(w, http.StatusOK, envelope{
 		"window_hours":          settings.DuplicateWindowHours,
 		"alerts":                alerts,
+		"total":                 alertsTotal,
 		"pending_count":         pendingCount,
+		"solved_count":          solvedCount,
 		"tv_swap_alerts":        tvSwapAlerts,
+		"tv_swap_total":         tvSwapTotal,
 		"tv_swap_pending_count": tvSwapPendingCount,
+		"tv_swap_solved_count":  tvSwapSolvedCount,
+		"limit":                 limit,
+		"limit_capped":          capped,
 	}, nil)
 }
 

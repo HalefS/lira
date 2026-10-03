@@ -142,29 +142,39 @@ func scanConsumableItem(scan func(dest ...any) error) (*ConsumableItem, error) {
 	return &ci, nil
 }
 
-func (m ConsumableItemModel) GetAll() ([]*ConsumableItem, error) {
-	query := `SELECT ` + consumableItemColumns + `
-		FROM consumable_items
-		ORDER BY name ASC`
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+// GetAll returns up to limit catalog items, plus the total in the catalog.
+//
+// name, id as a tiebreaker: two items sharing a name would otherwise be free to
+// swap places between requests, and "load more" would show one of them twice.
+func (m ConsumableItemModel) GetAll(limit int) ([]*ConsumableItem, int, error) {
+	ctx, cancel := listContext()
 	defer cancel()
 
-	rows, err := m.DB.QueryContext(ctx, query)
+	total, err := CountMatching(ctx, m.DB, `FROM consumable_items`, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+
+	query := `SELECT ` + consumableItemColumns + `
+		FROM consumable_items
+		ORDER BY name ASC, id ASC
+		LIMIT $1`
+
+	rows, err := m.DB.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, 0, err
 	}
 	defer rows.Close()
 
-	var items []*ConsumableItem
+	items := []*ConsumableItem{}
 	for rows.Next() {
 		ci, err := scanConsumableItem(rows.Scan)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		items = append(items, ci)
 	}
-	return items, rows.Err()
+	return items, total, rows.Err()
 }
 
 // CountByIDs returns how many of the given ids exist in the catalog, so a

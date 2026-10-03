@@ -60,7 +60,7 @@ func (app *application) createAuthTokenHandler(w http.ResponseWriter, r *http.Re
 	// treating this as a failure.
 	if user.MustResetPassword {
 		app.writeJSON(w, http.StatusForbidden, envelope{
-			"error":              "a new password is required before you can sign in",
+			"error":               "a new password is required before you can sign in",
 			"must_reset_password": true,
 		}, nil)
 		return

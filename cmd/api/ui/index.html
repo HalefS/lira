@@ -372,6 +372,16 @@ tbody tr.row-clickable { cursor: pointer; }
    English the same row wrapped the label onto two lines and made the button
    50px tall. Stacked, the field always gets the full card width in any
    language. Both controls are pinned to one height so their edges line up. */
+/* The footer under a paginated table. Centred rather than left-aligned, so it
+   reads as belonging to the table above it rather than as another column of it. */
+.loadmore {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  flex-wrap: wrap; padding: 12px 16px;
+  border-top: 1px solid var(--gray-200);
+}
+.loadmore-count { font-size: 12.5px; color: var(--gray-400); }
+.loadmore-note  { font-size: 11.5px; color: var(--amber); }
+
 .admin-form { display: grid; gap: 10px; }
 .admin-form .form-control { height: 36px; }
 .admin-form .btn { height: 36px; white-space: nowrap; justify-self: end; }
@@ -1274,6 +1284,150 @@ function PageShell({ page, children }) {
   return <div ref={ref}>{children}</div>;
 }
 
+/* ════════════════ PAGINATED LISTINGS ════════════════ */
+
+/* How many rows a listing shows before the reader asks for more. Matches the
+   server's own default, so a page that forgets to say anything still opens at
+   20 rather than at whatever the endpoint would otherwise return. */
+const PAGE_SIZE = 20;
+
+/* Fetches a listing that grows a page at a time.
+
+   buildPath(limit) returns the request path, so each caller keeps control of its
+   own query parameters and the hook only owns how many rows have been asked for.
+
+   filterKey is what the caller considers "these are different rows": change it
+   and the limit drops back to a page. That is why it exists rather than asking
+   the caller to remember to reset -- a filter that narrows to three rows should
+   not open with two hundred already loaded behind them, and a reader who has
+   loaded six pages and then searches should not have to click through five empty
+   ones to find out their search matched nothing.
+
+   The limit is a growing ceiling rather than a page number with an offset, so
+   "load more" asks for everything already on screen plus one page more. Rows
+   keep their order and their place, and there is no page number to fall out of
+   step with the filters.
+
+   rows is null until the first answer lands, which is how a page tells "still
+   loading" from "loaded, and there is genuinely nothing".
+
+   options:
+     rowsKey   which key in the response holds the rows. Every endpoint names its
+               own -- issues, units, swaps -- so this cannot be guessed at.
+     map       applied to each row on the way in. The issue tables read a mapped
+               shape and the rest read the API's own, so it is asked for rather
+               than assumed.
+     filterKey see above; changes reset the limit to a page.
+     onError   for endpoints whose failure means something to the page, such as
+               the LCU gate refusing the request. */
+function usePagedList(buildPath, token, options = {}) {
+  const {rowsKey = 'rows', map = null, filterKey = '', onError = null} = options;
+  const [limit, setLimit] = useState(PAGE_SIZE);
+  const [state, setState] = useState({rows: null, total: 0, capped: false, loading: true, res: null});
+
+  // Reset during render rather than in an effect: an effect would build the path
+  // once with the new filters and the old limit, fetch it, and then fetch again
+  // after resetting -- two requests for one filter change, and whichever answered
+  // last would win regardless of which was asked for more recently.
+  const [prevKey, setPrevKey] = useState(filterKey);
+  if (prevKey !== filterKey) {
+    setPrevKey(filterKey);
+    setLimit(PAGE_SIZE);
+  }
+
+  // buildPath is deliberately not a dependency: it is a fresh closure on every
+  // render, and depending on it would refetch in a loop. filterKey stands in for
+  // whatever the closure actually reads.
+  const path = useMemo(() => buildPath(limit), [limit, filterKey]);
+
+  // map and onError are held in refs so a caller passing an inline arrow does not
+  // become an effect dependency and restart the fetch on every render.
+  const mapRef = useRef(map);
+  mapRef.current = map;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
+  useEffect(() => {
+    let cancelled = false;
+    setState(s => ({...s, loading: true}));
+    apiFetch(path, {token})
+      .then(res => {
+        if (cancelled) return;
+        // Coerced to an array whatever came back: every caller maps over it, and
+        // a missing or null key would otherwise read as "still loading" forever.
+        const raw = res[rowsKey];
+        setState({
+          rows:   Array.isArray(raw) ? (mapRef.current ? raw.map(mapRef.current) : raw) : [],
+          total:  Number(res.total) || 0,
+          capped: !!res.limit_capped,
+          loading: false,
+          res,
+        });
+      })
+      .catch(ex => {
+        if (cancelled) return;
+        setState({rows: null, total: 0, capped: false, loading: false, res: null});
+        if (onErrorRef.current) onErrorRef.current(ex);
+      });
+    return () => { cancelled = true; };
+    // filterKey is a dependency even though it never appears in the path.
+    //
+    // A caller uses it to say "these are different rows" for reasons the query
+    // string cannot express: an issue was just written and the page behind this
+    // list has changed, or the daily answer was recorded. Bumping it recomputes
+    // the path to the *identical* string, so on its own it would change nothing --
+    // React would compare equal strings and correctly decline to run the effect,
+    // and the list would sit there showing a snapshot from before the write.
+  }, [path, token, rowsKey, filterKey]);
+
+  return {
+    // Spreads `res` through as well: an endpoint may answer with more than the
+    // rows, and the LCU list carries the server's idea of today alongside them.
+    ...state,
+    // How many rows the server actually sent, which is not always how many are on
+    // screen: a page that still narrows its own rows client-side shows fewer, and
+    // the count here is the honest one for "you have loaded 20 of 340".
+    fetched: state.rows ? state.rows.length : 0,
+    limit,
+    loadMore: () => setLimit(l => l + PAGE_SIZE),
+  };
+}
+
+/* The footer under a paginated table: what is loaded out of what exists, and the
+   button that asks for the next page.
+
+   Renders nothing at all once everything is loaded -- an empty footer with a
+   button that does nothing is worse than no footer. rows may be null while the
+   first request is in flight, in which case this shows nothing rather than
+   flashing "0 of 0".
+
+   `shown` and `total` override the list's own figures. The daily report needs
+   that: its two tables come from one response and share one limit, so neither
+   table's count is the count of rows the server sent, and the honest pair is
+   worked out from the per-mode totals the summary already carries. */
+function LoadMore({ list, t, shown, total }) {
+  const have = list && (list.rows || list.res);
+  if (!have || list.loading) return null;
+  const n = shown != null ? shown : list.fetched;
+  const m = total  != null ? total  : list.total;
+  if (!m || n >= m) return null;
+  return (
+    <div className="loadmore">
+      <span className="loadmore-count">
+        {t.showingOf.replace('{shown}', n).replace('{total}', m)}
+      </span>
+      <button className="btn btn-ghost" style={{padding:'6px 14px',fontSize:12.5}}
+        onClick={list.loadMore} disabled={list.loading}>
+        {list.loading ? '…' : t.loadMore}
+      </button>
+      {/* Only when the server refused to go past its own maximum, so a reader who
+          reaches it is told why rather than left thinking they had seen
+          everything. */}
+      {list.capped && <span className="loadmore-note">{t.loadMoreCapped}</span>}
+    </div>
+  );
+}
+
 /* ── helpers ── */
 function today(lang) {
   return new Date().toLocaleDateString(lang==='pt' ? 'pt-PT' : 'en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
@@ -1384,6 +1538,10 @@ const T = {
     searchApt: 'Search apt…',
     searchDept: 'Search dept…',
     noMatch: 'No issues match your filters.',
+  // Pagination footer. {shown} and {total} are filled in per render.
+  showingOf: 'Showing {shown} of {total}',
+  loadMore: 'Load more',
+  loadMoreCapped: 'That is as many as one request returns — narrow the filters to see the rest.',
     apt: 'Apt.',
     dept: 'Dept.',
     type: 'Type',
@@ -1861,6 +2019,10 @@ const T = {
     searchApt: 'Pesquisar apt…',
     searchDept: 'Pesquisar dept…',
     noMatch: 'Nenhuma avaria corresponde aos filtros.',
+  // {shown} e {total} são preenchidos em cada desenho.
+  showingOf: 'A mostrar {shown} de {total}',
+  loadMore: 'Carregar mais',
+  loadMoreCapped: 'É o máximo que um pedido devolve — estreite os filtros para ver o resto.',
     apt: 'Apt.',
     dept: 'Dept.',
     type: 'Tipo',
@@ -3808,15 +3970,18 @@ function IssueModal({ issueMode, editIssue, currentUser, issueTypes, departments
 }
 
 /* ════════════════ DASHBOARD ════════════════ */
-function Dashboard({ apt, dept, users, stats }) {
+function Dashboard({ users, stats }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
 
-  // Fall back to local computation while stats load
-  const all = [...apt,...dept];
-  const totalIssues  = stats ? stats.total_issues  : all.length;
-  const resolved     = stats ? stats.resolved       : all.filter(i=>i.status==='Ok').length;
-  const byType       = stats ? stats.by_type        : (() => { const m={}; all.forEach(i=>{m[i.type]=(m[i.type]||0)+1;}); return m; })();
+  /* Everything here comes from /stats. It used to fall back to counting the issue
+     list App had in memory while that request was in flight, which meant App had
+     to hold every issue ever logged for the sake of a loading state that lasted
+     a moment. /stats is fetched at start-up alongside everything else, so the
+     numbers are simply absent until it lands. */
+  const totalIssues  = stats ? stats.total_issues  : 0;
+  const resolved     = stats ? stats.resolved       : 0;
+  const byType       = stats ? stats.by_type        : {};
   const byTech       = stats ? stats.by_technician  : [];
   const maxWork      = Math.max(...(byTech.map(t=>t.count)), 1);
   const maxType      = Math.max(...Object.values(byType), 1);
@@ -3824,8 +3989,7 @@ function Dashboard({ apt, dept, users, stats }) {
   // Split out from avgTime so the counter has a number to tween. null is the
   // one case that is not a figure at all — nothing to average yet — and it has
   // to stay an em dash rather than count up from zero to nothing.
-  const avgNum = stats ? Number(stats.avg_minutes)
-    : (all.length ? all.reduce((s,i)=>s+Number(i.time),0)/all.length : null);
+  const avgNum = stats ? Number(stats.avg_minutes) : null;
   const avgText = avgNum === null ? '—' : Number(avgNum).toFixed(1);
   // Everyone who can currently sign in, whatever their role: managers log
   // issues too, and a deactivated account is not active no matter its role.
@@ -3839,7 +4003,7 @@ function Dashboard({ apt, dept, users, stats }) {
   // animation continuously instead of once.
   const barsRef = useAnimate((g, root, opts) => {
     MOTION.grow(g, root.querySelectorAll('.bar-fill'), 'x', 0.04);
-  }, [apt, dept, stats, users]);
+  }, [stats, users]);
 
   return (
     <div ref={barsRef}>
@@ -3898,7 +4062,7 @@ function Dashboard({ apt, dept, users, stats }) {
 }
 
 /* ════════════════ ISSUES TABLE ════════════════ */
-function IssuesTable({ issues, tableMode, currentUser, newIssueId, onDelete, onEdit }) {
+function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUser, newIssueId, onDelete, onEdit }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   // `null` means "no type filter", rather than the translated word for "All".
@@ -3908,16 +4072,36 @@ function IssuesTable({ issues, tableMode, currentUser, newIssueId, onDelete, onE
   // from the catch-all chip.
   const [filter, setFilter] = useState(null);
   const [search, setSearch] = useState('');
-  // The catch-all chip is labelled with t.all but filters on null; the rest
-  // filter on the type name itself. Keyed separately so an issue type that
-  // happens to be called "All" still gets its own working chip.
-  const chips   = [{label:t.all, value:null}, ...Array.from(new Set(issues.map(i=>i.type))).map(ty=>({label:ty, value:ty}))];
-  const filtered = useMemo(()=>issues.filter(i=>{
-    const ok1 = filter===null||i.type===filter;
-    const q   = search.toLowerCase();
-    const ok2 = !q||(i.apt||i.dept||'').toLowerCase().includes(q)||i.problem.toLowerCase().includes(q)||i.loggedByName.toLowerCase().includes(q)||i.type.toLowerCase().includes(q);
-    return ok1&&ok2;
-  }),[issues,filter,search]);
+
+  /* The search box talks to the server rather than filtering the rows in hand.
+     It used to narrow an array that held every issue ever logged, which is why
+     it could be a plain input handler. Now that only a page of rows is in hand,
+     filtering locally would mean searching twenty issues and calling it the whole
+     list -- so the term goes to the endpoint, which already knew how to match it.
+     Debounced, because each keystroke otherwise becomes a request. */
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQuery(search.trim()), 250);
+    return () => clearTimeout(id);
+  }, [search]);
+
+  // `date` is how the History page narrows to a single day. It goes to the server
+  // rather than being applied to whatever arrived, for the same reason the search
+  // does: a day filter applied to a loaded page would report a day with nothing
+  // in it while the server was holding the rows.
+  const list = usePagedList(limit => {
+    const qs = new URLSearchParams({mode: tableMode, limit: String(limit)});
+    if (filter) qs.set('type', filter);
+    if (query) qs.set('search', query);
+    if (date) qs.set('date', date);
+    return `/issues?${qs}`;
+  }, token, {rowsKey:'issues', map:mapIssue, filterKey: `${tableMode}|${filter}|${query}|${date}|${epoch}`});
+
+  const issues = list.rows || [];
+  // The chips come from the type catalog rather than from the rows on screen: with
+  // only the loaded page in hand, a type whose issues are all further down would
+  // have no chip at all, and picking it was impossible.
+  const chips = [{label:t.all, value:null}, ...issueTypes.map(ty=>({label:ty.name, value:ty.name}))];
 
   const canAct = issue => currentUser.role==='manager' || issue.loggedBy===currentUser.id;
 
@@ -3944,7 +4128,9 @@ function IssuesTable({ issues, tableMode, currentUser, newIssueId, onDelete, onE
           </div>
         </div>
       </div>
-      {filtered.length===0 ? (
+      {!list.rows ? (
+        <div className="empty-state">{Ic.list}<p>{t.analyticsLoading}</p></div>
+      ) : issues.length===0 ? (
         <div className="empty-state">{Ic.list}<p>{t.noMatch}</p></div>
       ) : (
         <table>
@@ -3955,7 +4141,7 @@ function IssuesTable({ issues, tableMode, currentUser, newIssueId, onDelete, onE
             </tr>
           </thead>
           <tbody>
-            {filtered.map(issue=>(
+            {issues.map(issue=>(
               <tr key={issue.id}
                   className={`${issue.id===newIssueId ? 'row-enter' : ''}${canAct(issue) ? ' row-clickable' : ''}`}
                   onClick={canAct(issue) ? e=>openFromRow(e,issue) : undefined}
@@ -3995,20 +4181,17 @@ function IssuesTable({ issues, tableMode, currentUser, newIssueId, onDelete, onE
           </tbody>
         </table>
       )}
+      <LoadMore list={list} t={t}/>
     </div>
   );
 }
 
 /* ════════════════ HISTORY PAGE ════════════════ */
-function HistoryPage({ apt, dept, currentUser, onDelete, onEdit }) {
+function HistoryPage({ token, issueTypes, epoch=0, currentUser, onDelete, onEdit }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = localISODate(new Date());
   const [date, setDate] = useState('');
-
-  const aptFiltered  = useMemo(()=> date ? apt.filter(i=>i.createdAt===date)  : apt,  [apt,date]);
-  const deptFiltered = useMemo(()=> date ? dept.filter(i=>i.createdAt===date) : dept, [dept,date]);
-  const hasAny = aptFiltered.length>0 || deptFiltered.length>0;
 
   return (
     <div>
@@ -4024,20 +4207,19 @@ function HistoryPage({ apt, dept, currentUser, onDelete, onEdit }) {
         {!date && <span style={{fontSize:12,color:'var(--gray-400)',marginLeft:'auto'}}>{t.historyShowingAll}</span>}
       </div>
 
-      {date && !hasAny ? (
-        <div className="empty-state">{Ic.clock}<p>{t.historyNoIssues}</p></div>
-      ) : (
-        <>
-          <IssuesTable issues={aptFiltered}  tableMode="apt"  currentUser={currentUser} onDelete={onDelete} onEdit={onEdit}/>
-          <IssuesTable issues={deptFiltered} tableMode="dept" currentUser={currentUser} onDelete={onDelete} onEdit={onEdit}/>
-        </>
-      )}
+      {/* Both tables are given the chosen date and ask the server for that day's
+          rows. They used to receive the whole issue list and narrow it here,
+          which is why this page needed every issue in memory to show one day of
+          them. Each table now paginates on its own, so the two can be showing
+          different amounts. */}
+      <IssuesTable token={token} issueTypes={issueTypes} tableMode="apt"  date={date} epoch={epoch} currentUser={currentUser} onDelete={onDelete} onEdit={onEdit}/>
+      <IssuesTable token={token} issueTypes={issueTypes} tableMode="dept" date={date} epoch={epoch} currentUser={currentUser} onDelete={onDelete} onEdit={onEdit}/>
     </div>
   );
 }
 
 /* ════════════════ ALERTS PAGE ════════════════ */
-function AlertsPage({ alerts, tvSwapAlerts, currentUser, token, onAlertsUpdate, onTvSwapAlertsUpdate, setToast }) {
+function AlertsPage({ currentUser, token, onCountsUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const isManager = currentUser.role === 'manager';
@@ -4047,28 +4229,61 @@ function AlertsPage({ alerts, tvSwapAlerts, currentUser, token, onAlertsUpdate, 
   const [solutionText, setSolutionText] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const list = alerts || [];
-  const tvList = tvSwapAlerts || [];
-  const tvPending = tvList.filter(a => a.status === 'pending');
-  const tvSolved = tvList.filter(a => a.status === 'solved');
-  const filtered = list.filter(a => a.status === filter);
-  const tvFiltered = filter === 'pending' ? tvPending : tvSolved;
-  // The chips answer "how much work is outstanding", so they count both kinds.
-  // Each section then breaks its own count down, so "3 pending" is never
-  // ambiguous about what the 3 are.
-  const pendingCount = list.filter(a => a.status === 'pending').length + tvPending.length;
-  const solvedCount = list.filter(a => a.status === 'solved').length + tvSolved.length;
+  /* This page fetches its own alerts. It used to receive them from App, which
+     also needed them only for the sidebar badge -- so App held every alert card
+     and its nested list of occurrences in memory to draw one number.
+
+     The status filter goes to the server, so switching between Pending and Solved
+     asks for that set rather than narrowing a set it already has. The endpoint
+     answers with both kinds in one request and its own pending counts, which is
+     what the chips are drawn from -- those count every outstanding alert, not
+     just the loaded page, so the badge never empties itself when you look at the
+     solved ones. */
+  // Re-read after a solve or a delete so the card that was just dealt with leaves
+  // the list it was on. Part of the filter key, which also drops the limit back
+  // to one page: the card that was solved is no longer in this set at all, so
+  // there is nothing to be gained by keeping the pages that were already loaded.
+  const [epoch, setEpoch] = useState(0);
+  const refresh = () => setEpoch(n => n + 1);
+
+  const paged = usePagedList(limit => `/alerts?limit=${limit}&status=${filter}`, token,
+    {rowsKey:'alerts', filterKey: `${filter}|${epoch}`});
+
+  // The sidebar badge and the Analytics sentence are drawn from a count the app
+  // holds, and this page is now the only thing that knows when an alert has been
+  // dealt with. Without handing the fresh figure back, signing off the last
+  // recurring alert here would leave a "1" in the sidebar until the next reload.
+  useEffect(() => {
+    if (data && onCountsUpdate) onCountsUpdate(data.pending_count || 0);
+  }, [data, onCountsUpdate]);
+
+  // `rows` is the alert array itself; the counts and the second list live alongside
+  // it in the response, so they are read from there rather than off the array.
+  const data = paged.res;
+  const list = paged.rows;
+  const tvList = data ? (data.tv_swap_alerts || []) : [];
+  // The server has already filtered both lists by status, so this is what is
+  // on screen -- no narrowing needed here.
+  const tvFiltered = tvList;
+  // The chips count every alert of each kind, across all pages rather than the
+  // loaded one, and across both kinds of alert.
+  const pendingCount = data ? (data.pending_count || 0) + (data.tv_swap_pending_count || 0) : 0;
+  const solvedCount  = data ? (data.solved_count  || 0) + (data.tv_swap_solved_count  || 0) : 0;
+  // Section headings: how many this filter holds, which is `total` because the
+  // request was already filtered.
+  const tvShownTotal  = data ? (data.tv_swap_total || 0) : 0;
+  const shownTotal    = data ? (data.total || 0) : 0;
 
   async function submitSolve(id) {
     const trimmed = solutionText.trim();
     if (!trimmed) return;
     setSaving(true);
     try {
-      const res = await apiFetch(`/alerts/${id}/solve`, {method:'PATCH', body:{solution:trimmed}, token});
-      onAlertsUpdate(prev => prev.map(a => a.id===id ? {...a, ...res.alert} : a));
+      await apiFetch(`/alerts/${id}/solve`, {method:'PATCH', body:{solution:trimmed}, token});
       setSolvingId(null);
       setSolutionText('');
       setToast(t.alertSolved);
+      refresh();
     } catch(ex) { setToast('Error: ' + ex.message); }
     finally { setSaving(false); }
   }
@@ -4076,8 +4291,8 @@ function AlertsPage({ alerts, tvSwapAlerts, currentUser, token, onAlertsUpdate, 
   async function removeAlert(id) {
     try {
       await apiFetch(`/alerts/${id}`, {method:'DELETE', token});
-      onAlertsUpdate(prev => prev.filter(a => a.id !== id));
       setToast(t.alertDeleted);
+      refresh();
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
@@ -4086,13 +4301,11 @@ function AlertsPage({ alerts, tvSwapAlerts, currentUser, token, onAlertsUpdate, 
     if (!trimmed) return;
     setSaving(true);
     try {
-      const res = await apiFetch(`/tv-swap-alerts/${id}/solve`, {method:'PATCH', body:{solution:trimmed}, token});
-      // The server sends the whole alert back, so the merge replaces every field
-      // rather than leaving the joined ones to be guessed at.
-      onTvSwapAlertsUpdate(prev => prev.map(a => a.id===id ? {...a, ...res.alert} : a));
+      await apiFetch(`/tv-swap-alerts/${id}/solve`, {method:'PATCH', body:{solution:trimmed}, token});
       setSolvingTvId(null);
       setSolutionText('');
       setToast(t.tvSwapAlertSolved);
+      refresh();
     } catch(ex) { setToast('Error: ' + ex.message); }
     finally { setSaving(false); }
   }
@@ -4121,11 +4334,13 @@ function AlertsPage({ alerts, tvSwapAlerts, currentUser, token, onAlertsUpdate, 
       <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:12}}>
         <h2 style={{fontSize:15,margin:0}}>{t.tvSwapAlertsTitle}</h2>
         <span style={{fontSize:12.5,color:'var(--gray-400)'}}>
-          {(filter==='pending' ? tvPending.length : tvSolved.length)} {t.tvSwapAlertsOf}
+          {tvShownTotal} {t.tvSwapAlertsOf}
         </span>
       </div>
 
-      {tvFiltered.length === 0 ? (
+      {!data ? (
+        <div className="empty-state">{Ic.tv}<p>{t.analyticsLoading}</p></div>
+      ) : tvFiltered.length === 0 ? (
         <div className="empty-state">{Ic.tv}
           <p>{filter==='pending' ? t.tvSwapAlertsEmpty : t.tvSwapAlertsSolvedEmpty}</p>
         </div>
@@ -4202,13 +4417,15 @@ function AlertsPage({ alerts, tvSwapAlerts, currentUser, token, onAlertsUpdate, 
       <div style={{display:'flex',alignItems:'baseline',gap:8,margin:'24px 0 12px'}}>
         <h2 style={{fontSize:15,margin:0}}>{t.alertsRecurringTitle}</h2>
         <span style={{fontSize:12.5,color:'var(--gray-400)'}}>
-          {(filter==='pending' ? list.filter(a=>a.status==='pending').length : list.filter(a=>a.status==='solved').length)} {t.tvSwapAlertsOf}
+          {shownTotal} {t.tvSwapAlertsOf}
         </span>
       </div>
 
-      {filtered.length === 0 ? (
+      {!data ? (
+        <div className="empty-state">{Ic.bell}<p>{t.analyticsLoading}</p></div>
+      ) : list.length === 0 ? (
         <div className="empty-state">{Ic.bell}<p>{filter==='pending' ? t.alertsEmpty : t.alertsSolvedEmpty}</p></div>
-      ) : filtered.map(alert => {
+      ) : list.map(alert => {
         // The API always sends an array now, but a null here would take the
         // whole page down, and this is the one field the Alerts page cannot
         // do without.
@@ -4317,6 +4534,11 @@ function AlertsPage({ alerts, tvSwapAlerts, currentUser, token, onAlertsUpdate, 
           )}
         </div>
       );})}
+
+      {/* One footer for the page rather than one per section: both sections come
+          from a single request and page together, so a reader who has loaded six
+          pages has six pages of each. */}
+      <LoadMore list={paged} t={t}/>
     </div>
   );
 }
@@ -4415,28 +4637,25 @@ function SupportPage({ token }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [range, setRange] = useState('all');
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
+  /* The table pages; the statistics above it do not. Both come from the same
+     request, and the server computes the figures over every matching row whatever
+     the limit is -- so the headline numbers keep describing the whole period
+     while only a pageful of handovers is on screen. */
+  const paged = usePagedList(limit => {
     const days = SUPPORT_RANGES.find(r=>r.id===range).days;
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({limit: String(limit)});
     if (days > 0) {
       // Inclusive of today, so "last 30 days" is 30 days wide rather than 29.
       const from = new Date(); from.setDate(from.getDate() - (days - 1));
-      params.set('from', from.toISOString().slice(0,10));
-      params.set('to', new Date().toISOString().slice(0,10));
+      params.set('from', localISODate(from));
+      params.set('to', localISODate(new Date()));
     }
-    const qs = params.toString();
-    apiFetch(`/support-requests${qs ? '?'+qs : ''}`, {token})
-      .then(res => { if (!cancelled) setData(res); })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [range, token]);
+    return `/support-requests?${params}`;
+  }, token, {rowsKey:'requests', filterKey: range});
 
+  const data = paged.res;
+  const loading = paged.loading && !data;
   const stats  = data && data.stats;
   const rows   = (data && data.requests) || [];
   // The same window is either a same-day turnaround or a multi-day one, so show
@@ -4527,6 +4746,7 @@ function SupportPage({ token }) {
             </tbody>
           </table>
         )}
+        <LoadMore list={paged} t={t}/>
       </div>
     </>
   );
@@ -4540,27 +4760,27 @@ function TVSwapsPage({ token }) {
   const t = T[lang];
   const [range, setRange] = useState('all');
   const [query, setQuery] = useState('');
-  const [swaps, setSwaps] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
+  /* The swap list pages from the server. The search box below still narrows what
+     has been loaded rather than going to the server, which is a deliberate
+     difference from the issues table: the terms here are room numbers and short
+     notes typed by a technician looking at one screen, and the endpoint has no
+     search of its own to send them to. So "load more" is what widens it, and the
+     footer says how much is loaded out of how much exists. */
+  const paged = usePagedList(limit => {
     const days = SUPPORT_RANGES.find(r=>r.id===range).days;
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({limit: String(limit)});
     if (days > 0) {
       // Inclusive of today, so "last 30 days" is 30 days wide rather than 29.
       const from = new Date(); from.setDate(from.getDate() - (days - 1));
-      params.set('from', from.toISOString().slice(0,10));
-      params.set('to', new Date().toISOString().slice(0,10));
+      params.set('from', localISODate(from));
+      params.set('to', localISODate(new Date()));
     }
-    const qs = params.toString();
-    apiFetch(`/tv-swaps${qs ? '?'+qs : ''}`, {token})
-      .then(res => { if (!cancelled) setSwaps(res.swaps || []); })
-      .catch(() => { if (!cancelled) setSwaps([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [range, token]);
+    return `/tv-swaps?${params}`;
+  }, token, {rowsKey:'swaps', filterKey: range});
+
+  const swaps = paged.rows || [];
+  const loading = paged.loading && !paged.rows;
 
   const q = query.trim().toLowerCase();
   const shown = q
@@ -4705,6 +4925,7 @@ function TVSwapsPage({ token }) {
           </table>
         </div>
       )}
+      <LoadMore list={paged} t={t}/>
     </>
   );
 }
@@ -5043,9 +5264,19 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
 
   // ── Log view ──
   const [date, setDate] = useState('');
-  const [items, setItems] = useState([]);
-  const [summary, setSummary] = useState([]);
-  const [loading, setLoading] = useState(true);
+  /* The usage log pages -- it grows by one row every time anything is used on
+     any issue, forever. The per-item running totals above it do not: the server
+     computes those over every recorded use regardless of the limit, so the
+     figures do not quietly shrink as more rows are loaded under them. */
+  const usage = usePagedList(limit => {
+    const qs = new URLSearchParams({limit: String(limit)});
+    if (date) qs.set('date', date);
+    return `/consumables?${qs}`;
+  }, token, {rowsKey:'consumables', filterKey: `${date}|${view === 'log' ? 'log' : 'other'}`});
+
+  const items   = usage.rows || [];
+  const summary = (usage.res && usage.res.summary) || [];
+  const loading = usage.loading && !usage.rows;
   // Inventory state. The catalog is fetched here as well as from the issue
   // form, because this page is where stock is corrected and explained.
   const [catalog, setCatalog] = useState([]);
@@ -5067,25 +5298,16 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
   };
   const replaceItem = updated => publish(list => list.map(ci => ci.id === updated.id ? updated : ci));
 
+  // In full, not a page: this is a catalog rather than a log, and the picker in the
+  // issue form has to be able to offer every item in it. The inventory table
+  // further down is the same list, and it is where the pagination is worth having.
   const loadCatalog = () =>
-    apiFetch('/consumable-items', {token}).then(res => publish(res.consumable_items || []));
+    apiFetch('/consumable-items?limit=1000', {token}).then(res => publish(res.consumable_items || []));
 
   useEffect(() => {
     if (view !== 'log') return;
-    let cancelled = false;
-    setLoading(true);
-    const qs = date ? `?date=${date}` : '';
-    apiFetch(`/consumables${qs}`, {token})
-      .then(res => {
-        if (cancelled) return;
-        setItems(res.consumables || []);
-        setSummary(res.summary || []);
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
     loadCatalog().catch(() => {});
-    return () => { cancelled = true; };
-  }, [date, token, view]);
+  }, [view, token]);
 
   // ── Weekly report view ──
   // anchor is any day inside the week being shown; the server expands it to the
@@ -5427,6 +5649,8 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
               </table>
             </div>
           )}
+
+          <LoadMore list={usage} t={t}/>
         </>
       )}
 
@@ -5624,7 +5848,7 @@ function ResetCodeDialog({ code, userName, expiresIn, onDone, t }) {
   );
 }
 
-function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToast }) {
+function TeamPage({ token, users, userIssueStats, currentUser, onUsersUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const canManage = currentUser?.role === 'manager';
@@ -5637,19 +5861,17 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
   // reject anyway.
   useEffect(() => { if (!canManage) setView('members'); }, [canManage]);
 
-  // One pass over the issues instead of re-filtering the whole list per user,
-  // which was O(users x issues) on every render.
+  const list = usePagedList(limit => `/users?limit=${limit}`, token, {rowsKey:'users'});
+
+  // Per-member totals, aggregated by the server. These used to be counted in the
+  // browser out of every issue App had loaded, which only worked while App held
+  // all of them: once the issue tables page their results, counting here would
+  // quietly under-report anyone with more than a pageful of issues.
   const stats = useMemo(() => {
     const byUser = new Map();
-    for (const i of [...apt, ...dept]) {
-      let s = byUser.get(i.loggedBy);
-      if (!s) { s = { total: 0, resolved: 0, minutes: 0 }; byUser.set(i.loggedBy, s); }
-      s.total++;
-      if (i.status === 'Ok') s.resolved++;
-      s.minutes += Number(i.time) || 0;
-    }
+    for (const s of userIssueStats || []) byUser.set(s.user_id, s);
     return byUser;
-  }, [apt, dept]);
+  }, [userIssueStats]);
 
   async function changeRole(userId, newRole) {
     try {
@@ -5688,7 +5910,20 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
-  if (!users.length) {
+  // `shown` rather than `users`: this page fetches and pages its own member list
+  // now, so `users` is the whole roster App loaded at start-up and may be a
+  // different thing entirely from what is on screen.
+  const shown = list.rows || [];
+
+  if (!list.rows) {
+    return (
+      <div className="table-card">
+        <div className="empty-state">{Ic.users}<p>{t.analyticsLoading}</p></div>
+      </div>
+    );
+  }
+
+  if (!shown.length) {
     return (
       <div className="table-card">
         <div className="empty-state">
@@ -5714,7 +5949,7 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
             </tr>
           </thead>
           <tbody>
-            {users.map(u=>(
+            {shown.map(u=>(
               <tr key={u.id} className={u.active ? '' : 'fp-row'}>
                 <td style={{minWidth:170}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -5778,6 +6013,7 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
           </tbody>
         </table>
       </div>
+      <LoadMore list={list} t={t}/>
     </div>
   );
 
@@ -5804,7 +6040,7 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
 
       {view==='manage' && canManage ? manageTable : (
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:16}}>
-      {users.map(u=>{
+      {shown.map(u=>{
         const s = stats.get(u.id) || { total: 0, resolved: 0, minutes: 0 };
         // No issues means there is no average to report. Appending "m" to the
         // em dash unconditionally rendered "—m".
@@ -5841,6 +6077,10 @@ function TeamPage({ users, apt, dept, currentUser, token, onUsersUpdate, setToas
       })}
     </div>
       )}
+
+      <div className="table-card" style={{marginTop:16, padding:0, border:'none', background:'transparent', boxShadow:'none'}}>
+        <LoadMore list={list} t={t}/>
+      </div>
     </>
   );
 }
@@ -6001,13 +6241,12 @@ function LCUUnitCard({ unit, today, onAnswer, onDelete, t, index }) {
 function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
-  const [units, setUnits]     = useState(null);
-  const [today, setToday]     = useState('');
   const [err, setErr]         = useState('');
   const [adding, setAdding]   = useState(false);
   const [serial, setSerial]   = useState('');
   const [note, setNote]       = useState('');
   const [saving, setSaving]   = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // The trial length is a manager setting, so the page copy cannot name a number.
   // 7 is the same default the server falls back to.
@@ -6016,24 +6255,34 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
   // on every render without mattering.
   const withDays = s => s.replace('{days}', days);
 
-  async function load() {
-    try {
-      const res = await apiFetch('/lcu/units', {token});
-      setUnits(res.units || []);
-      setToday(res.today || localISODate(new Date()));
-      setErr('');
-    } catch(ex) {
-      // Adding a unit makes today's result owed straight away, so the reload that
-      // follows is itself refused. That is the gate working, not a failure: hand
-      // it up so the prompt opens instead of leaving a stale empty state behind.
+  /* Readers on trial, paged. `refreshKey` is bumped when the daily prompt closes,
+     so the list is re-read after an answer rather than left showing whatever it
+     managed to fetch before the gate closed -- and it doubles as the filter key,
+     so it also drops back to a single page rather than showing the answer under
+     pages of rows fetched before it.
+
+     Adding a unit makes today's result owed straight away, so the reload that
+     follows is itself refused. That is the gate working, not a failure, and it
+     arrives here as an error rather than an empty list. */
+  const paged = usePagedList(limit => `/lcu/units?limit=${limit}`, token, {
+    rowsKey: 'units',
+    filterKey: `${refreshKey}|${reloadKey}`,
+    onError: ex => {
       if (ex.lcuRequired) { onLcuRequired(ex); return; }
       setErr(ex.message);
-    }
+    },
+  });
+
+  const units = paged.rows || [];
+  const today = (paged.res && paged.res.today) || localISODate(new Date());
+  // Cleared on a successful fetch, so a transient failure does not leave a red
+  // line above a list that has since loaded perfectly well.
+  useEffect(() => { if (paged.res) setErr(''); }, [paged.res]);
+
+  async function reload() {
+    // Handled by bumping the key the hook watches.
+    setReloadKey(k => k + 1);
   }
-  // refreshKey is bumped when the daily prompt closes, so the list is re-read
-  // after an answer rather than left showing whatever it managed to fetch before
-  // the gate closed.
-  useEffect(()=>{ load(); }, [token, refreshKey]);
 
   async function add(e) {
     e.preventDefault();
@@ -6042,7 +6291,9 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
       await apiFetch('/lcu/units', {method:'POST', token, body:{serial, note}});
       setSerial(''); setNote(''); setAdding(false);
       setToast(t.lcuAdded);
-      await load();
+      // The new reader is today's outstanding test, so this reload is the one the
+      // gate refuses -- which opens the prompt through the hook's error handler.
+      reload();
     } catch(ex) { setErr(ex.message); }
     finally { setSaving(false); }
   }
@@ -6050,14 +6301,14 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
   async function answer(unitID, result) {
     await apiFetch('/lcu/tests', {method:'POST', token, body:{results:[{unit_id:unitID, result}]}});
     setToast(t.lcuRecorded);
-    await load();
+    reload();
   }
 
   async function remove(id) {
     try {
       await apiFetch(`/lcu/units/${id}`, {method:'DELETE', token});
       setToast(t.lcuDeleted);
-      await load();
+      reload();
     } catch(ex) { setErr(ex.message); }
   }
 
@@ -6099,18 +6350,20 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
 
       {err && <div className="auth-error" style={{marginBottom:16}}>{err}</div>}
 
-      {units === null && <div className="table-card"><div className="empty-state"><p>{t.analyticsLoading}</p></div></div>}
+      {!paged.rows && <div className="table-card"><div className="empty-state"><p>{t.analyticsLoading}</p></div></div>}
 
-      {units !== null && units.length === 0 && (
+      {paged.rows && units.length === 0 && (
         <div className="table-card">
           <div className="empty-state">{Ic.server}<p>{t.lcuNone}</p></div>
         </div>
       )}
 
-      {units !== null && units.map((u, i)=>(
+      {paged.rows && units.map((u, i)=>(
         <LCUUnitCard key={u.id} unit={u} today={today} t={t} index={i}
           onAnswer={answer} onDelete={remove}/>
       ))}
+
+      <LoadMore list={paged} t={t}/>
     </div>
   );
 }
@@ -6198,22 +6451,25 @@ function LCUPrompt({ units, token, onDone, onLogout }) {
 function ReportsPage({ token }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
-  const [date,    setDate]    = useState(new Date().toISOString().slice(0,10));
-  const [report,  setReport]  = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [date,    setDate]    = useState(localISODate(new Date()));
   const [error,   setError]   = useState('');
   const [downloading, setDownloading] = useState(false);
 
-  async function fetchReport() {
-    setLoading(true); setError(''); setReport(null);
-    try {
-      const res = await apiFetch(`/reports/daily?date=${date}`, {token});
-      setReport(res.report);
-    } catch(ex) { setError(ex.message); }
-    finally { setLoading(false); }
-  }
-
-  useEffect(() => { fetchReport(); }, [date]);
+  /* The two issue tables page; everything else on this page does not.
+     The summary tiles, the by-type and by-technician charts are aggregates over
+     the whole day and the server computes them without regard to the limit, so
+     the figures stay true while a busy day's rows are still being loaded. */
+  const paged = usePagedList(limit => `/reports/daily?date=${date}&limit=${limit}`, token, {
+    // The report is one object rather than an array of rows, so `rows` holds that
+    // object and the two tables inside it are what page. An object is not an
+    // array, so it arrives as-is rather than being coerced.
+    rowsKey: 'report',
+    filterKey: date,
+    onError: ex => setError(ex.message),
+  });
+  const report = paged.res && paged.res.report;
+  const loading = paged.loading && !report;
+  const reload = () => setDate(d => d);
 
   // The printable report is rendered server-side: the Go backend builds an
   // HTML+CSS document styled with this app's own palette and prints it with a
@@ -6285,7 +6541,7 @@ function ReportsPage({ token }) {
             style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}
           />
         </div>
-        <button className="btn btn-ghost" onClick={fetchReport} disabled={loading}>
+        <button className="btn btn-ghost" onClick={reload} disabled={loading}>
           {loading ? '…' : 'Refresh'}
         </button>
         <button className="btn btn-primary" onClick={downloadPDF} disabled={!report || loading || downloading}
@@ -6415,6 +6671,15 @@ function ReportsPage({ token }) {
               </table>
             </div>
           )}
+
+          {/* Both tables came from one request and page together, so there is one
+              footer for the pair. Neither table's own count is the count of rows
+              the server sent -- each is capped at the same limit independently --
+              so the pair is added up from the per-mode totals in the summary,
+              which describe the whole day. */}
+          <LoadMore list={paged} t={t}
+            shown={Math.min(paged.limit, report.summary.apt_issues||0) + Math.min(paged.limit, report.summary.dept_issues||0)}
+            total={(report.summary.apt_issues||0) + (report.summary.dept_issues||0)}/>
 
           {report.summary.total_issues === 0 && (
             <div className="table-card">
@@ -7336,21 +7601,18 @@ function App() {
   const [lang,    setLang]    = useState(()=>loadLS('lira_lang','en'));
   const [theme,   setTheme]   = useState(()=>loadLS('lira_theme','light'));
   const [session, setSession] = useState(()=>loadLS('lira_session', null)); // {user, token}
-  const [apt,     setApt]     = useState([]);
-  const [dept,    setDept]    = useState([]);
   const [users,   setUsers]   = useState([]);
+  // Counts only, straight from the alerts endpoint. The alert lists are the
+  // Alerts page's business and are fetched there, a pageful at a time.
+  const [alertsPendingCount, setAlertsPendingCount] = useState(0);
+  // All-time per-member issue totals for the Team page, which used to count them
+  // out of every issue App held in memory.
+  const [userIssueStats, setUserIssueStats] = useState([]);
   const [issueTypes, setIssueTypes] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [connectaAgents, setConnectaAgents] = useState([]);
   const [consumableItems, setConsumableItems] = useState([]);
   const [settings, setSettings] = useState(null);
-  const [alerts, setAlerts] = useState([]);
-  // Kept apart from the recurring alerts rather than merged into one list: a TV
-  // swap alert means one set was carried for one room, which is a different kind
-  // of thing from a location repeating a fault, and the two want different
-  // wording, different evidence and a different way to be signed off.
-  const [tvSwapAlerts, setTvSwapAlerts] = useState([]);
-  const alertsPendingCount = useMemo(() => alerts.filter(a => a.status === 'pending').length, [alerts]);
   const typeColorMap = useMemo(
     () => Object.fromEntries(issueTypes.map(it => [it.name, it.color])),
     [issueTypes]
@@ -7371,6 +7633,14 @@ function App() {
   const [toast,   setToast]   = useState(null);
   const [newIssueId, setNewIssueId] = useState(null);
   const [apiErr,  setApiErr]  = useState('');
+  /* Bumped after an issue is created, edited or deleted.
+     The issue tables fetch and hold their own rows now, so nothing in App can be
+     edited in place to keep them honest. This is the signal they listen on to ask
+     the server again -- and it lands in usePagedList's filter key, so they also
+     drop back to a single page instead of showing a new row under six pages of
+     rows that were all fetched before it existed. */
+const [issuesEpoch, setIssuesEpoch] = useState(0);
+const bumpIssues = () => setIssuesEpoch(n => n + 1);
 
   const t     = T[lang];
   const token = session?.token;
@@ -7423,30 +7693,38 @@ function App() {
   }, [token]);
 
   function loadEverything() {
-    const todayStr = new Date().toISOString().slice(0,10);
+    const todayStr = localISODate(new Date());
     return Promise.all([
-      apiFetch('/issues?mode=apt', {token}),
-      apiFetch('/issues?mode=dept', {token}),
       apiFetch('/users', {token}),
       apiFetch(`/stats?date=${todayStr}`, {token}),
       apiFetch('/issue-types', {token}),
       apiFetch('/departments', {token}),
       apiFetch('/connecta-agents', {token}),
       apiFetch('/settings', {token}),
-      apiFetch('/alerts', {token}),
-      apiFetch('/consumable-items', {token}),
-    ]).then(([aptRes, deptRes, usersRes, statsRes, typesRes, deptsRes, agentsRes, settingsRes, alertsRes, consumableItemsRes]) => {
-      setApt((aptRes.issues || []).map(mapIssue));
-      setDept((deptRes.issues || []).map(mapIssue));
+      // limit=1: all that is wanted from this call is the two pending counts that
+      // drive the sidebar badge and the Analytics sentence. The alerts themselves
+      // are fetched by the Alerts page, which pages through them.
+      apiFetch('/alerts?limit=1', {token}),
+      // The consumable catalog in full, because the picker in the issue form needs
+      // every item to choose from. The inventory table on the Consumables page
+      // asks for its own pageful.
+      apiFetch('/consumable-items?limit=1000', {token}),
+      apiFetch('/user-issue-stats', {token}),
+    ]).then(([usersRes, statsRes, typesRes, deptsRes, agentsRes, settingsRes, alertsRes, consumableItemsRes, userStatsRes]) => {
       setUsers(usersRes.users || []);
       setStats(statsRes.stats);
       setIssueTypes(typesRes.issue_types || []);
       setDepartments(deptsRes.departments || []);
       setConnectaAgents(agentsRes.connecta_agents || []);
       setSettings(settingsRes.settings);
-      setAlerts(alertsRes.alerts || []);
-    setTvSwapAlerts(alertsRes.tv_swap_alerts || []);
+      // The counts only. The lists belong to the Alerts page.
+      // Recurring only, as before: the badge and the Analytics sentence both describe
+      // recurring issues, and a TV swap alert is a different kind of warning
+      // entirely. Counting them in would make the sentence say something it does
+      // not mean.
+      setAlertsPendingCount(alertsRes.pending_count || 0);
       setConsumableItems(consumableItemsRes.consumable_items || []);
+      setUserIssueStats(userStatsRes.stats || []);
     }).catch(ex => {
       if (ex.lcuRequired) {
         // The gate closed mid-session -- a unit was added, or the day rolled over
@@ -7467,7 +7745,7 @@ function App() {
 
   function logout() {
     setSession(null);
-    setApt([]); setDept([]); setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlerts([]); setTvSwapAlerts([]);
+    setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlertsPendingCount(0); setUserIssueStats([]);
   }
 
   // Called when profile updates come back from API
@@ -7532,14 +7810,17 @@ function App() {
       };
       const res = await apiFetch('/issues', {method:'POST', body, token});
       const issue = mapIssue(res.issue);
-      if (mode==='apt') setApt(p=>[issue,...p]);
-      else              setDept(p=>[issue,...p]);
       // Briefly flag the new row so IssuesTable can animate it in and
-      // pulse its status indicator, then clear the flag once that's done.
+      // pulse its status indicator, then clear the flag once that's done. The
+      // table picks the row up on its own next time it fetches -- it owns its
+      // rows now, so there is no shared array to push into.
       setNewIssueId(issue.id);
       setTimeout(() => setNewIssueId(id => id===issue.id ? null : id), 1200);
+      // The table on screen is showing a page fetched before this issue existed.
+      // Nudge it so the row the user just created is actually there.
+      bumpIssues();
       // Refresh stats
-      const todayStr = new Date().toISOString().slice(0,10);
+      const todayStr = localISODate(new Date());
       apiFetch(`/stats?date=${todayStr}`, {token}).then(r=>setStats(r.stats)).catch(()=>{});
       setToast(t.toastLogged);
     } catch(ex) { setToast('Error: ' + ex.message); }
@@ -7565,10 +7846,10 @@ function App() {
         tv_swaps: tvSwapBody(form.tvSwaps),
       };
       const res = await apiFetch(`/issues/${id}`, {method:'PATCH', body, token});
-      const updated = mapIssue(res.issue);
-      const upd = list => list.map(i=>i.id===id ? updated : i);
-      if (mode==='apt') setApt(upd); else setDept(upd);
-      const todayStr = new Date().toISOString().slice(0,10);
+      // The tables hold their own rows and refetch on this signal, so an edit
+      // shows up in place rather than waiting for someone to reload the page.
+      bumpIssues();
+      const todayStr = localISODate(new Date());
       apiFetch(`/stats?date=${todayStr}`, {token}).then(r=>setStats(r.stats)).catch(()=>{});
       setToast(t.toastUpdated);
     } catch(ex) { setToast('Error: ' + ex.message); }
@@ -7587,9 +7868,8 @@ function App() {
     setPending({issue, mode, busy:true});
     try {
       await apiFetch(`/issues/${issue.id}`, {method:'DELETE', token});
-      if (mode==='apt') setApt(p=>p.filter(i=>i.id!==issue.id));
-      else              setDept(p=>p.filter(i=>i.id!==issue.id));
-      const todayStr = new Date().toISOString().slice(0,10);
+      bumpIssues();
+      const todayStr = localISODate(new Date());
       apiFetch(`/stats?date=${todayStr}`, {token}).then(r=>setStats(r.stats)).catch(()=>{});
       setToast(t.toastDeleted);
       setPending(null);
@@ -7722,15 +8002,19 @@ function App() {
                 working. */}
             <PageErrorBoundary resetKey={page}>
             <PageShell page={page}>
-            {page==='dashboard' && <Dashboard apt={apt} dept={dept} users={users} stats={stats}/>}
-            {page==='apt'       && <IssuesTable issues={apt}  tableMode="apt"  currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
-            {page==='dept'      && <IssuesTable issues={dept} tableMode="dept" currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
-            {page==='history'   && <HistoryPage apt={apt} dept={dept} currentUser={me} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
-            {page==='alerts'    && <AlertsPage alerts={alerts} tvSwapAlerts={tvSwapAlerts} currentUser={me} token={token} onAlertsUpdate={setAlerts} onTvSwapAlertsUpdate={setTvSwapAlerts} setToast={setToast}/>}
+            {page==='dashboard' && <Dashboard users={users} stats={stats}/>}
+            {/* The issue tables fetch and paginate themselves. App used to hold
+                every issue ever logged and hand the same array to all three of
+                these pages at once, which meant the History page needed the whole
+                dataset in memory to show one day of it. */}
+            {page==='apt'       && <IssuesTable token={token} issueTypes={issueTypes} tableMode="apt"  epoch={issuesEpoch} currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='dept'      && <IssuesTable token={token} issueTypes={issueTypes} tableMode="dept" epoch={issuesEpoch} currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='history'   && <HistoryPage token={token} issueTypes={issueTypes} epoch={issuesEpoch} currentUser={me} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='alerts'    && <AlertsPage currentUser={me} token={token} onCountsUpdate={setAlertsPendingCount} setToast={setToast}/>}
             {page==='analytics' && <AnalyticsPage token={token} alertsPendingCount={alertsPendingCount}/>}
             {page==='consumables' && <ConsumablesPage token={token} currentUser={me} onCatalogUpdate={setConsumableItems} setToast={setToast}/>}
             {page==='support' && <SupportPage token={token}/>}
-            {page==='team'    && <TeamPage users={users} apt={apt} dept={dept} currentUser={me}
+            {page==='team'    && <TeamPage token={token} users={users} userIssueStats={userIssueStats} currentUser={me}
               token={token} onUsersUpdate={setUsers} setToast={setToast}/>}
             {page==='reports' && <ReportsPage token={token}/>}
             {/* LCU testing — a card reader on trial for a run of days, the length

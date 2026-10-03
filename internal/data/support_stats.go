@@ -101,11 +101,6 @@ func (m SupportRequestModel) GetStats(from, to string) (*SupportStats, error) {
 	return stats, nil
 }
 
-// maxSupportListRows bounds how many rows the page is asked to draw. The
-// statistics above are computed over every matching row regardless; this only
-// caps the list itself.
-const maxSupportListRows = 500
-
 // SupportListRow is one handover joined to the issue it belongs to, which is
 // what the support page lists.
 type SupportListRow struct {
@@ -126,27 +121,36 @@ type SupportListRow struct {
 	IssueLocation string `json:"issue_location"`
 }
 
-// GetList returns handovers in the date range, newest first, joined to their
-// issue so the page can say which problem each one is about.
-func (m SupportRequestModel) GetList(from, to string) ([]*SupportListRow, error) {
+// GetList returns up to limit handovers in the date range, newest first, joined
+// to their issue so the page can say which problem each one is about, plus the
+// total number in the range.
+func (m SupportRequestModel) GetList(from, to string, limit int) ([]*SupportListRow, int, error) {
+	fromWhere := `
+		FROM issue_support_requests s
+		INNER JOIN issues i ON i.id = s.issue_id
+		WHERE ($1 = '' OR s.created_at::date >= $1::date)
+		  AND ($2 = '' OR s.created_at::date <= $2::date)`
+
+	ctx, cancel := listContext()
+	defer cancel()
+
+	total, err := CountMatching(ctx, m.DB, fromWhere, []any{from, to})
+	if err != nil {
+		return nil, 0, err
+	}
+
 	query := `
 		SELECT s.id, s.created_at, s.company, s.status,
 		       s.started_at, s.resolved_at, s.duration_minutes, s.notes,
 		       COALESCE(s.telefonica_ticket_id, s.telnet_technician, ''),
 		       i.id, i.problem, i.mode, i.location
-		FROM issue_support_requests s
-		INNER JOIN issues i ON i.id = s.issue_id
-		WHERE ($1 = '' OR s.created_at::date >= $1::date)
-		  AND ($2 = '' OR s.created_at::date <= $2::date)
+		` + fromWhere + `
 		ORDER BY s.started_at DESC NULLS LAST, s.id DESC
 		LIMIT $3`
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	rows, err := m.DB.QueryContext(ctx, query, from, to, maxSupportListRows)
+	rows, err := m.DB.QueryContext(ctx, query, from, to, limit)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -159,9 +163,9 @@ func (m SupportRequestModel) GetList(from, to string) ([]*SupportListRow, error)
 			&r.Reference,
 			&r.IssueID, &r.IssueProblem, &r.IssueMode, &r.IssueLocation,
 		); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		out = append(out, &r)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }

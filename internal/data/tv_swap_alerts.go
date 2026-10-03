@@ -143,23 +143,31 @@ func (m TVSwapAlertModel) Sync() error {
 	return err
 }
 
-// tvSwapAlertSelect is the one shape an alert is read in. List and get share it
-// so a single alert can never come back with a different set of fields from a
-// list of them.
-const tvSwapAlertSelect = `
-	SELECT a.id, a.swap_id, s.issue_id, a.status,
-	       i.mode, i.location, i.type, i.problem,
-	       s.from_room, s.to_room, s.notes, s.created_at, s.version,
-	       i.created_at, COALESCE(logger.name, ''),
-	       a.solution, a.solved_by, COALESCE(solver.name, ''), a.solved_at,
-	       a.created_at, a.updated_at
+// Split into a column list and a FROM/WHERE-able clause so the same tables can
+// be counted as well as selected. They were one string once, which made the
+// count come out as "SELECT COUNT(*) SELECT a.id, ..." the moment a listing
+// wanted a total.
+const tvSwapAlertColumns = `
+	a.id, a.swap_id, s.issue_id, a.status,
+	i.mode, i.location, i.type, i.problem,
+	s.from_room, s.to_room, s.notes, s.created_at, s.version,
+	i.created_at, COALESCE(logger.name, ''),
+	a.solution, a.solved_by, COALESCE(solver.name, ''), a.solved_at,
+	a.created_at, a.updated_at`
+
+const tvSwapAlertFrom = `
 	FROM tv_swap_alerts a
 	JOIN issue_tv_swaps s ON s.id = a.swap_id
 	JOIN issues i ON i.id = s.issue_id
 	LEFT JOIN users logger ON logger.id = i.logged_by
 	LEFT JOIN users solver ON solver.id = a.solved_by`
 
-// scanAlert reads one alert row in the column order of tvSwapAlertSelect.
+// tvSwapAlertSelect is the full projection, for reading a row. Get and MarkSolved
+// both use it, so a single alert can never come back with a different set of
+// fields from a list of them.
+var tvSwapAlertSelect = `SELECT` + tvSwapAlertColumns + tvSwapAlertFrom
+
+// scanAlert reads one alert row in the column order of tvSwapAlertColumns.
 func scanAlert(sc interface{ Scan(...any) error }) (*TVSwapAlert, error) {
 	var a TVSwapAlert
 	var solvedBy sql.NullInt64
@@ -204,18 +212,26 @@ func (m TVSwapAlertModel) Get(id int64) (*TVSwapAlert, error) {
 }
 
 // List returns the alerts, optionally filtered by status ("pending", "solved", or
-// "" for all), newest activity first.
-func (m TVSwapAlertModel) List(status string) ([]*TVSwapAlert, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+// "" for all), newest activity first, plus the total matching that filter.
+func (m TVSwapAlertModel) List(status string, limit int) ([]*TVSwapAlert, int, error) {
+	fromWhere := tvSwapAlertFrom + `
+		WHERE ($1 = '' OR a.status = $1)`
+
+	ctx, cancel := listContext()
 	defer cancel()
 
-	query := tvSwapAlertSelect + `
-		WHERE ($1 = '' OR a.status = $1)
-		ORDER BY a.status ASC, a.updated_at DESC, a.id DESC`
-
-	rows, err := m.DB.QueryContext(ctx, query, status)
+	total, err := CountMatching(ctx, m.DB, fromWhere, []any{status})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+
+	query := `SELECT` + tvSwapAlertColumns + fromWhere + `
+		ORDER BY a.status ASC, a.updated_at DESC, a.id DESC
+		LIMIT $2`
+
+	rows, err := m.DB.QueryContext(ctx, query, status, limit)
+	if err != nil {
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -225,21 +241,21 @@ func (m TVSwapAlertModel) List(status string) ([]*TVSwapAlert, error) {
 	for rows.Next() {
 		a, err := scanAlert(rows)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		alerts = append(alerts, a)
 	}
-	return alerts, rows.Err()
+	return alerts, total, rows.Err()
 }
 
-// CountPending is the number shown beside the section heading.
-func (m TVSwapAlertModel) CountPending() (int, error) {
+// CountByStatus totals the alerts in one status, for the chips.
+func (m TVSwapAlertModel) CountByStatus(status string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	var count int
 	err := m.DB.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM tv_swap_alerts WHERE status = 'pending'`).Scan(&count)
+		`SELECT COUNT(*) FROM tv_swap_alerts WHERE status = $1`, status).Scan(&count)
 	return count, err
 }
 

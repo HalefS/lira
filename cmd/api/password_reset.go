@@ -96,7 +96,7 @@ func (app *application) resetUserPasswordHandler(w http.ResponseWriter, r *http.
 		"by_user_id", currentUser.ID, "by_user_email", currentUser.Email)
 
 	response := envelope{
-		"user":      user,
+		"user":       user,
 		"expires_in": int(data.ResetCodeTTL.Seconds()),
 	}
 	if required {

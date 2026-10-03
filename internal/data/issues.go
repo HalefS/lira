@@ -196,7 +196,13 @@ func (m IssueModel) Get(id int64) (*Issue, error) {
 	return &issue, nil
 }
 
-func (m IssueModel) GetAll(f IssueFilters) ([]*Issue, error) {
+// GetAll returns up to limit issues matching the filters, plus the total number
+// that match them ignoring the limit.
+//
+// The total is not a convenience: the client needs it to know whether "load more"
+// has anything left to load, and computing it here from the same WHERE as the
+// rows is the only way that number stays true.
+func (m IssueModel) GetAll(f IssueFilters, limit int) ([]*Issue, int, error) {
 	conditions := []string{"1=1"}
 	args := []any{}
 	argIdx := 1
@@ -231,25 +237,37 @@ func (m IssueModel) GetAll(f IssueFilters) ([]*Issue, error) {
 		argIdx += 4
 	}
 
+	// One FROM/WHERE string, used verbatim by both the count and the rows, so
+	// the "total" can never disagree with the list it is counting.
+	fromWhere := `FROM issues i
+		INNER JOIN users u ON i.logged_by = u.id
+		WHERE ` + strings.Join(conditions, " AND ")
+
+	ctx, cancel := listContext()
+	defer cancel()
+
+	total, err := CountMatching(ctx, m.DB, fromWhere, args)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// LIMIT is bound rather than interpolated, so a hostile or mistaken limit
+	// cannot become part of the query.
 	query := fmt.Sprintf(`
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
 		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
 		       u.name, u.avatar_idx, i.version, i.false_positive
-		FROM issues i
-		INNER JOIN users u ON i.logged_by = u.id
-		WHERE %s
-		ORDER BY i.created_at DESC`, strings.Join(conditions, " AND "))
+		%s
+		ORDER BY i.created_at DESC, i.id DESC
+		LIMIT $%d`, fromWhere, argIdx)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	rows, err := m.DB.QueryContext(ctx, query, args...)
+	rows, err := m.DB.QueryContext(ctx, query, append(append([]any{}, args...), limit)...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
-	var issues []*Issue
+	issues := []*Issue{}
 	for rows.Next() {
 		var issue Issue
 		err := rows.Scan(
@@ -258,18 +276,18 @@ func (m IssueModel) GetAll(f IssueFilters) ([]*Issue, error) {
 			&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version, &issue.FalsePositive,
 		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		issues = append(issues, &issue)
 	}
 	if err = rows.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if err = loadIssueChildren(ctx, m.DB, issues); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return issues, nil
+	return issues, total, nil
 }
 
 func (m IssueModel) Update(issue *Issue) error {
@@ -592,7 +610,11 @@ type ReportSummary struct {
 	FalsePositives int     `json:"false_positives"`
 }
 
-func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
+// GetDailyReport builds one day's report. limit caps each of the two issue
+// lists independently; the summary, the breakdown maps and the per-technician
+// table are all aggregates over the whole day and ignore it, so the headline
+// numbers and the charts keep describing the day as more rows are loaded.
+func (m IssueModel) GetDailyReport(date string, limit int) (*DailyReport, error) {
 	if date == "" {
 		date = time.Now().Format("2006-01-02")
 	}
@@ -661,44 +683,101 @@ func (m IssueModel) GetDailyReport(date string) (*DailyReport, error) {
 	}
 	report.Summary = s
 
-	// ── All issues (apt + dept) ──
+	// ── Breakdown maps, over every issue on the day ──
+	//
+	// Kept out of the row query below on purpose. They used to be counted while
+	// scanning the rows the report lists, which was fine when that was every
+	// issue of the day -- and silently wrong the moment the lists stopped being
+	// every issue of the day, because the charts would have described only the
+	// rows that happened to be on screen. Aggregated separately, they describe the
+	// day whatever is loaded.
+	breakdownQ := `
+		SELECT mode, type, status, COUNT(*)
+		FROM issues
+		WHERE created_at::date = $1
+		GROUP BY mode, type, status`
+
+	breakdownRows, err := m.DB.QueryContext(ctx, breakdownQ, date)
+	if err != nil {
+		return nil, err
+	}
+	for breakdownRows.Next() {
+		var mode, issueType, status string
+		var n int
+		if err := breakdownRows.Scan(&mode, &issueType, &status, &n); err != nil {
+			breakdownRows.Close()
+			return nil, err
+		}
+		report.ByType[issueType] += n
+		report.ByMode[mode] += n
+		report.ByStatus[status] += n
+	}
+	if err := breakdownRows.Err(); err != nil {
+		breakdownRows.Close()
+		return nil, err
+	}
+	breakdownRows.Close()
+
+	// ── The issue lists, one query per mode ──
+	//
+	// Split rather than one combined query with a single LIMIT: the two tables
+	// are read independently, so one shared limit would fill the apartment table
+	// to the brim and leave the department table showing nothing at all while
+	// the server was holding dozens of rows it was told not to send.
 	issueQ := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
 		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
 		       u.name, u.avatar_idx, i.version, i.false_positive
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
-		WHERE i.created_at::date = $1
-		ORDER BY i.mode, i.created_at`
+		WHERE i.created_at::date = $1 AND i.mode = $2
+		ORDER BY i.created_at DESC, i.id DESC`
 
-	rows, err := m.DB.QueryContext(ctx, issueQ, date)
-	if err != nil {
-		return nil, err
+	// limit of zero or less means every row. That is what the printed report
+	// asks for: a PDF is an archive of the day, so quietly capping it would
+	// produce a document that looks complete and is not.
+	if limit > 0 {
+		issueQ += "\n\t\tLIMIT $3"
 	}
-	defer rows.Close()
 
-	var reportIssues []*Issue
-	for rows.Next() {
-		var i Issue
-		if err := rows.Scan(
-			&i.ID, &i.CreatedAt, &i.Mode, &i.Location, &i.Type,
-			&i.Problem, &i.Resolution, &i.TimeMinutes, &i.StartTime, &i.EndTime, &i.ReportedByAgent, &i.ConfirmedByAgent, &i.Status,
-			&i.LoggedBy, &i.LoggedByName, &i.LoggedByIdx, &i.Version, &i.FalsePositive,
-		); err != nil {
+	reportIssues := []*Issue{}
+	// Empty rather than nil so the JSON is always an array: the report page reads
+	// .length on both, and a null there takes the whole page down.
+	report.AptIssues = []*Issue{}
+	report.DeptIssues = []*Issue{}
+	for _, mode := range []string{"apt", "dept"} {
+		var rows *sql.Rows
+		var err error
+		if limit > 0 {
+			rows, err = m.DB.QueryContext(ctx, issueQ, date, mode, limit)
+		} else {
+			rows, err = m.DB.QueryContext(ctx, issueQ, date, mode)
+		}
+		if err != nil {
 			return nil, err
 		}
-		reportIssues = append(reportIssues, &i)
-		if i.Mode == "apt" {
-			report.AptIssues = append(report.AptIssues, &i)
-		} else {
-			report.DeptIssues = append(report.DeptIssues, &i)
+		for rows.Next() {
+			var i Issue
+			if err := rows.Scan(
+				&i.ID, &i.CreatedAt, &i.Mode, &i.Location, &i.Type,
+				&i.Problem, &i.Resolution, &i.TimeMinutes, &i.StartTime, &i.EndTime, &i.ReportedByAgent, &i.ConfirmedByAgent, &i.Status,
+				&i.LoggedBy, &i.LoggedByName, &i.LoggedByIdx, &i.Version, &i.FalsePositive,
+			); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			reportIssues = append(reportIssues, &i)
+			if mode == "apt" {
+				report.AptIssues = append(report.AptIssues, &i)
+			} else {
+				report.DeptIssues = append(report.DeptIssues, &i)
+			}
 		}
-		report.ByType[i.Type]++
-		report.ByMode[i.Mode]++
-		report.ByStatus[i.Status]++
-	}
-	if err = rows.Err(); err != nil {
-		return nil, err
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		rows.Close()
 	}
 
 	if err = loadIssueChildren(ctx, m.DB, reportIssues); err != nil {

@@ -20,14 +20,19 @@ var dateParamPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 // GET /v1/reports/daily?date=YYYY-MM-DD
 func (app *application) dailyReportHandler(w http.ResponseWriter, r *http.Request) {
 	date := app.readString(r.URL.Query(), "date", "")
+	limit, capped := app.readLimit(r)
 
-	rep, err := app.models.Issues.GetDailyReport(date)
+	rep, err := app.models.Issues.GetDailyReport(date, limit)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	app.writeJSON(w, http.StatusOK, envelope{"report": rep}, nil)
+	app.writeJSON(w, http.StatusOK, envelope{
+		"report":       rep,
+		"limit":        limit,
+		"limit_capped": capped,
+	}, nil)
 }
 
 // GET /v1/reports/daily.pdf?date=YYYY-MM-DD
@@ -59,7 +64,10 @@ func (app *application) dailyReportPDFHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	rep, err := app.models.Issues.GetDailyReport(date)
+	// Zero: the printed report takes every issue of the day. The screen version
+	// above pages, but a PDF is an archive of the day and capping it would print
+	// a document that looks complete and is not.
+	rep, err := app.models.Issues.GetDailyReport(date, 0)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return

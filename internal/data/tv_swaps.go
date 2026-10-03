@@ -223,28 +223,36 @@ type TVSwapListItem struct {
 //
 // The issue's own fields are joined in because a swap on its own does not say
 // which of the two rooms was the one that was faulty.
-func (m TVSwapModel) GetList(issueID int64, from, to string, limit int) ([]*TVSwapListItem, error) {
+func (m TVSwapModel) GetList(issueID int64, from, to string, limit int) ([]*TVSwapListItem, int, error) {
 	// The range is on the swap's own created_at, anchored in the server's
 	// timezone like every other date filter in the app. An empty bound is
 	// unbounded, so the page opens on "everything" and narrows from there.
-	query := `
-		SELECT s.id, s.created_at, s.issue_id, s.from_room, s.to_room, s.notes,
-		       i.mode, i.location, i.type, i.problem, COALESCE(u.name, '')
+	fromWhere := `
 		FROM issue_tv_swaps s
 		INNER JOIN issues i ON i.id = s.issue_id
 		LEFT JOIN users u ON u.id = i.logged_by
 		WHERE ($1 = 0 OR s.issue_id = $1)
 		  AND ($2 = '' OR s.created_at::date >= $2::date)
-		  AND ($3 = '' OR s.created_at::date <= $3::date)
+		  AND ($3 = '' OR s.created_at::date <= $3::date)`
+
+	ctx, cancel := listContext()
+	defer cancel()
+
+	total, err := CountMatching(ctx, m.DB, fromWhere, []any{issueID, from, to})
+	if err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT s.id, s.created_at, s.issue_id, s.from_room, s.to_room, s.notes,
+		       i.mode, i.location, i.type, i.problem, COALESCE(u.name, '')
+		` + fromWhere + `
 		ORDER BY s.created_at DESC, s.id DESC
 		LIMIT $4`
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	rows, err := m.DB.QueryContext(ctx, query, issueID, from, to, limit)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -254,11 +262,11 @@ func (m TVSwapModel) GetList(issueID int64, from, to string, limit int) ([]*TVSw
 		if err := rows.Scan(&s.ID, &s.CreatedAt, &s.IssueID, &s.FromRoom, &s.ToRoom,
 			&s.Notes, &s.IssueMode, &s.IssueLocation, &s.IssueType, &s.IssueProblem,
 			&s.LoggedByName); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		out = append(out, &s)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 // loadIssueTVSwaps fills in TVSwaps on each of the given issues with a single

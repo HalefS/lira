@@ -89,6 +89,13 @@ func (app *application) routes() http.Handler {
 	// Analytics — week/month comparisons, for the Analytics page
 	router.HandlerFunc(http.MethodGet, "/v1/analytics", app.requireAuth(app.getAnalyticsHandler))
 
+	// All-time per-member issue totals, for the Team page.
+	//
+	// Its own path rather than /v1/users/issue-stats: httprouter cannot hold a
+	// literal segment and a wildcard at the same position, so adding that route
+	// next to /v1/users/:id panics the process at startup.
+	router.HandlerFunc(http.MethodGet, "/v1/user-issue-stats", app.requireAuth(app.getUserIssueStatsHandler))
+
 	// Consumables — inventory usage tracking (what was used on which issue)
 	router.HandlerFunc(http.MethodGet, "/v1/consumables", app.requireAuth(app.listConsumablesHandler))
 

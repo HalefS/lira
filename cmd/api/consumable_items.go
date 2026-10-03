@@ -10,7 +10,9 @@ import (
 )
 
 func (app *application) listConsumableItemsHandler(w http.ResponseWriter, r *http.Request) {
-	items, err := app.models.ConsumableItems.GetAll()
+	limit, capped := app.readLimit(r)
+
+	items, total, err := app.models.ConsumableItems.GetAll(limit)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -18,7 +20,12 @@ func (app *application) listConsumableItemsHandler(w http.ResponseWriter, r *htt
 	if items == nil {
 		items = []*data.ConsumableItem{}
 	}
-	app.writeJSON(w, http.StatusOK, envelope{"consumable_items": items}, nil)
+	app.writeJSON(w, http.StatusOK, envelope{
+		"consumable_items": items,
+		"total":            total,
+		"limit":            limit,
+		"limit_capped":     capped,
+	}, nil)
 }
 
 func (app *application) createConsumableItemHandler(w http.ResponseWriter, r *http.Request) {

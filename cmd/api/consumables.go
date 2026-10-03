@@ -11,8 +11,9 @@ import (
 // consumable, optionally filtered to one date, plus a running total per item.
 func (app *application) listConsumablesHandler(w http.ResponseWriter, r *http.Request) {
 	date := app.readString(r.URL.Query(), "date", "")
+	limit, capped := app.readLimit(r)
 
-	items, err := app.models.Consumables.GetAll(date)
+	items, total, err := app.models.Consumables.GetAll(date, limit)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -21,6 +22,9 @@ func (app *application) listConsumablesHandler(w http.ResponseWriter, r *http.Re
 		items = []*data.Consumable{}
 	}
 
+	// Deliberately unaffected by the limit: the per-item running totals
+	// describe every use ever recorded, so the summary above the table does not
+	// quietly shrink as the reader loads more rows into it.
 	summary, err := app.models.Consumables.SummaryByItem()
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -31,8 +35,11 @@ func (app *application) listConsumablesHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	app.writeJSON(w, http.StatusOK, envelope{
-		"consumables": items,
-		"summary":     summary,
+		"consumables":  items,
+		"summary":      summary,
+		"total":        total,
+		"limit":        limit,
+		"limit_capped": capped,
 	}, nil)
 }
 

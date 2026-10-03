@@ -83,16 +83,18 @@ func (app *application) listTVSwapsHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	limit := app.readInt(qs, "limit", 500)
-	if limit < 1 || limit > 1000 {
-		limit = 500
-	}
+	limit, capped := app.readLimit(r)
 
-	swaps, err := app.models.TVSwaps.GetList(issueID, from, to, limit)
+	swaps, total, err := app.models.TVSwaps.GetList(issueID, from, to, limit)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	app.writeJSON(w, http.StatusOK, envelope{"swaps": swaps}, nil)
+	app.writeJSON(w, http.StatusOK, envelope{
+		"swaps":        swaps,
+		"total":        total,
+		"limit":        limit,
+		"limit_capped": capped,
+	}, nil)
 }

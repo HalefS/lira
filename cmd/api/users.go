@@ -74,12 +74,34 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 
 // GET /v1/users
 func (app *application) listUsersHandler(w http.ResponseWriter, r *http.Request) {
-	users, err := app.models.Users.GetAll()
+	limit, capped := app.readLimit(r)
+
+	users, total, err := app.models.Users.GetAll(limit)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
-	app.writeJSON(w, http.StatusOK, envelope{"users": users}, nil)
+	app.writeJSON(w, http.StatusOK, envelope{
+		"users":        users,
+		"total":        total,
+		"limit":        limit,
+		"limit_capped": capped,
+	}, nil)
+}
+
+// getUserIssueStatsHandler returns all-time per-member issue totals for the
+// Team page. Aggregated here rather than counted in the browser, because the
+// issue lists no longer hand every issue to the client to count.
+func (app *application) getUserIssueStatsHandler(w http.ResponseWriter, r *http.Request) {
+	stats, err := app.models.Users.GetIssueStats()
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	if stats == nil {
+		stats = []*data.UserIssueStats{}
+	}
+	app.writeJSON(w, http.StatusOK, envelope{"stats": stats}, nil)
 }
 
 // GET /v1/users/:id

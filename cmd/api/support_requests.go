@@ -158,14 +158,22 @@ func (app *application) listSupportRequestsHandler(w http.ResponseWriter, r *htt
 		app.serverErrorResponse(w, r, err)
 		return
 	}
-	requests, err := app.models.SupportRequests.GetList(from, to)
+	// Stats are computed over every matching row, so they are unaffected by the
+	// limit: the page's headline numbers describe the whole range even while the
+	// table below shows only the first page of it.
+	limit, capped := app.readLimit(r)
+
+	requests, total, err := app.models.SupportRequests.GetList(from, to, limit)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
 	app.writeJSON(w, http.StatusOK, envelope{
-		"requests": requests,
-		"stats":    stats,
+		"requests":     requests,
+		"stats":        stats,
+		"total":        total,
+		"limit":        limit,
+		"limit_capped": capped,
 	}, nil)
 }

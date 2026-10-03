@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -383,46 +384,54 @@ func (m LCUModel) get(ctx context.Context, id int64) (*LCUUnit, error) {
 }
 
 // ListAll returns every unit, newest window first. This is the manager's view.
-func (m LCUModel) ListAll() ([]*LCUUnit, error) {
+func (m LCUModel) ListAll(limit int) ([]*LCUUnit, int, error) {
 	return m.list(`
 		FROM lcu_units u
-		LEFT JOIN users adder ON adder.id = u.added_by
-		ORDER BY u.starts_on DESC, u.id DESC`)
+		LEFT JOIN users adder ON adder.id = u.added_by`, limit, nil)
 }
 
 // ListForUser returns only the units this user added. Technicians see their own
 // readers; the team-wide list is a manager's to ask for.
-func (m LCUModel) ListForUser(userID int64) ([]*LCUUnit, error) {
+func (m LCUModel) ListForUser(userID int64, limit int) ([]*LCUUnit, int, error) {
 	return m.list(`
 		FROM lcu_units u
 		LEFT JOIN users adder ON adder.id = u.added_by
-		WHERE u.added_by = $1
-		ORDER BY u.starts_on DESC, u.id DESC`, userID)
+		WHERE u.added_by = $1`, limit, []any{userID})
 }
 
-func (m LCUModel) list(from string, args ...any) ([]*LCUUnit, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+// list returns up to limit units plus the total that matched. The caller passes
+// the FROM/WHERE and the matching arguments separately so the count query can
+// reuse the very same strings rather than having the filters written twice.
+func (m LCUModel) list(from string, limit int, args []any) ([]*LCUUnit, int, error) {
+	ctx, cancel := listContext()
 	defer cancel()
+
+	total, err := CountMatching(ctx, m.DB, from, args)
+	if err != nil {
+		return nil, 0, err
+	}
 
 	// Rows are read and closed first so their ids are all known before the daily
 	// logs are fetched in a single follow-up query.
-	query := `SELECT` + lcuUnitColumns + from
-	rows, err := m.DB.QueryContext(ctx, query, args...)
+	query := `SELECT` + lcuUnitColumns + from + `
+		ORDER BY u.starts_on DESC, u.id DESC
+		LIMIT $` + strconv.Itoa(len(args)+1)
+	rows, err := m.DB.QueryContext(ctx, query, append(append([]any{}, args...), limit)...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	var units []*LCUUnit
+	units := []*LCUUnit{}
 	for rows.Next() {
 		u, err := scanUnitRow(rows)
 		if err != nil {
 			rows.Close()
-			return nil, err
+			return nil, 0, err
 		}
 		units = append(units, u)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
-		return nil, err
+		return nil, 0, err
 	}
 	rows.Close()
 
@@ -432,12 +441,12 @@ func (m LCUModel) list(from string, args ...any) ([]*LCUUnit, error) {
 	}
 	tests, names, err := m.testsForUnits(ctx, ids)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	for _, u := range units {
 		u.attach(tests[u.ID], names)
 	}
-	return units, nil
+	return units, total, nil
 }
 
 // PendingToday returns the units this user added whose window covers today and

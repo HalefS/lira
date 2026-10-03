@@ -280,29 +280,39 @@ func loadIssueConsumables(ctx context.Context, db *sql.DB, issues []*Issue) erro
 	return rows.Err()
 }
 
-// GetAll returns consumable usage, optionally filtered to a single calendar
-// date ("YYYY-MM-DD"), newest first.
-func (m ConsumableModel) GetAll(date string) ([]*Consumable, error) {
-	query := `
-		SELECT c.id, c.issue_id, c.item_id, c.item, COALESCE(ci.icon, 'box'), c.quantity,
-		       i.mode, i.location, c.logged_by, u.name, c.created_at
+// GetAll returns up to limit consumable usage rows, optionally filtered to a
+// single calendar date ("YYYY-MM-DD"), newest first, plus the total that matched
+// the filter.
+func (m ConsumableModel) GetAll(date string, limit int) ([]*Consumable, int, error) {
+	fromWhere := `
 		FROM consumables c
 		INNER JOIN issues i ON i.id = c.issue_id
 		INNER JOIN users u ON c.logged_by = u.id
 		LEFT JOIN consumable_items ci ON ci.id = c.item_id
-		WHERE ($1 = '' OR c.created_at::date = $1::date)
-		ORDER BY c.created_at DESC, c.id DESC`
+		WHERE ($1 = '' OR c.created_at::date = $1::date)`
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := listContext()
 	defer cancel()
 
-	rows, err := m.DB.QueryContext(ctx, query, date)
+	total, err := CountMatching(ctx, m.DB, fromWhere, []any{date})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT c.id, c.issue_id, c.item_id, c.item, COALESCE(ci.icon, 'box'), c.quantity,
+		       i.mode, i.location, c.logged_by, u.name, c.created_at
+		` + fromWhere + `
+		ORDER BY c.created_at DESC, c.id DESC
+		LIMIT $2`
+
+	rows, err := m.DB.QueryContext(ctx, query, date, limit)
+	if err != nil {
+		return nil, 0, err
 	}
 	defer rows.Close()
 
-	var out []*Consumable
+	out := []*Consumable{}
 	for rows.Next() {
 		var c Consumable
 		var itemID sql.NullInt64
@@ -310,7 +320,7 @@ func (m ConsumableModel) GetAll(date string) ([]*Consumable, error) {
 			&c.ID, &c.IssueID, &itemID, &c.Item, &c.Icon, &c.Quantity,
 			&c.Mode, &c.Location, &c.LoggedBy, &c.LoggedByName, &c.CreatedAt,
 		); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if itemID.Valid {
 			id := itemID.Int64
@@ -318,7 +328,7 @@ func (m ConsumableModel) GetAll(date string) ([]*Consumable, error) {
 		}
 		out = append(out, &c)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 // SummaryByItem returns the total quantity used per item — e.g. how many AA
