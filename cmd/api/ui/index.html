@@ -384,19 +384,150 @@ tbody tr.row-clickable { cursor: pointer; }
 
 /* ── Maintenance ──
    A row, not a card: the queue is scanned rather than read, so the device, what
-   state it is in and the action all sit on one line. Overdue gets a red left
-   edge rather than a red fill -- a page of them would otherwise be unreadable. */
+   state it is in and the action all sit on one line.
+
+   Colour on this page answers the one question it exists to answer -- how urgent
+   is this -- so intensity tracks urgency. Overdue shouts in red, due soon says so
+   once in amber, scheduled is a quiet teal edge and stops there. A page where
+   every row shouted equally would say nothing at all.
+
+   The urgency wash is a pseudo-element rather than a background so it layers over
+   the card's own surface: dark mode forces card backgrounds with !important, and
+   this way the tint needs no !important of its own to survive that. It also fades
+   to nothing by 58%, so the row's text stays on white instead of on red. */
 .maint-card {
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   padding: 13px 16px; margin-bottom: 8px;
-  background: var(--white); border: 1px solid var(--gray-200); border-radius: 10px;
+  background: #fff; border: 1px solid var(--gray-200); border-radius: 10px;
   border-left: 3px solid var(--gray-200);
+  transition: border-color 0.25s ease;
 }
-.maint-card.maint-late   { border-left-color: var(--red); }
+.maint-card::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, var(--maint-wash, transparent) 0, transparent 58%);
+  opacity: 0; transition: opacity 0.3s ease;
+}
+/* Positioned children paint above the wash without needing a z-index: both are
+   positioned with z-index auto, so source order decides. */
+.maint-card > * { position: relative; }
+.maint-card.maint-overdue { border-left-color: var(--red);       --maint-wash: var(--red-light); }
+.maint-card.maint-soon    { border-left-color: var(--amber); }
+.maint-card.maint-scheduled { border-left-color: var(--teal-mid); }
+.maint-card.maint-overdue::before { opacity: 1; }
 .maint-card.maint-retired { opacity: 0.62; }
 .maint-card-main { flex: 1; min-width: 240px; }
 .maint-card-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .maint-card-actions svg { width: 13px; height: 13px; }
+
+/* Printer and phone are the only two kinds, so they get the two strongest tints
+   and a reader can tell them apart before they read a word. */
+.maint-chip {
+  width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.maint-chip svg { width: 17px; height: 17px; }
+.maint-chip-printer { background: var(--blue-light); color: var(--blue); }
+.maint-chip-phone   { background: var(--teal-light);  color: var(--teal); }
+.badge-maint-printer { background: var(--blue-light); color: var(--blue); border: 1px solid var(--blue-mid); }
+.badge-maint-phone   { background: var(--teal-light);  color: var(--teal);  border: 1px solid var(--teal-mid); }
+
+/* How much of its own interval a device has used up. interval_days and
+   next_due_on both arrive with the row, so this is arithmetic on data already
+   loaded rather than a new endpoint. The fill is the same urgency language as
+   everything above, so one glance answers both "when" and "how bad". */
+.maint-meter { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.maint-meter-track {
+  flex: 0 1 150px; height: 4px; border-radius: 3px;
+  background: var(--gray-100); overflow: hidden;
+}
+.maint-meter-fill {
+  height: 100%; border-radius: 3px; background: var(--teal-mid);
+  transition: width 0.4s ease, background 0.3s ease;
+}
+.maint-meter-fill.soon { background: var(--amber); }
+.maint-meter-fill.late { background: var(--red); }
+.maint-meter-label { font-size: 11px; color: var(--gray-400); white-space: nowrap; }
+
+/* The summary strip. Four tiles that hold their positions whatever the numbers
+   are, so the page does not reshuffle itself as checks are recorded. A tile at
+   zero stays grey rather than disappearing: "nothing overdue" is the good outcome
+   and should read as an answer, not as missing data. */
+.maint-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+.maint-tile {
+  position: relative; overflow: hidden;
+  background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg);
+  padding: 12px 15px 13px 17px;
+  transition: border-color 0.25s ease;
+}
+/* Left edge and value take the tile's colour; the tint comes from the overlay
+   below. Retired is deliberately the quietest of the four -- it is an archive,
+   not a queue, and should never compete with what is actually waiting. */
+.maint-tile.overdue   { --tile-color: var(--red);       --tile-tint: var(--red-light); }
+.maint-tile.soon      { --tile-color: var(--amber);     --tile-tint: var(--amber-light); }
+.maint-tile.scheduled { --tile-color: var(--teal);      --tile-tint: var(--teal-light); }
+.maint-tile.retired   { --tile-color: var(--gray-400);  --tile-tint: transparent; }
+.maint-tile::before {
+  content: ''; position: absolute; inset: 0 auto 0 0; width: 3px;
+  background: var(--gray-200); transition: background 0.25s ease;
+}
+.maint-tile::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: var(--tile-tint, transparent);
+  opacity: 0; transition: opacity 0.3s ease;
+}
+.maint-tile > * { position: relative; }
+.maint-tile.live::after { opacity: 1; }
+.maint-tile.live::before { background: var(--tile-color); }
+.maint-tile-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 500; color: var(--gray-400);
+}
+.maint-tile-value { font-size: 25px; font-weight: 600; line-height: 1; margin-top: 8px; color: var(--gray-300); transition: color 0.25s ease; }
+.maint-tile.live .maint-tile-value { color: var(--tile-color); }
+.maint-tile .stat-dot { background: var(--gray-300); transition: background 0.25s ease; }
+.maint-tile.live .stat-dot { background: var(--tile-color); }
+
+/* The queue headings carry the same four colours as the tiles above them, so the
+   strip reads as a legend for the sections under it. */
+.maint-queue { margin-bottom: 22px; }
+.maint-queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.maint-queue-head h2 { font-size: 15px; margin: 0; }
+.maint-queue-count { font-size: 12.5px; color: var(--gray-400); }
+.maint-queue-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--gray-300); }
+.maint-queue.maint-queue-overdue   .maint-queue-dot { background: var(--red); }
+.maint-queue.maint-queue-soon      .maint-queue-dot { background: var(--amber); }
+.maint-queue.maint-queue-scheduled .maint-queue-dot { background: var(--teal); }
+
+/* Cards arrive rather than snap in, and the one genuinely overdue tile breathes.
+   Both are plain CSS: no tween to leak and no cleanup path to get wrong. React
+   reuses the card nodes across a refresh, so only genuinely new rows animate.
+
+   The entrance moves but does not fade, deliberately. An opacity in the `from`
+   keyframe means the resting state lives inside the animation, so any situation
+   where the timeline does not advance -- a backgrounded tab, a print, an
+   extension, anything that stops animations outright -- leaves the whole queue
+   invisible. Displacing by a few pixels instead has the same effect when it runs
+   and costs nothing when it does not. */
+@keyframes maintCardIn {
+  from { transform: translateY(-8px); }
+  to   { transform: none; }
+}
+@keyframes maintBreathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 75, 75, 0); }
+  50%      { box-shadow: 0 0 0 4px rgba(217, 75, 75, 0.20); }
+}
+.maint-card.maint-enter { animation: maintCardIn 220ms ease-out backwards; }
+.maint-tile.overdue.live { animation: maintBreathe 2.8s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .maint-card.maint-enter,
+  .maint-tile.overdue.live { animation: none; }
+  .maint-card, .maint-card::before, .maint-meter-fill,
+  .maint-tile, .maint-tile::after { transition: none; }
+}
+@media (max-width: 900px) { .maint-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .maint-tiles { grid-template-columns: 1fr; } }
 
 /* ── Maintenance: equipment type choice ──
    Tiles rather than chips. These set a form value rather than filtering a list,
@@ -1026,6 +1157,8 @@ html.dark .topbar,
 html.dark .stat-card,
 html.dark .table-card,
 html.dark .mini-card,
+html.dark .maint-card,
+html.dark .maint-tile,
 html.dark .support-stat-card,
 html.dark .modal,
 html.dark .auth-card,
@@ -1039,6 +1172,8 @@ html.dark .topbar  { border-color: var(--gray-200) !important; }
 html.dark .stat-card,
 html.dark .table-card,
 html.dark .mini-card,
+html.dark .maint-card,
+html.dark .maint-tile,
 html.dark .support-stat-card { border-color: var(--gray-200) !important; }
 html.dark .error-boundary-card { border-color: var(--gray-200) !important; }
 html.dark .support-counts { border-color: var(--gray-200) !important; }
@@ -1624,6 +1759,7 @@ const T = {
   maintenanceEditDevice: 'Edit equipment',
   maintenanceInterval: 'How often',
   maintenanceIntervalDays: 'every {days} days',
+  maintenanceRound: '{used} of {total} days used',
   maintenanceDeviceName: 'Name',
   maintenanceDeviceNameHint: 'What the technician calls it — e.g. “Reception front desk”',
   maintenanceEquipment: 'Equipment',
@@ -2171,6 +2307,7 @@ const T = {
   maintenanceEditDevice: 'Editar equipamento',
   maintenanceInterval: 'Com que frequência',
   maintenanceIntervalDays: 'a cada {days} dias',
+  maintenanceRound: '{used} de {total} dias usados',
   maintenanceDeviceName: 'Nome',
   maintenanceDeviceNameHint: 'Como o técnico lhe chama — ex. “Receção da frente”',
   maintenanceEquipment: 'Equipamento',
@@ -6665,10 +6802,11 @@ const MAINTENANCE_PRESETS = [
 // in the normal tables already categorised.
 const maintenanceIssueType = eq => eq === 'phone' ? 'Phone' : 'Printer';
 
-function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit }) {
+function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit, index = 0 }) {
   const late = s.due_state === 'overdue';
   const soon = s.due_state === 'due_soon';
-  const typeLabel = s.equipment_type === 'phone' ? t.maintenancePhone : t.maintenancePrinter;
+  const isPhone = s.equipment_type === 'phone';
+  const typeLabel = isPhone ? t.maintenancePhone : t.maintenancePrinter;
 
   let dueText;
   if (late) {
@@ -6688,12 +6826,32 @@ function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit 
         s.last_outcome === 'fault' ? t.maintenanceFault : t.maintenanceAllFine}`
     : t.maintenanceNeverChecked;
 
+  // How much of its own interval this device has used up, from the interval and
+  // the next due date that already arrived with the row. Clamped at both ends:
+  // overdue deliberately runs to a full bar, because "past the end" is the whole
+  // point of it rather than a number that keeps climbing.
+  const round = Number(s.interval_days) || 0;
+  const dueDay = dayNumber(s.next_due_on);
+  const todayDay = dayNumber(localISODate(new Date()));
+  const daysLeft = dueDay === null || todayDay === null ? null : dueDay - todayDay;
+  const daysUsed = round > 0 && daysLeft !== null
+    ? Math.max(0, Math.min(round, round - daysLeft))
+    : null;
+
   return (
-    <div className={`maint-card ${late ? 'maint-late' : ''} ${!s.active ? 'maint-retired' : ''}`}>
+    <div className={`maint-card maint-enter ${
+        late ? 'maint-overdue' : soon ? 'maint-soon' : 'maint-scheduled'
+      } ${!s.active ? 'maint-retired' : ''}`}
+      // Staggered by position so the queue arrives in order instead of all at
+      // once. Capped: a long overdue queue should not take a second to appear.
+      style={{animationDelay: `${Math.min(index, 8) * 30}ms`}}>
+      <span className={`maint-chip maint-chip-${isPhone ? 'phone' : 'printer'}`} aria-hidden="true">
+        {isPhone ? Ic.phone : Ic.printer}
+      </span>
       <div className="maint-card-main">
         <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
           <strong style={{fontSize:14}}>{s.device_name}</strong>
-          <span className="badge badge-type">{typeLabel}</span>
+          <span className={`badge badge-maint-${isPhone ? 'phone' : 'printer'}`}>{typeLabel}</span>
           {late && <span className="badge badge-pending">{dueText}</span>}
           {!late && soon && <span className="badge badge-ok" style={{background:'var(--amber-light)',color:'var(--amber)'}}>{dueText}</span>}
           {!s.active && <span className="badge badge-slate">{t.maintenanceRetired}</span>}
@@ -6710,6 +6868,18 @@ function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit 
           {lastLine}
           {s.last_done_by_name && ` · ${t.maintenanceBy.replace('{name}', s.last_done_by_name)}`}
         </div>
+        {/* A retired device has no round left to run, so it gets no meter. */}
+        {s.active && daysUsed !== null && (
+          <div className="maint-meter">
+            <div className="maint-meter-track">
+              <div className={`maint-meter-fill ${late ? 'late' : soon ? 'soon' : ''}`}
+                style={{width: `${Math.round(daysUsed / round * 100)}%`}}/>
+            </div>
+            <span className="maint-meter-label">
+              {t.maintenanceRound.replace('{used}', daysUsed).replace('{total}', round)}
+            </span>
+          </div>
+        )}
         {s.last_note && s.active && (
           <div style={{fontSize:12,color:'var(--gray-500)',marginTop:3,fontStyle:'italic'}}>
             “{s.last_note}”
@@ -6745,13 +6915,26 @@ function formatDateShort(iso) {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, {day:'numeric', month:'short'});
 }
 
+// dayNumber turns a YYYY-MM-DD string into whole days since the epoch.
+//
+// Both sides are built with Date.UTC so the two dates are compared as plain
+// calendar days and neither can slip by one according to where the reader is --
+// the same reason formatDateShort avoids new Date(iso) above. Returns null for
+// anything unparseable rather than NaN, so a missing date is a skipped meter and
+// not a bar rendered at width NaN.
+function dayNumber(iso) {
+  const [y, m, d] = String(iso || '').slice(0, 10).split('-').map(Number);
+  return y && m && d ? Math.floor(Date.UTC(y, m - 1, d) / 86400000) : null;
+}
+
 function MaintenanceQueue({ title, list, t, emptyText, canManage, handlers, testId }) {
   if (!list.length) return null;
   return (
-    <div style={{marginBottom:22}} data-maint-section={testId}>
-      <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:10}}>
-        <h2 style={{fontSize:15,margin:0}}>{title}</h2>
-        <span style={{fontSize:12.5,color:'var(--gray-400)'}}>{list.length}</span>
+    <div className={`maint-queue maint-queue-${testId}`} data-maint-section={testId}>
+      <div className="maint-queue-head">
+        <span className="maint-queue-dot" aria-hidden="true"/>
+        <h2>{title}</h2>
+        <span className="maint-queue-count">{list.length}</span>
       </div>
       {list.map((s, i) => (
         <MaintenanceDeviceCard key={s.id} s={s} t={t} index={i} canManage={canManage} {...handlers}/>
@@ -6881,6 +7064,24 @@ function MaintenancePage({ token, currentUser, departments, setToast, onCountsUp
           </button>
         )}
       </div>
+
+      {/* Only once there is something to count. Four grey zeroes above "no
+          equipment yet" is noise, and the empty state already says it. */}
+      {all.length > 0 && (
+        <div className="maint-tiles">
+          {[
+            { key: 'overdue',   n: overdue.length,   label: t.maintenanceOverdue },
+            { key: 'soon',      n: dueSoon.length,   label: t.maintenanceDueSoon },
+            { key: 'scheduled', n: scheduled.length, label: t.maintenanceScheduled },
+            { key: 'retired',   n: retired.length,   label: t.maintenanceRetired },
+          ].map(x => (
+            <div key={x.key} className={`maint-tile ${x.key}${x.n ? ' live' : ''}`}>
+              <div className="maint-tile-label"><span className="stat-dot" aria-hidden="true"/>{x.label}</div>
+              <div className="maint-tile-value"><CountUp value={x.n}/></div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!active.length && !retired.length ? (
         <div className="empty-state">{Ic.tool}<p>{t.maintenanceNone}</p></div>
