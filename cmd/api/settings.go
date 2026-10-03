@@ -20,6 +20,9 @@ func (app *application) updateSettingsHandler(w http.ResponseWriter, r *http.Req
 	var input struct {
 		DuplicateWindowHours int `json:"duplicate_window_hours"`
 		LCUWindowDays        int `json:"lcu_window_days"`
+		// A pointer so an absent sla_minutes clears the SLA rather than silently
+		// defaulting to zero, which would flag every issue that took any time.
+		SLAMinutes *int `json:"sla_minutes"`
 	}
 	if err := app.readJSON(w, r, &input); err != nil {
 		app.badRequestResponse(w, r, err)
@@ -29,6 +32,7 @@ func (app *application) updateSettingsHandler(w http.ResponseWriter, r *http.Req
 	s := &data.Settings{
 		DuplicateWindowHours: input.DuplicateWindowHours,
 		LCUWindowDays:        input.LCUWindowDays,
+		SLAMinutes:           input.SLAMinutes,
 	}
 	v := validator.New()
 	if data.ValidateSettings(v, s); !v.Valid() {
@@ -37,7 +41,7 @@ func (app *application) updateSettingsHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	user := app.contextGetUser(r)
-	updated, err := app.models.Settings.Update(s.DuplicateWindowHours, s.LCUWindowDays, user.ID)
+	updated, err := app.models.Settings.Update(s.DuplicateWindowHours, s.LCUWindowDays, s.SLAMinutes, user.ID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return

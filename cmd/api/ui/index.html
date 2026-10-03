@@ -338,6 +338,16 @@ tbody tr.row-clickable { cursor: pointer; }
   padding: 3px 9px; border-radius: 20px; font-size: 11.5px; font-weight: 500; white-space: nowrap;
 }
 .badge-ok { background: var(--green-light); color: var(--green); }
+/* An issue whose resolution time ran past the SLA. A filled pill rather than red
+   text on its own: these tables are read by scanning down a column of small
+   numbers, and colour alone on one figure among twenty is easy to walk past. The
+   colours are all theme variables, so this flips correctly in dark mode without
+   an override of its own. */
+.sla-breach {
+  display: inline-block; font-weight: 600;
+  padding: 1px 6px; border-radius: 5px;
+  background: var(--red-light); color: var(--red); border: 1px solid var(--red-mid);
+}
 .badge-pending { background: var(--amber-light); color: var(--amber); }
 .badge-internet { background: var(--teal-light); color: var(--teal); border: 1px solid var(--teal-mid); }
 .badge-type { background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200); }
@@ -2267,7 +2277,12 @@ const T = {
     adminLcuWindow: 'LCU testing window',
     lcuWindowLabel: 'Trial length (days)',
     lcuWindowHint: 'How long a new card reader is trialled for. Readers already on trial keep the window they were given.',
-    settingsSaved: 'Settings saved',
+    adminSla: 'Resolution SLA',
+  adminSlaSub: 'How long a fix is allowed to take. Anything longer is flagged in red in the issue lists, the history and the daily report. Leave it empty for no SLA.',
+  slaMinutesLabel: 'Target resolution time (minutes)',
+  slaUnsetPlaceholder: 'No SLA',
+  slaBreachedTitle: 'Over the {minutes} minute SLA',
+  settingsSaved: 'Settings saved',
     duplicateAlertTitle: 'Possible recurring issue',
     noIssueTypes: 'No issue types yet.',
     removeType: 'Remove',
@@ -2820,7 +2835,12 @@ const T = {
     adminLcuWindow: 'Janela de teste LCU',
     lcuWindowLabel: 'Duração do teste (dias)',
     lcuWindowHint: 'Durante quantos dias é posto à prova um leitor de cartão novo. Os leitores já em teste mantêm a janela que lhes foi dada.',
-    settingsSaved: 'Definições guardadas',
+    adminSla: 'SLA de resolução',
+  adminSlaSub: 'Quanto tempo uma reparação pode demorar. O que demorar mais fica marcado a vermelho nas listas de avarias, no histórico e no relatório diário. Deixe vazio para não haver SLA.',
+  slaMinutesLabel: 'Tempo de resolução alvo (minutos)',
+  slaUnsetPlaceholder: 'Sem SLA',
+  slaBreachedTitle: 'Acima do SLA de {minutes} minutos',
+  settingsSaved: 'Definições guardadas',
     duplicateAlertTitle: 'Possível avaria recorrente',
     noIssueTypes: 'Ainda não há tipos de avaria.',
     removeType: 'Remover',
@@ -4437,7 +4457,30 @@ function Dashboard({ users, stats }) {
 }
 
 /* ════════════════ ISSUES TABLE ════════════════ */
-function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUser, newIssueId, onDelete, onEdit }) {
+// The one place that decides whether a resolution time has breached the SLA.
+//
+// Four tables show a resolution time -- both issue lists, the history table, the
+// daily report and the profile -- and a component rather than a helper returning
+// a style object is what keeps the comparison and the red from drifting apart
+// between them. With no SLA configured it renders exactly what these tables
+// rendered before one existed, so the feature is invisible until it is switched on.
+//
+// sla is nullable and that is the whole off switch: null means no SLA, so nothing
+// is ever flagged. Zero could not mean the same thing -- it would mark every issue
+// that took any time at all, including a three-minute fix.
+function IssueTime({ minutes, sla, t }) {
+  const m = Number(minutes) || 0;
+  const base = {fontFamily:'DM Mono,monospace', fontSize:13};
+  if (sla == null || m <= sla) return <span style={base}>{m}m</span>;
+  return (
+    <span className="sla-breach" style={base}
+      title={t.slaBreachedTitle.replace('{minutes}', sla)}>
+      {m}m
+    </span>
+  );
+}
+
+function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUser, newIssueId, slaMinutes, onDelete, onEdit }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   // `null` means "no type filter", rather than the translated word for "All".
@@ -4525,7 +4568,7 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
                 <td><TypeBadge type={issue.type}/></td>
                 <td style={{maxWidth:150}}>{issue.problem}{issue.falsePositive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}<TVSwapStrip swaps={issue.tvSwaps} t={t}/><ConsumableStrip items={issue.consumables}/><SupportRequestStrip requests={issue.supportRequests} t={t}/></td>
                 <td style={{maxWidth:190,color:'var(--gray-600)',fontSize:13}}>{issue.resolution}</td>
-                <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.time}m</td>
+                <td><IssueTime minutes={issue.time} sla={slaMinutes} t={t}/></td>
                 <td><span className={`badge ${issue.status==='Ok'?'badge-ok':'badge-pending'} ${issue.id===newIssueId ? 'status-highlight' : ''}`}>{issue.status}</span></td>
                 <td>
                   <div style={{display:'flex',alignItems:'center',gap:7}}>
@@ -4562,7 +4605,7 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
 }
 
 /* ════════════════ HISTORY PAGE ════════════════ */
-function HistoryPage({ token, issueTypes, epoch=0, currentUser, onDelete, onEdit }) {
+function HistoryPage({ token, issueTypes, epoch=0, currentUser, slaMinutes, onDelete, onEdit }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const todayStr = localISODate(new Date());
@@ -4587,8 +4630,8 @@ function HistoryPage({ token, issueTypes, epoch=0, currentUser, onDelete, onEdit
           which is why this page needed every issue in memory to show one day of
           them. Each table now paginates on its own, so the two can be showing
           different amounts. */}
-      <IssuesTable token={token} issueTypes={issueTypes} tableMode="apt"  date={date} epoch={epoch} currentUser={currentUser} onDelete={onDelete} onEdit={onEdit}/>
-      <IssuesTable token={token} issueTypes={issueTypes} tableMode="dept" date={date} epoch={epoch} currentUser={currentUser} onDelete={onDelete} onEdit={onEdit}/>
+      <IssuesTable token={token} issueTypes={issueTypes} tableMode="apt"  date={date} epoch={epoch} currentUser={currentUser} slaMinutes={slaMinutes} onDelete={onDelete} onEdit={onEdit}/>
+      <IssuesTable token={token} issueTypes={issueTypes} tableMode="dept" date={date} epoch={epoch} currentUser={currentUser} slaMinutes={slaMinutes} onDelete={onDelete} onEdit={onEdit}/>
     </div>
   );
 }
@@ -7593,7 +7636,7 @@ function MaintenanceHistoryDialog({ schedule, token, t, onClose }) {
 }
 
 /* ════════════════ REPORTS PAGE ════════════════ */
-function ReportsPage({ token }) {
+function ReportsPage({ token, slaMinutes }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [date,    setDate]    = useState(localISODate(new Date()));
@@ -7770,7 +7813,7 @@ function ReportsPage({ token }) {
                       <td><TypeBadge type={i.type}/></td>
                       <td style={{maxWidth:140,fontSize:13}}>{i.problem}{i.false_positive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}</td>
                       <td style={{maxWidth:180,fontSize:13,color:'var(--gray-600)'}}>{i.resolution||'—'}</td>
-                      <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.time_minutes}m</td>
+                      <td><IssueTime minutes={i.time_minutes} sla={slaMinutes} t={t}/></td>
                       <td><span className={`badge ${i.status==='Ok'?'badge-ok':'badge-pending'}`}>{i.status}</span></td>
                       <td>
                         <div style={{display:'flex',alignItems:'center',gap:7}}>
@@ -7802,7 +7845,7 @@ function ReportsPage({ token }) {
                       <td><TypeBadge type={i.type}/></td>
                       <td style={{maxWidth:140,fontSize:13}}>{i.problem}{i.false_positive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}</td>
                       <td style={{maxWidth:180,fontSize:13,color:'var(--gray-600)'}}>{i.resolution||'—'}</td>
-                      <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.time_minutes}m</td>
+                      <td><IssueTime minutes={i.time_minutes} sla={slaMinutes} t={t}/></td>
                       <td><span className={`badge ${i.status==='Ok'?'badge-ok':'badge-pending'}`}>{i.status}</span></td>
                       <td>
                         <div style={{display:'flex',alignItems:'center',gap:7}}>
@@ -7841,7 +7884,7 @@ function ReportsPage({ token }) {
 }
 
 /* ════════════════ PROFILE PAGE ════════════════ */
-function ProfilePage({ currentUser, token, onSessionUpdate, setToast, lang, onLangChange }) {
+function ProfilePage({ currentUser, token, onSessionUpdate, setToast, lang, onLangChange, slaMinutes }) {
   const t = T[lang];
   const [myStats,  setMyStats]  = useState(null);
   const [myIssues, setMyIssues] = useState([]);
@@ -8090,7 +8133,7 @@ function ProfilePage({ currentUser, token, onSessionUpdate, setToast, lang, onLa
                         <td><TypeBadge type={i.type}/></td>
                         <td style={{maxWidth:160,fontSize:13}}>{i.problem}</td>
                         <td><span className={`badge ${i.status==='Ok'?'badge-ok':'badge-pending'}`}>{i.status}</span></td>
-                        <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.time}m</td>
+                        <td><IssueTime minutes={i.time} sla={slaMinutes} t={t}/></td>
                         <td style={{fontSize:12,color:'var(--gray-400)'}}>{i.createdAt}</td>
                       </tr>
                     ))}
@@ -8288,29 +8331,42 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
 
   const [windowHours, setWindowHours] = useState(settings?.duplicate_window_hours ?? 24);
   const [lcuDays, setLcuDays] = useState(settings?.lcu_window_days ?? 7);
+  // Held as a string, not a number, because it is optional and blank has to stay
+  // a state the field can be in. A manager who never set an SLA must be able to
+  // clear the box and save, which means sending null; a number state would turn
+  // that cleared field into 0 and the server would -- correctly -- reject it.
+  const [slaMinutes, setSlaMinutes] = useState(settings?.sla_minutes ?? '');
   const [savingSettings, setSavingSettings] = useState(false);
   useEffect(() => {
     if (settings) {
       setWindowHours(settings.duplicate_window_hours);
       setLcuDays(settings.lcu_window_days ?? 7);
+      setSlaMinutes(settings.sla_minutes ?? '');
     }
   }, [settings]);
 
-  // The settings row is written whole, so both sends carry both values. What
-  // differs is intent: one form owns the alert window and the other owns the
-  // LCU trial window, so a saved field never silently carries the other one along
-  // with it from the editor.
+  // The settings row is written whole, so every send carries every value. What
+  // differs is intent: one form owns the alert window, another the LCU trial
+  // window, another the SLA, so a saved field never silently carries the others
+  // along with it from the editor.
   async function saveSettings(e, which) {
     e.preventDefault();
     setSavingSettings(true);
     try {
+      const trimmed = String(slaMinutes).trim();
       const res = await apiFetch('/settings', {
         method:'PATCH',
-        body:{ duplicate_window_hours: Number(windowHours), lcu_window_days: Number(lcuDays) },
+        body:{
+          duplicate_window_hours: Number(windowHours),
+          lcu_window_days: Number(lcuDays),
+          // null switches the SLA off. A blank field is how that is done.
+          sla_minutes: trimmed === '' ? null : Number(trimmed),
+        },
         token});
       onSettingsUpdate(res.settings);
       if (which === 'alert') setWindowHours(res.settings.duplicate_window_hours);
-      else setLcuDays(res.settings.lcu_window_days);
+      else if (which === 'lcu') setLcuDays(res.settings.lcu_window_days);
+      else setSlaMinutes(res.settings.sla_minutes ?? '');
       setToast(t.settingsSaved);
     } catch(ex) { setToast('Error: ' + ex.message); }
     finally { setSavingSettings(false); }
@@ -8318,6 +8374,7 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
 
   const saveAlertWindow = e => saveSettings(e, 'alert');
   const saveLcuWindow   = e => saveSettings(e, 'lcu');
+  const saveSla         = e => saveSettings(e, 'sla');
 
   async function addType(e) {
     e.preventDefault();
@@ -8472,13 +8529,13 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
 
   return (
     <div style={{maxWidth:1360}}>
-      {/* Two separate cards, because these windows are unrelated settings and
-          saving one should not look like it saved the other. They sit in the
-          same grid as the add-a-type and add-a-department cards below, so the
-          whole page reads as four paired cards rather than one full-width pair
-          stacked on another. Each form sends both values, since the endpoint
-          writes the settings row as a whole -- but the visible outcome of each
-          save is only its own field. */}
+      {/* Three separate cards, because these are unrelated settings and saving
+          one should not look like it saved the others. They sit in the same grid
+          as the add-a-type and add-a-department cards below, so the whole page
+          reads as paired cards rather than one full-width row stacked on
+          another. Each form sends every value, since the endpoint writes the
+          settings row as a whole -- but the visible outcome of each save is only
+          its own field. */}
       <div className="admin-grid" style={{marginBottom:20}}>
         <div className="mini-card">
           <div className="mini-card-title" style={{marginBottom:6}}>{t.adminAlerts}</div>
@@ -8507,6 +8564,27 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
             </div>
             <button type="submit" className="btn btn-primary"
               disabled={savingSettings || !lcuDays}>
+              {Ic.check} {savingSettings ? '…' : t.saveChanges}
+            </button>
+          </form>
+        </div>
+
+        <div className="mini-card">
+          <div className="mini-card-title" style={{marginBottom:6}}>{t.adminSla}</div>
+          <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminSlaSub}</p>
+          <form onSubmit={saveSla} className="admin-form">
+            <div className="form-group" style={{maxWidth:180}}>
+              <label>{t.slaMinutesLabel}</label>
+              {/* No placeholder number on purpose: a greyed-out 30 would be read as
+                  a real threshold by anyone who skimmed it, and the difference
+                  between "30 minutes" and "no SLA" is exactly what this field has
+                  to make obvious. */}
+              <input className="form-control" type="number" min="1" max="14400"
+                value={slaMinutes} placeholder={t.slaUnsetPlaceholder}
+                onChange={e=>setSlaMinutes(e.target.value)} />
+            </div>
+            <button type="submit" className="btn btn-primary"
+              disabled={savingSettings || String(slaMinutes).trim() === ''}>
               {Ic.check} {savingSettings ? '…' : t.saveChanges}
             </button>
           </form>
@@ -9244,9 +9322,9 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
                 every issue ever logged and hand the same array to all three of
                 these pages at once, which meant the History page needed the whole
                 dataset in memory to show one day of it. */}
-            {page==='apt'       && <IssuesTable token={token} issueTypes={issueTypes} tableMode="apt"  epoch={issuesEpoch} currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
-            {page==='dept'      && <IssuesTable token={token} issueTypes={issueTypes} tableMode="dept" epoch={issuesEpoch} currentUser={me} newIssueId={newIssueId} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
-            {page==='history'   && <HistoryPage token={token} issueTypes={issueTypes} epoch={issuesEpoch} currentUser={me} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='apt'       && <IssuesTable token={token} issueTypes={issueTypes} tableMode="apt"  epoch={issuesEpoch} currentUser={me} newIssueId={newIssueId} slaMinutes={settings?.sla_minutes} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='dept'      && <IssuesTable token={token} issueTypes={issueTypes} tableMode="dept" epoch={issuesEpoch} currentUser={me} newIssueId={newIssueId} slaMinutes={settings?.sla_minutes} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
+            {page==='history'   && <HistoryPage token={token} issueTypes={issueTypes} epoch={issuesEpoch} currentUser={me} slaMinutes={settings?.sla_minutes} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='alerts'    && <AlertsPage currentUser={me} token={token} onCountsUpdate={setAlertsPendingCount} setToast={setToast}/>}
             {page==='maintenance' && <MaintenancePage token={token} currentUser={me} departments={departments} setToast={setToast} onCountsUpdate={setMaintenanceDueCount} onRequestIssue={req => setMaintIssue(req)}/>}
             {page==='analytics' && <AnalyticsPage token={token} alertsPendingCount={alertsPendingCount}/>}
@@ -9254,7 +9332,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             {page==='support' && <SupportPage token={token}/>}
             {page==='team'    && <TeamPage token={token} users={users} userIssueStats={userIssueStats} currentUser={me}
               token={token} onUsersUpdate={setUsers} setToast={setToast}/>}
-            {page==='reports' && <ReportsPage token={token}/>}
+            {page==='reports' && <ReportsPage token={token} slaMinutes={settings?.sla_minutes}/>}
             {/* LCU testing — a card reader on trial for a run of days, the length
                 of which a manager sets on the Admin page. The page needs it
                 because its copy names the period. */}
@@ -9285,6 +9363,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
               setToast={setToast}
               lang={lang}
               onLangChange={setLang}
+  slaMinutes={settings?.sla_minutes}
             />}
             </PageShell>
             </PageErrorBoundary>
