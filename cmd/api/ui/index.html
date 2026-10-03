@@ -2066,6 +2066,10 @@ const T = {
     addDepartment: 'Add department',
     departmentPlaceholder: 'e.g. Housekeeping',
     toastDeptAdded: 'Department added',
+    renameDepartment: 'Rename department',
+    renameDepartmentEmpty: 'A department needs a name.',
+    toastDeptRenamed: 'Department renamed.',
+    toastDeptRenamedWithIssues: 'Department renamed to {name}. {count} existing issue(s) moved with it.',
     toastDeptDeleted: 'Department removed',
     noDepartments: 'No departments yet.',
     removeDepartment: 'Remove',
@@ -2610,6 +2614,10 @@ const T = {
     addDepartment: 'Adicionar departamento',
     departmentPlaceholder: 'ex. Governanta',
     toastDeptAdded: 'Departamento adicionado',
+    renameDepartment: 'Renomear serviço',
+    renameDepartmentEmpty: 'Um serviço precisa de um nome.',
+    toastDeptRenamed: 'Serviço renomeado.',
+    toastDeptRenamedWithIssues: 'Serviço renomeado para {name}. {count} avaria(s) existentes foram acompanhadas.',
     toastDeptDeleted: 'Departamento removido',
     noDepartments: 'Ainda não há departamentos.',
     removeDepartment: 'Remover',
@@ -7968,6 +7976,9 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
   const [err, setErr] = useState('');
 
   const [deptName, setDeptName] = useState('');
+  // Which department row is open for renaming, and what has been typed into it.
+  const [editingDeptId, setEditingDeptId] = useState(null);
+  const [deptDraft, setDeptDraft]     = useState('');
   const [savingDept, setSavingDept] = useState(false);
   const [deptErr, setDeptErr] = useState('');
 
@@ -8069,7 +8080,41 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
     finally { setSavingDept(false); }
   }
 
-  async function removeDept(id) {
+  // Renaming edits the row in place rather than opening a dialog: the list
+    // already shows the name, so the cell becomes an input and saves from there.
+    // A modal for one short field would be heavier than the change being made.
+    function startDeptEdit(d) {
+      setEditingDeptId(d.id);
+      setDeptDraft(d.name);
+      setDeptErr('');
+    }
+
+    function cancelDeptEdit() {
+      setEditingDeptId(null);
+      setDeptDraft('');
+      setDeptErr('');
+    }
+
+    async function saveDeptEdit(id) {
+      const trimmed = deptDraft.trim();
+      if (!trimmed) { setDeptErr(t.renameDepartmentEmpty); return; }
+      setSavingDept(true); setDeptErr('');
+      try {
+        const res = await apiFetch(`/departments/${id}`, {method:'PATCH', body:{name: trimmed}, token});
+        // Replaced rather than edited field-by-field: the API echoes the row back
+        // complete, so this is exactly what a fresh load would show.
+        onDepartmentsUpdate(prev => prev.map(d => d.id === id ? res.department : d)
+          .sort((a,b)=>a.name.localeCompare(b.name)));
+        setToast(res.issues_updated > 0
+          ? t.toastDeptRenamedWithIssues.replace('{name}', res.department.name)
+                                         .replace('{count}', res.issues_updated)
+          : t.toastDeptRenamed);
+        cancelDeptEdit();
+      } catch(ex) { setDeptErr(ex.message); }
+      finally { setSavingDept(false); }
+    }
+
+    async function removeDept(id) {
     try {
       await apiFetch(`/departments/${id}`, {method:'DELETE', token});
       onDepartmentsUpdate(prev => prev.filter(d => d.id !== id));
@@ -8259,11 +8304,40 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
                     <tr><th>{t.department}</th><th></th></tr>
                   </thead>
                   <tbody>
-                    {departments.map(d=>(
+                    {departments.map(d => (
                       <tr key={d.id}>
-                        <td>{d.name}</td>
-                        <td style={{textAlign:'right'}}>
-                          <button className="icon-btn" title={t.removeDepartment} onClick={()=>removeDept(d.id)}>{Ic.trash}</button>
+                        {editingDeptId === d.id ? (
+                          <td>
+                            <input className="form-control" autoFocus maxLength={50}
+                              value={deptDraft}
+                              onChange={e=>setDeptDraft(e.target.value)}
+                              onKeyDown={e=>{
+                                if (e.key === 'Enter') saveDeptEdit(d.id);
+                                if (e.key === 'Escape') cancelDeptEdit();
+                              }}/>
+                            {deptErr && <div style={{fontSize:12,color:'var(--red)',marginTop:5}}>{deptErr}</div>}
+                          </td>
+                        ) : (
+                          <td>{d.name}</td>
+                        )}
+                        <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                          {editingDeptId === d.id ? (
+                            <>
+                              <button className="btn btn-primary" style={{padding:'4px 12px',fontSize:12}}
+                                onClick={()=>saveDeptEdit(d.id)} disabled={savingDept || !deptDraft.trim()}>
+                                {savingDept ? '…' : t.saveChanges}
+                              </button>
+                              <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
+                                onClick={cancelDeptEdit} disabled={savingDept}>{t.cancel}</button>
+                            </>
+                          ) : (
+                            <>
+                              <button className="icon-btn" title={t.renameDepartment}
+                                onClick={()=>startDeptEdit(d)}>{Ic.edit}</button>
+                              <button className="icon-btn" title={t.removeDepartment}
+                                onClick={()=>removeDept(d.id)}>{Ic.trash}</button>
+                            </>
+                          )}
                         </td>
                       </tr>
                     ))}

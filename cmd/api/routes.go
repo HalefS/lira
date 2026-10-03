@@ -133,6 +133,9 @@ func (app *application) routes() http.Handler {
 	// Departments — list for all authenticated users; mutate for managers only
 	router.HandlerFunc(http.MethodGet, "/v1/departments", app.requireAuth(app.listDepartmentsHandler))
 	router.HandlerFunc(http.MethodPost, "/v1/departments", app.requireAuth(app.requireManager(app.createDepartmentHandler)))
+	// The rename carries its name to issues and recurring alerts, which hold a
+	// copy of it rather than the id -- see DepartmentModel.Rename.
+	router.HandlerFunc(http.MethodPatch, "/v1/departments/:id", app.requireAuth(app.requireManager(app.updateDepartmentHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/departments/:id", app.requireAuth(app.requireManager(app.deleteDepartmentHandler)))
 
 	// Melia Connecta Agents — list for all authenticated users; mutate for managers only

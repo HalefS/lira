@@ -6,11 +6,14 @@ import (
 )
 
 var (
-	ErrRecordNotFound         = errors.New("record not found")
-	ErrEditConflict           = errors.New("edit conflict")
-	ErrDuplicateEmail         = errors.New("duplicate email")
-	ErrDuplicateIssueType     = errors.New("duplicate issue type")
-	ErrDuplicateDepartment    = errors.New("duplicate department")
+	ErrRecordNotFound      = errors.New("record not found")
+	ErrEditConflict        = errors.New("edit conflict")
+	ErrDuplicateEmail      = errors.New("duplicate email")
+	ErrDuplicateIssueType  = errors.New("duplicate issue type")
+	ErrDuplicateDepartment = errors.New("duplicate department")
+	// A rename would move a department's name onto one that already has a
+	// recurring alert of the same type, and the two cannot both exist.
+	ErrDepartmentRenameClash  = errors.New("department rename would collide with an existing recurring alert")
 	ErrDuplicateConnectaAgent = errors.New("duplicate connecta agent")
 
 	ErrDuplicateConsumableItem = errors.New("duplicate consumable item")
