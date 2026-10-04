@@ -407,14 +407,23 @@ tbody tr.row-clickable { cursor: pointer; }
    the card's own surface: dark mode forces card backgrounds with !important, and
    this way the tint needs no !important of its own to survive that. It also fades
    to nothing by 58%, so the tile's text stays on white instead of on red. */
-/* Five across. The tile gives up its padding rather than its content: the
-   caption, the two fact icons, the meter and the button label all stay exactly
-   as they were, and the extra room is found in the tile's own margins. */
-.maint-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; }
+/* As many 180px cards across as the window will hold, and no wider than that.
+
+   A fixed column count was the mistake here. `repeat(3, minmax(0, 1fr))` hands
+   every spare pixel to the tiles, so a card was 226px on a small window and 550px
+   on a 1920px one, with the action button stretched across all of it -- three
+   enormous blocks on a big screen instead of a queue you can scan. auto-fill
+   spends spare width on more cards instead, so the tile stays a card. The
+   min(180px, 100%) is what keeps it from collapsing to zero tracks on a window
+   too narrow to hold even one. */
+.maint-grid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
+}
 .maint-card {
   position: relative; overflow: hidden;
   display: flex; flex-direction: column; gap: 6px;
-  padding: 10px 10px 9px;
+  padding: 10px 11px 9px;
   background: #fff; border: 1px solid var(--gray-200); border-radius: 9px;
   border-left: 3px solid var(--gray-200);
   transition: border-color 0.25s ease;
@@ -436,65 +445,63 @@ tbody tr.row-clickable { cursor: pointer; }
 /* Icon and name share the top line. align-items flex-start rather than center so a
    name that wraps to two lines still sits against the top of the icon instead of
    floating beside its midpoint. */
-.maint-head { display: flex; align-items: flex-start; gap: 9px; }
-.maint-name { font-size: 13.5px; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
+.maint-head { display: flex; align-items: flex-start; gap: 8px; }
+.maint-name { font-size: 13px; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
 .maint-tags { display: flex; align-items: center; gap: 5px 7px; flex-wrap: wrap; }
 .maint-sub  {
-  display: flex; flex-wrap: wrap; gap: 3px 10px;
-  font-size: 11.5px; color: var(--gray-400); overflow-wrap: anywhere;
+  display: flex; flex-wrap: wrap; gap: 3px 9px;
+  font-size: 11px; color: var(--gray-400); overflow-wrap: anywhere;
 }
-/* The last result as a dot and a date rather than a sentence. Whether the previous
-   check found something is the part worth carrying on the tile; the wording and
-   who wrote it are one click away. */
-.maint-last { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--gray-400); }
+/* The foot, and the rule that opens it. Everything above the rule describes the
+   device -- what it is, where it lives, how often it is looked at. Everything
+   below it is a date, and dates are what a reader scans a queue for. The dot and
+   the green say whether the previous check found something; the words beside it
+   say when it happened, and only spell out a date when that date is not today.
+
+   The two dates together want about 175px, which is a little more than a 180px
+   tile has once the padding is off it, so at the narrow end of the range the
+   countdown drops to its own line. It wraps; nothing is cut off. */
+.maint-last {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
+  margin-top: auto; padding-top: 8px; border-top: 1px solid var(--gray-100);
+  font-size: 11px; color: var(--gray-400);
+}
+.maint-last-when.ok    { color: var(--green); }
+.maint-last-when.fault { color: var(--red); }
 .maint-last-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--gray-300); }
 .maint-last-dot.fault { background: var(--red); }
 .maint-last-dot.ok    { background: var(--green); }
 /* margin-top auto pins the buttons to the bottom, so the actions line up across a
    row of tiles whose text is one or two lines different in height.
 
-   History is an icon here rather than a labelled button. Three labelled controls
-   need about 196px and a tile at three across is 179px inside its border, so the
-   last one wrapped onto a second line on every tile -- which cost more vertical
-   space than the label ever saved. Mark done keeps its label because it is the
-   action the page exists to be used for. */
-.maint-card-actions { margin-top: auto; padding-top: 2px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.maint-card-actions svg { width: 13px; height: 13px; }
-/* No nowrap on the label. "Mark done" and "Marcar como feita" are very
-   different lengths, and at five across the Portuguese one wants about 130px of
-   a tile that has 105. With nowrap the button could not shrink and pushed itself
-   past the tile's edge on every card; letting the text wrap lets the flex item
-   fall back to its longest word and the button simply gets taller. */
-.maint-card-actions .btn { padding: 5px 9px; font-size: 11.5px; }
-/* Deliberately no min-width: 0 here. The default min-width:auto is what stops the
-   nowrap label shrinking below its own text, so when a tile really is too narrow
-   the strip wraps onto a second line instead of quietly clipping the words. The
-   sidebar does not collapse, so a window around 620-700px wide does produce tiles
-   that narrow. */
-.maint-card-actions .btn:first-child { flex: 1 1 auto; justify-content: center; }
-.maint-card-actions .icon-btn { width: 26px; height: 26px; flex-shrink: 0; }
+   The button hugs its label. It used to be flex: 1 1 auto and then 1 1 0%, both of
+   which stretch it to fill whatever the icons left -- 203px of button around 62px
+   of words, and 520px of it on a 1920px screen, which is what made it look
+   ridiculous. flex: 0 0 auto sizes it to "check + Mark done" and no further, so it
+   is the same modest size on every screen and every column count.
 
-/* Four across is the point of the grid, so it holds down to a genuinely small
-   window rather than stepping to three on an ordinary laptop. The three-column
-   stop that used to sit at 1400px took the layout away from almost every real
-   screen; there is nothing to be gained by a three-across step between four and
-   two, so it is gone and the tiles simply get narrower. They do get taller, so
-   this is a density trade rather than a free win. */
-/* Five across needs about 133px per tile before the card stops fitting its own
-   contents, which works out at roughly a 980px window once the sidebar and the
-   page padding are counted. Below that three across, where the tiles are wide
-   enough that nothing has to wrap. */
-@media (max-width: 980px) { .maint-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 760px)  { .maint-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 520px)  { .maint-grid { grid-template-columns: 1fr; } }
+   History and edit are icons rather than labelled buttons for the same reason:
+   three labels do not fit a 180px tile at any size. */
+.maint-card-actions { margin-top: auto; padding-top: 2px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.maint-card-actions svg { width: 12px; height: 12px; }
+/* No nowrap on the label, because the two languages are not the same length:
+   "Marcar como feita" wants about 85px where "Mark done" wants 55px. Without nowrap
+   the button can still shrink to its longest word if a tile gets very narrow, so
+   the label wraps rather than pushing past the tile's edge. */
+.maint-card-actions .btn { flex: 0 0 auto; padding: 5px 8px; font-size: 11px; }
+.maint-card-actions .icon-btn { width: 24px; height: 24px; flex-shrink: 0; }
+
+/* No column breakpoints. auto-fill already takes the tile down to a single 100%
+   column on a window too narrow for two, and every step in between is handled by
+   the floor rather than by a hand-picked pixel count. */
 
 /* Printer and phone are the only two kinds, so they get the two strongest tints
    and a reader can tell them apart before they read a word. */
 .maint-chip {
-  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.maint-chip svg { width: 16px; height: 16px; }
+.maint-chip svg { width: 15px; height: 15px; }
 .maint-chip-printer { background: var(--blue-light); color: var(--blue); }
 .maint-chip-phone   { background: var(--teal-light);  color: var(--teal); }
 /* The caption that stands in for the removed type pill: one step below the
@@ -502,37 +509,14 @@ tbody tr.row-clickable { cursor: pointer; }
    badge to be noticed. Uses --gray-600 rather than --gray-500, which is used in
    eighteen places in this file but never defined, so every one of those
    declarations is invalid and silently inherits body ink. */
-.maint-caption { font-size: 11.5px; color: var(--gray-600); }
+.maint-caption { font-size: 11px; color: var(--gray-600); }
 /* A fact is an icon and its value. The gap between facts does the separating, so
    the middots that used to join these three values are gone -- an icon followed
    by a middot reads as clutter at this size. --gray-400 to match the last-check
    line below, so the two metadata lines are one quiet block. */
 .maint-fact { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .maint-fact-ic { display: inline-flex; flex-shrink: 0; color: var(--gray-400); }
-.maint-fact-ic svg { width: 12px; height: 12px; }
-
-/* How much of its own interval a device has used up. interval_days and
-   next_due_on both arrive with the row, so this is arithmetic on data already
-   loaded rather than a new endpoint. The fill is the same urgency language as
-   everything above, so one glance answers both "when" and "how bad". */
-/* Wraps rather than pushing. The bar and its figure together want about 150px,
-   which is more than a five-across tile has, and nowrap would have pushed the
-   figure past the tile's edge -- clipped, in Portuguese, by up to eight pixels.
-   Letting the figure drop under the bar keeps both and costs one line. */
-.maint-meter { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 7px; }
-/* The track takes whatever the label leaves, rather than a fixed width that would
-   either overflow a narrow tile or leave a stub on a wide one. */
-.maint-meter-track {
-  flex: 1 1 40px; min-width: 24px; height: 4px; border-radius: 3px;
-  background: var(--gray-100); overflow: hidden;
-}
-.maint-meter-fill {
-  height: 100%; border-radius: 3px; background: var(--teal-mid);
-  transition: width 0.4s ease, background 0.3s ease;
-}
-.maint-meter-fill.soon { background: var(--amber); }
-.maint-meter-fill.late { background: var(--red); }
-.maint-meter-label { font-size: 11px; color: var(--gray-400); white-space: nowrap; flex-shrink: 0; }
+.maint-fact-ic svg { width: 11px; height: 11px; }
 
 /* The summary strip. Four tiles that hold their positions whatever the numbers
    are, so the page does not reshuffle itself as checks are recorded. A tile at
@@ -630,7 +614,7 @@ tbody tr.row-clickable { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .maint-card.maint-enter,
   .maint-tile.overdue.live { animation: none; }
-  .maint-card, .maint-card::before, .maint-meter-fill,
+  .maint-card, .maint-card::before,
   .maint-tile, .maint-tile::after { transition: none; }
 }
 /* The same breakpoints as the cards above, so the summary strip never shows a
@@ -1862,16 +1846,22 @@ const T = {
   maintenanceDayOverdue: '1 day overdue',
   maintenanceNotYet: 'due {date}',
   maintenanceNeverChecked: 'Never checked',
+  maintenanceCheckedToday: 'Checked today',
+  maintenanceNextIn: 'Next in {days} days',
+  maintenanceNextTomorrow: 'Next tomorrow',
+  maintenanceNextToday: 'Next today',
   maintenanceAllFine: 'all fine',
   maintenanceFault: 'a fault',
   maintenanceBy: 'by {name}',
   maintenanceMarkDone: 'Mark done',
+  // The card's own label, which English needs no separate wording for.
+  maintenanceMarkDoneCard: 'Mark done',
+  maintenanceDoneAgain: 'Done again',
   maintenanceHistory: 'History',
   maintenanceAddDevice: 'Add equipment',
   maintenanceEditDevice: 'Edit equipment',
   maintenanceInterval: 'How often',
   maintenanceIntervalDays: 'every {days} days',
-  maintenanceRound: '{used} of {total} days used',
   maintenanceDeviceName: 'Name',
   maintenanceDeviceNameHint: 'What the technician calls it — e.g. “Reception front desk”',
   maintenanceEquipment: 'Equipment',
@@ -2420,16 +2410,32 @@ const T = {
   maintenanceDayOverdue: '1 dia em atraso',
   maintenanceNotYet: 'para {date}',
   maintenanceNeverChecked: 'Nunca verificado',
+  maintenanceCheckedToday: 'Verificado hoje',
+  // Portuguese is the longer of the two by some way: "Verificado hoje" beside
+  // "Próxima em 90 dias" wants 234px of a 196px tile, so the countdown drops its
+  // "Próxima" and reads as a bare "Em 90 dias" against the check beside it. English
+  // keeps the fuller wording because it fits.
+  maintenanceNextIn: 'Em {days} dias',
+  maintenanceNextTomorrow: 'Amanhã',
+  maintenanceNextToday: 'Hoje',
   maintenanceAllFine: 'tudo bem',
   maintenanceFault: 'uma avaria',
   maintenanceBy: 'por {name}',
   maintenanceMarkDone: 'Marcar como feita',
+  // The card's own label. "Marcar como feita" is 131px of button once it is sized
+  // to its words, which at a 180px tile leaves no room for the two icons beside it
+  // and pushed them onto a second line on every card. The dialog keeps the full
+  // wording, where there is room for it and the meaning benefits.
+  maintenanceMarkDoneCard: 'Concluir',
+  // "Fazer de novo" is 109px of button once sized to its words, which at a 180px
+  // tile leaves no room for the two icons and pushed them onto a second line.
+  // "Repetir" says the same thing in half the width.
+  maintenanceDoneAgain: 'Repetir',
   maintenanceHistory: 'Histórico',
   maintenanceAddDevice: 'Adicionar equipamento',
   maintenanceEditDevice: 'Editar equipamento',
   maintenanceInterval: 'Com que frequência',
   maintenanceIntervalDays: 'a cada {days} dias',
-  maintenanceRound: '{used} de {total} dias usados',
   maintenanceDeviceName: 'Nome',
   maintenanceDeviceNameHint: 'Como o técnico lhe chama — ex. “Receção da frente”',
   maintenanceEquipment: 'Equipamento',
@@ -6989,22 +6995,39 @@ function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit,
     dueText = t.maintenanceNotYet.replace('{date}', formatDateShort(s.next_due_on));
   }
 
-  const lastLine = s.last_done_on
-    ? `${formatDateShort(s.last_done_on)} · ${
-        s.last_outcome === 'fault' ? t.maintenanceFault : t.maintenanceAllFine}`
-    : t.maintenanceNeverChecked;
-
-  // How much of its own interval this device has used up, from the interval and
-  // the next due date that already arrived with the row. Clamped at both ends:
-  // overdue deliberately runs to a full bar, because "past the end" is the whole
-  // point of it rather than a number that keeps climbing.
-  const round = Number(s.interval_days) || 0;
+  // The foot answers two questions, and both are dates: when this device was last
+  // looked at, and when it is next wanted. next_due_on already arrived with the
+  // row, so the countdown is arithmetic on loaded data rather than a new endpoint.
+  //
+  // "Checked today" rather than today's date, because a date the reader already
+  // knows is a date that takes up room to say nothing.
+  const todayISO = localISODate(new Date());
+  const checkedToday = !!s.last_done_on && String(s.last_done_on).slice(0, 10) === todayISO;
   const dueDay = dayNumber(s.next_due_on);
-  const todayDay = dayNumber(localISODate(new Date()));
-  const daysLeft = dueDay === null || todayDay === null ? null : dueDay - todayDay;
-  const daysUsed = round > 0 && daysLeft !== null
-    ? Math.max(0, Math.min(round, round - daysLeft))
-    : null;
+  const todayDay = dayNumber(todayISO);
+  const daysToNextDue = dueDay === null || todayDay === null ? null : dueDay - todayDay;
+
+  let lastText;
+  if (!s.last_done_on) {
+    lastText = t.maintenanceNeverChecked;
+  } else if (checkedToday) {
+    lastText = t.maintenanceCheckedToday;
+  } else {
+    lastText = `${formatDateShort(s.last_done_on)} · ${
+      s.last_outcome === 'fault' ? t.maintenanceFault : t.maintenanceAllFine}`;
+  }
+
+  // The countdown is only spelled out while the tile is comfortable. An overdue or
+  // soon device already says so on the coloured badge above, and a tile that
+  // repeats itself is a tile nobody reads.
+  let nextText = '';
+  if (!late && !soon && s.active && daysToNextDue !== null && daysToNextDue >= 0) {
+    nextText = daysToNextDue === 0
+      ? t.maintenanceNextToday
+      : daysToNextDue === 1
+        ? t.maintenanceNextTomorrow
+        : t.maintenanceNextIn.replace('{days}', daysToNextDue);
+  }
 
   return (
     <div className={`maint-card maint-enter ${
@@ -7046,27 +7069,25 @@ function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit,
             be noise. */}
         {s.assignee_name && <span className="maint-fact">{s.assignee_name}</span>}
       </div>
-      {/* A retired device has no round left to run, so it gets no meter. */}
-      {s.active && daysUsed !== null && (
-        <div className="maint-meter">
-          <div className="maint-meter-track">
-            <div className={`maint-meter-fill ${late ? 'late' : soon ? 'soon' : ''}`}
-              style={{width: `${Math.round(daysUsed / round * 100)}%`}}/>
-          </div>
-          <span className="maint-meter-label">
-            {t.maintenanceRound.replace('{used}', daysUsed).replace('{total}', round)}
-          </span>
-        </div>
-      )}
+      {/* The foot, under a rule: the two dates a reader scans a queue for. The
+          words go green or red with the dot, so a device that was checked today
+          and found nothing reads as closed at a glance. */}
       <div className="maint-last">
         <span className={`maint-last-dot ${
           !s.last_done_on ? '' : s.last_outcome === 'fault' ? 'fault' : 'ok'}`}/>
-        {lastLine}
+        <span className={`maint-last-when ${
+          !s.last_done_on ? '' : s.last_outcome === 'fault' ? 'fault' : 'ok'}`}>
+          {lastText}
+        </span>
+        {nextText && <span className="maint-last-due">{nextText}</span>}
       </div>
       <div className="maint-card-actions">
         {s.active && (
           <button className="btn btn-primary" onClick={()=>onComplete(s)}>
-            {Ic.check} {t.maintenanceMarkDone}
+            {/* A device already checked today is not waiting to be done, it has
+                been done -- what the button offers is another look. Saying so
+                stops the tile reading as though it had been overlooked. */}
+            {Ic.check} {checkedToday ? t.maintenanceDoneAgain : t.maintenanceMarkDoneCard}
           </button>
         )}
         <button className="icon-btn" title={t.maintenanceHistory} aria-label={t.maintenanceHistory}
@@ -7095,8 +7116,8 @@ function formatDateShort(iso) {
 // Both sides are built with Date.UTC so the two dates are compared as plain
 // calendar days and neither can slip by one according to where the reader is --
 // the same reason formatDateShort avoids new Date(iso) above. Returns null for
-// anything unparseable rather than NaN, so a missing date is a skipped meter and
-// not a bar rendered at width NaN.
+// anything unparseable rather than NaN, so a missing date leaves the countdown
+// off the tile instead of rendering it as NaN days.
 function dayNumber(iso) {
   const [y, m, d] = String(iso || '').slice(0, 10).split('-').map(Number);
   return y && m && d ? Math.floor(Date.UTC(y, m - 1, d) / 86400000) : null;
