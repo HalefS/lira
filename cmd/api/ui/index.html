@@ -285,6 +285,12 @@ img.avatar-circle { object-fit: cover; background: var(--gray-100); }
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
 }
 .table-title { font-size: 13.5px; font-weight: 600; }
+/* Footer under a catalog list that is showing only its first rows. Centred,
+   because the button is about the list as a whole rather than an action on any
+   one row, and ruled off from the table above it so the two do not read as one
+   continuous list of unknown length. */
+.table-footer { padding: 9px 16px; border-top: 1px solid var(--gray-200); text-align: center; }
+.table-footer .btn { font-size: 12px; padding: 5px 14px; }
 .table-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .filter-chips { display: flex; gap: 6px; }
 .chip {
@@ -2336,6 +2342,7 @@ const T = {
     adminView: 'Admin view',
     language: 'Language',
     admin: 'Admin',
+    adminShowMore: 'Show more',
     adminIssueTypes: 'Issue types',
     adminIssueTypesSub: 'These types appear in the dropdown when an issue is logged. Only managers can add or remove them.',
     addIssueType: 'Add type',
@@ -2912,6 +2919,7 @@ const T = {
     adminView: 'Vista de administrador',
     language: 'Idioma',
     admin: 'Administração',
+    adminShowMore: 'Mostrar mais',
     adminIssueTypes: 'Tipos de avaria',
     adminIssueTypesSub: 'Estes tipos aparecem no menu ao registar uma avaria. Só os gestores podem adicionar ou remover tipos.',
     addIssueType: 'Adicionar tipo',
@@ -8497,12 +8505,54 @@ function SystemStatusPage({ token }) {
   );
 }
 
+/* ── collapsed catalog lists ──
+   Issue types, departments, Connecta agents and consumables are reference lists:
+   most visits are about the one at the top, and the tail is scrolled past. So each
+   shows its first few rows and opens on request.
+
+   One constant and one button for all four, deliberately. Four copies of the same
+   threshold and the same markup is how three of them end up at five and one at
+   six, and a page where one list in a column behaves differently from the one above
+   it reads as a bug rather than as a choice.
+
+   Five rows, not five <tr>s. A consumable whose icon is being edited renders a
+   second row underneath it, and counting rows would make that item look like two
+   and hide a sixth item's worth of nothing.
+
+   The count in each card's header is the real total and is left alone, so the
+   length of the list is never a surprise -- only its tail is deferred. */
+const ADMIN_PREVIEW_ROWS = 5;
+
+// Rendered only while something is actually hidden, so a short list carries no
+// button and no ruled footer. The number in brackets is what the click buys, which
+// is the part that makes it safe to press without opening a dialog to find out.
+function AdminShowMore({ hidden, label, onClick }) {
+  if (!hidden) return null;
+  return (
+    <div className="table-footer">
+      <button type="button" className="btn btn-ghost" onClick={onClick}>
+        {label} ({hidden})
+      </button>
+    </div>
+  );
+}
+
 function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartmentsUpdate, connectaAgents, onConnectaAgentsUpdate, consumableItems, onConsumableItemsUpdate, settings, onSettingsUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+
+  // Whether each catalog list has been opened past its first rows. One flag per
+  // list rather than one shared flag, because they are separate columns and
+  // opening one has no business revealing another. They only ever go from false
+  // to true while the page is mounted, so a rename in progress or an icon editor
+  // left open cannot be collapsed out from under itself by a re-render.
+  const [typesAll,  setTypesAll]  = useState(false);
+  const [deptsAll,  setDeptsAll]  = useState(false);
+  const [agentsAll, setAgentsAll] = useState(false);
+  const [ciAll,     setCiAll]     = useState(false);
 
   const [deptName, setDeptName] = useState('');
   // Which department row is open for renaming, and what has been typed into it.
@@ -8576,6 +8626,10 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
     try {
       const res = await apiFetch('/issue-types', {method:'POST', body:{name: trimmed}, token});
       onTypesUpdate(prev => [...prev, res.issue_type].sort((a,b)=>a.name.localeCompare(b.name)));
+      // The list is alphabetical, so a new row can land anywhere in it. Opening it
+      // is what stops "I added it and nothing happened" -- without this the new row
+      // can be row nine of a list showing five.
+      setTypesAll(true);
       setName('');
       setToast(t.toastTypeAdded);
     } catch(ex) { setErr(ex.message); }
@@ -8617,6 +8671,7 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
     try {
       const res = await apiFetch('/departments', {method:'POST', body:{name: trimmed}, token});
       onDepartmentsUpdate(prev => [...prev, res.department].sort((a,b)=>a.name.localeCompare(b.name)));
+      setDeptsAll(true);
       setDeptName('');
       setToast(t.toastDeptAdded);
     } catch(ex) { setDeptErr(ex.message); }
@@ -8673,6 +8728,7 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
     try {
       const res = await apiFetch('/connecta-agents', {method:'POST', body:{name: trimmed}, token});
       onConnectaAgentsUpdate(prev => [...prev, res.connecta_agent].sort((a,b)=>a.name.localeCompare(b.name)));
+      setAgentsAll(true);
       setAgentName('');
       setToast(t.toastAgentAdded);
     } catch(ex) { setAgentErr(ex.message); }
@@ -8695,6 +8751,7 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
     try {
       const res = await apiFetch('/consumable-items', {method:'POST', body:{name: trimmed, icon: ciIcon}, token});
       onConsumableItemsUpdate(prev => [...prev, res.consumable_item].sort((a,b)=>a.name.localeCompare(b.name)));
+      setCiAll(true);
       setCiName(''); setCiIcon('box');
       setToast(t.toastConsumableAdded);
     } catch(ex) { setCiErr(ex.message); }
@@ -8813,7 +8870,7 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
                     <tr><th>{t.type}</th><th style={{width:130}}>{t.adminSwapsCol}</th><th></th></tr>
                   </thead>
                   <tbody>
-                    {issueTypes.map(it=>(
+                    {issueTypes.slice(0, typesAll ? issueTypes.length : ADMIN_PREVIEW_ROWS).map(it=>(
                       <tr key={it.id}>
                         <td><TypeBadge type={it.name}/></td>
                         {/* Turn the "record equipment swaps" prompt on for this
@@ -8836,6 +8893,8 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
                   </tbody>
                 </table>
             }
+            <AdminShowMore hidden={typesAll ? 0 : Math.max(0, issueTypes.length - ADMIN_PREVIEW_ROWS)}
+              label={t.adminShowMore} onClick={()=>setTypesAll(true)}/>
           </div>
         </div>
 
@@ -8868,7 +8927,7 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
                     <tr><th>{t.department}</th><th></th></tr>
                   </thead>
                   <tbody>
-                    {departments.map(d => (
+                    {departments.slice(0, deptsAll ? departments.length : ADMIN_PREVIEW_ROWS).map(d => (
                       <tr key={d.id}>
                         {editingDeptId === d.id ? (
                           <td>
@@ -8908,6 +8967,8 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
                   </tbody>
                 </table>
             }
+            <AdminShowMore hidden={deptsAll ? 0 : Math.max(0, departments.length - ADMIN_PREVIEW_ROWS)}
+              label={t.adminShowMore} onClick={()=>setDeptsAll(true)}/>
           </div>
         </div>
 
@@ -8940,7 +9001,7 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
                     <tr><th>{t.connectaAgent}</th><th></th></tr>
                   </thead>
                   <tbody>
-                    {connectaAgents.map(a=>(
+                    {connectaAgents.slice(0, agentsAll ? connectaAgents.length : ADMIN_PREVIEW_ROWS).map(a=>(
                       <tr key={a.id}>
                         <td>{a.name}</td>
                         <td style={{textAlign:'right'}}>
@@ -8951,6 +9012,8 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
                   </tbody>
                 </table>
             }
+            <AdminShowMore hidden={agentsAll ? 0 : Math.max(0, connectaAgents.length - ADMIN_PREVIEW_ROWS)}
+              label={t.adminShowMore} onClick={()=>setAgentsAll(true)}/>
           </div>
         </div>
 
@@ -8993,7 +9056,7 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
                     <tr><th>{t.consumableName}</th><th></th></tr>
                   </thead>
                   <tbody>
-                    {consumableItems.map(ci=>(
+                    {consumableItems.slice(0, ciAll ? consumableItems.length : ADMIN_PREVIEW_ROWS).map(ci=>(
                       <React.Fragment key={ci.id}>
                         <tr>
                           <td>
@@ -9022,6 +9085,8 @@ function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartment
                   </tbody>
                 </table>
             }
+            <AdminShowMore hidden={ciAll ? 0 : Math.max(0, consumableItems.length - ADMIN_PREVIEW_ROWS)}
+              label={t.adminShowMore} onClick={()=>setCiAll(true)}/>
           </div>
         </div>
       </div>
