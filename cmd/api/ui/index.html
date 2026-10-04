@@ -517,12 +517,23 @@ tbody tr.row-clickable { cursor: pointer; }
 .maint-fact { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .maint-fact-ic { display: inline-flex; flex-shrink: 0; color: var(--gray-400); }
 .maint-fact-ic svg { width: 11px; height: 11px; }
+/* Location and periodicity are the two things a reader actually looks up on a
+   tile -- where the thing is, and how often it wants seeing -- so they are set a
+   step heavier than the rest of the metadata block. 600 rather than 700 because at
+   11px a full-bold run of letters closes up into a smudge, and because 600 is the
+   weight the rest of this file already uses for small emphasis.
+
+   The assignee is deliberately left at the regular weight. It is a third line of
+   its own rather than half of this pair, and bolding it would make an optional
+   detail shout louder than the two facts that are always there. */
+.maint-fact-location,
+.maint-fact-interval { font-weight: 600; }
 /* How often it is looked at gets a line to itself, always. As an ordinary flex
    sibling it sat beside the department whenever the two fitted together -- which
    they did for "F&B" or "Bar" and did not for "Back Office" -- so the same card
    was laid out two different ways depending on the length of a word. flex-basis
-   100% is the same trick as the countdown below the foot: in a wrapping row, an
-   item asking for the full width never shares that row with anything.
+   100% is the same trick as the countdown in the foot: in a wrapping row, an item
+   asking for the full width never shares that row with anything.
 
    The assignee has no such rule, and needs none: it comes after this one, so a
    full-width interval always pushes it down with everything else. */
@@ -1797,6 +1808,7 @@ const T = {
     history: 'History',
     historyPickDate: 'Select a date',
     historyShowingAll: 'Showing all dates',
+    historyTodayCarriesPending: 'Today also carries anything still pending from earlier days, until it is solved',
     historyToday: 'Today',
     historyAllDates: 'All dates',
     historyNoIssues: 'No issues logged on this date.',
@@ -2361,6 +2373,7 @@ const T = {
     history: 'Histórico',
     historyPickDate: 'Selecionar uma data',
     historyShowingAll: 'A mostrar todas as datas',
+    historyTodayCarriesPending: 'Hoje traz também tudo o que continua pendente de dias anteriores, até ser resolvido',
     historyToday: 'Hoje',
     historyAllDates: 'Todas as datas',
     historyNoIssues: 'Nenhuma avaria registada nesta data.',
@@ -4711,7 +4724,15 @@ function HistoryPage({ token, issueTypes, epoch=0, currentUser, slaMinutes, onDe
         />
         <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate(todayStr)}>{t.historyToday}</button>
         <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate('')}>{t.historyAllDates}</button>
-        {!date && <span style={{fontSize:12,color:'var(--gray-400)',marginLeft:'auto'}}>{t.historyShowingAll}</span>}
+        {/* Today's list is not just today's issues: anything still pending from an
+            earlier day stays on it until it is solved, so the number of rows can
+            be larger than the number logged today. Saying so is the difference
+            between that looking like a bug and looking like the point. A past
+            date is that date alone, which is why only today is mentioned. */}
+        {!date
+          ? <span style={{fontSize:12,color:'var(--gray-400)',marginLeft:'auto'}}>{t.historyShowingAll}</span>
+          : date === todayStr &&
+            <span style={{fontSize:12,color:'var(--gray-400)',marginLeft:'auto'}}>{t.historyTodayCarriesPending}</span>}
       </div>
 
       {/* Both tables are given the chosen date and ask the server for that day's
@@ -7066,7 +7087,7 @@ function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit,
       {/* One fact per icon, so the line reads without labels and wraps cleanly
           when an assignee makes it longer than the tile. */}
       <div className="maint-sub">
-        <span className="maint-fact">
+        <span className="maint-fact maint-fact-location">
           <span className="maint-fact-ic" aria-hidden="true">{Ic.pin}</span>{s.department_name}
         </span>
         <span className="maint-fact maint-fact-interval">

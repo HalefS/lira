@@ -202,6 +202,28 @@ func (m IssueModel) Get(id int64) (*Issue, error) {
 // The total is not a convenience: the client needs it to know whether "load more"
 // has anything left to load, and computing it here from the same WHERE as the
 // rows is the only way that number stays true.
+// carryPendingOntoToday reports whether a date filter is asking for the current
+// day, which is the one date that behaves differently from the others.
+//
+// An issue stays on today's list until it is solved. Today is the list somebody
+// actually works through, so an issue logged on Monday and still pending on
+// Wednesday belongs on Wednesday's list -- otherwise it quietly stops being
+// visible anywhere while it is still somebody's job, which is the whole problem
+// this fixes.
+//
+// Only the current day does this. Asked for October 1st, you get October 1st:
+// a day being looked back on has to stay the day it was, or the history page and
+// every report built on it stop meaning anything.
+//
+// The comparison is against the server's calendar via Today, the same source the
+// LCU gate and the maintenance due dates use, so "today" cannot mean two
+// different days inside one process. A browser sitting in another timezone can
+// ask for a day that is not the server's today, and it then gets that day alone
+// -- the old behaviour -- rather than a list it did not ask for.
+func carryPendingOntoToday(date string, today time.Time) bool {
+	return date != "" && date == today.Format(time.DateOnly)
+}
+
 func (m IssueModel) GetAll(f IssueFilters, limit int) ([]*Issue, int, error) {
 	conditions := []string{"1=1"}
 	args := []any{}
@@ -223,7 +245,19 @@ func (m IssueModel) GetAll(f IssueFilters, limit int) ([]*Issue, int, error) {
 		argIdx++
 	}
 	if f.Date != "" {
-		conditions = append(conditions, fmt.Sprintf("i.created_at::date = $%d", argIdx))
+		// created_at is assigned by the database on insert and never written
+		// again afterwards, so no row can sit in the future and the pending arm
+		// needs no upper bound of its own.
+		//
+		// The two arms are one parenthesised condition rather than two separate
+		// ones, so that a status filter still narrows the result rather than being
+		// silently widened by the carry-forward.
+		if carryPendingOntoToday(f.Date, Today()) {
+			conditions = append(conditions, fmt.Sprintf(
+				"(i.created_at::date = $%d OR i.status = 'Pending')", argIdx))
+		} else {
+			conditions = append(conditions, fmt.Sprintf("i.created_at::date = $%d", argIdx))
+		}
 		args = append(args, f.Date)
 		argIdx++
 	}
