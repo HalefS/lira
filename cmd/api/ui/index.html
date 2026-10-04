@@ -517,6 +517,16 @@ tbody tr.row-clickable { cursor: pointer; }
 .maint-fact { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .maint-fact-ic { display: inline-flex; flex-shrink: 0; color: var(--gray-400); }
 .maint-fact-ic svg { width: 11px; height: 11px; }
+/* How often it is looked at gets a line to itself, always. As an ordinary flex
+   sibling it sat beside the department whenever the two fitted together -- which
+   they did for "F&B" or "Bar" and did not for "Back Office" -- so the same card
+   was laid out two different ways depending on the length of a word. flex-basis
+   100% is the same trick as the countdown below the foot: in a wrapping row, an
+   item asking for the full width never shares that row with anything.
+
+   The assignee has no such rule, and needs none: it comes after this one, so a
+   full-width interval always pushes it down with everything else. */
+.maint-fact-interval { flex: 0 0 100%; }
 
 /* The summary strip. Four tiles that hold their positions whatever the numbers
    are, so the page does not reshuffle itself as checks are recorded. A tile at
@@ -7059,7 +7069,7 @@ function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit,
         <span className="maint-fact">
           <span className="maint-fact-ic" aria-hidden="true">{Ic.pin}</span>{s.department_name}
         </span>
-        <span className="maint-fact">
+        <span className="maint-fact maint-fact-interval">
           <span className="maint-fact-ic" aria-hidden="true">{Ic.refresh}</span>
           {t.maintenanceIntervalDays.replace('{days}', s.interval_days)}
         </span>
