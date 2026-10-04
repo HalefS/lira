@@ -1293,6 +1293,14 @@ html.dark .support-stat-card { border-color: var(--gray-200) !important; }
    so it has to outlive the !important above -- otherwise the selected tile looks
    the same in both themes except for its edge width. */
 html.dark .maint-tile.is-filter { border-color: var(--tile-color) !important; }
+/* The wash over a live tile is a tint in light mode, because the pastel it uses is
+   already pale. The dark theme's --*-light values are not pastels of a dark surface,
+   they are full-strength colours, so the same overlay at the same opacity fills the
+   whole tile rather than washing it -- the scheduled one most of all, where #085041
+   reads as a solid green block with a grey label stranded on it. Dark mode gets a
+   much lower alpha instead, which keeps the hue as a wash, which is all the overlay
+   was ever for. */
+html.dark .maint-tile.live::after { opacity: 0.25; }
 html.dark .error-boundary-card { border-color: var(--gray-200) !important; }
 html.dark .support-counts { border-color: var(--gray-200) !important; }
 
@@ -1550,7 +1558,16 @@ function CountUp({ value, decimals = 0, className, style }) {
   const target = Number.isFinite(n) ? n : 0;
   const ref = useAnimate((g, el, opts) => {
     const final = target.toFixed(decimals);
-    if (!g || opts.reduced) { el.textContent = final; return; }
+    // The finished number is written before anything is animated, so the span is
+    // never empty. It used to be written only from GSAP's onUpdate, and a tween
+    // that is created but never advances -- GSAP's ticker is suspended in a
+    // background tab, where requestAnimationFrame does not fire -- left the span
+    // blank for good: a tile with a label and no number on it. React still renders
+    // no children, so this stays the only thing that ever writes the text, and the
+    // animation still gets to run: it starts on the next frame, which lands before
+    // the browser paints, so the value written here is never itself shown.
+    el.textContent = final;
+    if (!g || opts.reduced) return;
     const proxy = { n: 0 };
     g.to(proxy, {
       n: target, duration: 0.8, ease: 'power2.out',
