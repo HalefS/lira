@@ -407,12 +407,15 @@ tbody tr.row-clickable { cursor: pointer; }
    the card's own surface: dark mode forces card backgrounds with !important, and
    this way the tint needs no !important of its own to survive that. It also fades
    to nothing by 58%, so the tile's text stays on white instead of on red. */
-.maint-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+/* Five across. The tile gives up its padding rather than its content: the
+   caption, the two fact icons, the meter and the button label all stay exactly
+   as they were, and the extra room is found in the tile's own margins. */
+.maint-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; }
 .maint-card {
   position: relative; overflow: hidden;
-  display: flex; flex-direction: column; gap: 7px;
-  padding: 12px 13px 11px;
-  background: #fff; border: 1px solid var(--gray-200); border-radius: 10px;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 10px 9px;
+  background: #fff; border: 1px solid var(--gray-200); border-radius: 9px;
   border-left: 3px solid var(--gray-200);
   transition: border-color 0.25s ease;
 }
@@ -435,8 +438,11 @@ tbody tr.row-clickable { cursor: pointer; }
    floating beside its midpoint. */
 .maint-head { display: flex; align-items: flex-start; gap: 9px; }
 .maint-name { font-size: 13.5px; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
-.maint-tags { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-.maint-sub  { font-size: 11.5px; color: var(--gray-500); overflow-wrap: anywhere; }
+.maint-tags { display: flex; align-items: center; gap: 5px 7px; flex-wrap: wrap; }
+.maint-sub  {
+  display: flex; flex-wrap: wrap; gap: 3px 10px;
+  font-size: 11.5px; color: var(--gray-400); overflow-wrap: anywhere;
+}
 /* The last result as a dot and a date rather than a sentence. Whether the previous
    check found something is the part worth carrying on the tile; the wording and
    who wrote it are one click away. */
@@ -454,7 +460,12 @@ tbody tr.row-clickable { cursor: pointer; }
    action the page exists to be used for. */
 .maint-card-actions { margin-top: auto; padding-top: 2px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .maint-card-actions svg { width: 13px; height: 13px; }
-.maint-card-actions .btn { padding: 5px 9px; font-size: 11.5px; white-space: nowrap; }
+/* No nowrap on the label. "Mark done" and "Marcar como feita" are very
+   different lengths, and at five across the Portuguese one wants about 130px of
+   a tile that has 105. With nowrap the button could not shrink and pushed itself
+   past the tile's edge on every card; letting the text wrap lets the flex item
+   fall back to its longest word and the button simply gets taller. */
+.maint-card-actions .btn { padding: 5px 9px; font-size: 11.5px; }
 /* Deliberately no min-width: 0 here. The default min-width:auto is what stops the
    nowrap label shrinking below its own text, so when a tile really is too narrow
    the strip wraps onto a second line instead of quietly clipping the words. The
@@ -463,9 +474,19 @@ tbody tr.row-clickable { cursor: pointer; }
 .maint-card-actions .btn:first-child { flex: 1 1 auto; justify-content: center; }
 .maint-card-actions .icon-btn { width: 26px; height: 26px; flex-shrink: 0; }
 
-@media (max-width: 1400px) { .maint-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 900px)  { .maint-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 620px)  { .maint-grid { grid-template-columns: 1fr; } }
+/* Four across is the point of the grid, so it holds down to a genuinely small
+   window rather than stepping to three on an ordinary laptop. The three-column
+   stop that used to sit at 1400px took the layout away from almost every real
+   screen; there is nothing to be gained by a three-across step between four and
+   two, so it is gone and the tiles simply get narrower. They do get taller, so
+   this is a density trade rather than a free win. */
+/* Five across needs about 133px per tile before the card stops fitting its own
+   contents, which works out at roughly a 980px window once the sidebar and the
+   page padding are counted. Below that three across, where the tiles are wide
+   enough that nothing has to wrap. */
+@media (max-width: 980px) { .maint-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px)  { .maint-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px)  { .maint-grid { grid-template-columns: 1fr; } }
 
 /* Printer and phone are the only two kinds, so they get the two strongest tints
    and a reader can tell them apart before they read a word. */
@@ -476,18 +497,33 @@ tbody tr.row-clickable { cursor: pointer; }
 .maint-chip svg { width: 16px; height: 16px; }
 .maint-chip-printer { background: var(--blue-light); color: var(--blue); }
 .maint-chip-phone   { background: var(--teal-light);  color: var(--teal); }
-.badge-maint-printer { background: var(--blue-light); color: var(--blue); border: 1px solid var(--blue-mid); }
-.badge-maint-phone   { background: var(--teal-light);  color: var(--teal);  border: 1px solid var(--teal-mid); }
+/* The caption that stands in for the removed type pill: one step below the
+   device name, so the card reads name > type > facts without the type needing a
+   badge to be noticed. Uses --gray-600 rather than --gray-500, which is used in
+   eighteen places in this file but never defined, so every one of those
+   declarations is invalid and silently inherits body ink. */
+.maint-caption { font-size: 11.5px; color: var(--gray-600); }
+/* A fact is an icon and its value. The gap between facts does the separating, so
+   the middots that used to join these three values are gone -- an icon followed
+   by a middot reads as clutter at this size. --gray-400 to match the last-check
+   line below, so the two metadata lines are one quiet block. */
+.maint-fact { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.maint-fact-ic { display: inline-flex; flex-shrink: 0; color: var(--gray-400); }
+.maint-fact-ic svg { width: 12px; height: 12px; }
 
 /* How much of its own interval a device has used up. interval_days and
    next_due_on both arrive with the row, so this is arithmetic on data already
    loaded rather than a new endpoint. The fill is the same urgency language as
    everything above, so one glance answers both "when" and "how bad". */
-.maint-meter { display: flex; align-items: center; gap: 7px; }
+/* Wraps rather than pushing. The bar and its figure together want about 150px,
+   which is more than a five-across tile has, and nowrap would have pushed the
+   figure past the tile's edge -- clipped, in Portuguese, by up to eight pixels.
+   Letting the figure drop under the bar keeps both and costs one line. */
+.maint-meter { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 7px; }
 /* The track takes whatever the label leaves, rather than a fixed width that would
    either overflow a narrow tile or leave a stub on a wide one. */
 .maint-meter-track {
-  flex: 1 1 auto; min-width: 40px; height: 4px; border-radius: 3px;
+  flex: 1 1 40px; min-width: 24px; height: 4px; border-radius: 3px;
   background: var(--gray-100); overflow: hidden;
 }
 .maint-meter-fill {
@@ -507,7 +543,10 @@ tbody tr.row-clickable { cursor: pointer; }
   position: relative; overflow: hidden;
   background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg);
   padding: 12px 15px 13px 17px;
-  transition: border-color 0.25s ease;
+  /* A button, so the browser's own chrome is undone: the tile supplies its own
+     surface, and the label has to sit left like every other one in the app. */
+  font-family: inherit; text-align: left; color: inherit; cursor: pointer;
+  transition: border-color 0.25s ease, transform 0.12s ease;
 }
 /* Left edge and value take the tile's colour; the tint comes from the overlay
    below. Retired is deliberately the quietest of the four -- it is an archive,
@@ -528,11 +567,30 @@ tbody tr.row-clickable { cursor: pointer; }
 .maint-tile > * { position: relative; }
 .maint-tile.live::after { opacity: 1; }
 .maint-tile.live::before { background: var(--tile-color); }
+/* Pressed: a border in the group's own colour and a wider edge, which is a
+   different signal from `live` -- that one means "there is something here",
+   this one means "you are looking at this one". Both can be true at once. */
+.maint-tile.is-filter { border-color: var(--tile-color); }
+.maint-tile.is-filter::before { width: 4px; }
+.maint-tile.is-filter .maint-tile-label { color: var(--tile-color); font-weight: 600; }
+/* The nudge is the whole click affordance, so it is kept under a tenth of a
+   second: enough to feel pressed, not enough to lag behind the list changing. */
+.maint-tile:hover { transform: translateY(-1px); }
+.maint-tile:active { transform: none; }
+/* A visible ring on keyboard focus only. The outline is outside the tile, which
+   overflow:hidden would normally clip -- it does not, because overflow clips
+   descendants, not the element's own outline. */
+.maint-tile:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .maint-tile-label {
   display: flex; align-items: center; gap: 6px;
   font-size: 11.5px; font-weight: 500; color: var(--gray-400);
+  transition: color 0.2s ease;
 }
-.maint-tile-value { font-size: 25px; font-weight: 600; line-height: 1; margin-top: 8px; color: var(--gray-300); transition: color 0.25s ease; }
+.maint-tile-value {
+  display: block;
+  font-size: 25px; font-weight: 600; line-height: 1; margin-top: 8px;
+  color: var(--gray-300); transition: color 0.25s ease;
+}
 .maint-tile.live .maint-tile-value { color: var(--tile-color); }
 .maint-tile .stat-dot { background: var(--gray-300); transition: background 0.25s ease; }
 .maint-tile.live .stat-dot { background: var(--tile-color); }
@@ -575,8 +633,10 @@ tbody tr.row-clickable { cursor: pointer; }
   .maint-card, .maint-card::before, .maint-meter-fill,
   .maint-tile, .maint-tile::after { transition: none; }
 }
-@media (max-width: 900px) { .maint-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 520px) { .maint-tiles { grid-template-columns: 1fr; } }
+/* The same breakpoints as the cards above, so the summary strip never shows a
+   different number of columns than the queue it is summarising. */
+@media (max-width: 820px) { .maint-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .maint-tiles { grid-template-columns: 1fr; } }
 
 /* ── Maintenance: equipment type choice ──
    Tiles rather than chips. These set a form value rather than filtering a list,
@@ -1224,6 +1284,10 @@ html.dark .mini-card,
 html.dark .maint-card,
 html.dark .maint-tile,
 html.dark .support-stat-card { border-color: var(--gray-200) !important; }
+/* The tinted border is the strongest signal that a tile is filtering the queue,
+   so it has to outlive the !important above -- otherwise the selected tile looks
+   the same in both themes except for its edge width. */
+html.dark .maint-tile.is-filter { border-color: var(--tile-color) !important; }
 html.dark .error-boundary-card { border-color: var(--gray-200) !important; }
 html.dark .support-counts { border-color: var(--gray-200) !important; }
 
@@ -1822,6 +1886,7 @@ const T = {
   maintenancePhones: 'Phones',
   maintenanceNoPrinters: 'No printers on the schedule.',
   maintenanceNoPhones: 'No phones on the schedule.',
+  maintenanceNothingInGroup: 'Nothing in this group.',
   maintenanceRecent: 'Recent activity',
   maintenanceRecentEmpty: 'No checks recorded yet.',
   maintenanceScheduleSaved: 'Equipment saved.',
@@ -1857,7 +1922,7 @@ const T = {
     tvSwapAlertsOf: 'shown',
     tvSwapAlertsEmpty: 'No rooms are running on a swapped-out set.',
     tvSwapAlertsSolvedEmpty: 'No swapped-out equipment signed off yet.',
-    tvSwapAlertBody: "This room's {type} is faulty and is still in place. A working set was carried in to cover it, so the faulty one still needs to be dealt with.",
+    tvSwapAlertBody: "The {type} from this room was taken somewhere else to cover a fault over there, so a non-functional one was placed here for now. It is still in place and still needs to be dealt with.",
     tvSwapAlertFrom: 'Working set from',
     tvSwapAlertTo: 'Carried into',
     tvSwapSolvedWhat: 'What was done about it',
@@ -2379,6 +2444,7 @@ const T = {
   maintenancePhones: 'Telefones',
   maintenanceNoPrinters: 'Sem impressoras agendadas.',
   maintenanceNoPhones: 'Sem telefones agendados.',
+  maintenanceNothingInGroup: 'Nada neste grupo.',
   maintenanceRecent: 'Atividade recente',
   maintenanceRecentEmpty: 'Ainda não há verificações registadas.',
   maintenanceScheduleSaved: 'Equipamento guardado.',
@@ -2414,7 +2480,7 @@ const T = {
     tvSwapAlertsOf: 'mostrados',
     tvSwapAlertsEmpty: 'Nenhum quarto está com um equipamento trocado.',
     tvSwapAlertsSolvedEmpty: 'Ainda não há equipamento trocado marcado como resolvido.',
-    tvSwapAlertBody: 'O {type} deste quarto está avariado e continua no local. Foi levado equipamento a funcionar para o tapar, por isso o que está avariado ainda precisa de ser tratado.',
+    tvSwapAlertBody: 'O {type} deste quarto foi levado para outro lado para tapar uma avaria lá, por isso foi aqui colocado um equipamento avariado. Esse continua no local e ainda precisa de ser tratado.',
     tvSwapAlertFrom: 'Equipamento a funcionar veio de',
     tvSwapAlertTo: 'Levado para',
     tvSwapSolvedWhat: 'O que foi feito',
@@ -2903,6 +2969,13 @@ const Ic = {
   // reads as a phone at 16px and beside the printer's squared-off shape.
   phone: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M4.7 1.7 3.3 3.1a1.7 1.7 0 0 0-.3 2c1.7 3.8 4.8 6.9 8.6 8.6a1.7 1.7 0 0 0 2-.3l1.4-1.4a1.2 1.2 0 0 0 0-1.7l-1.9-1.9a1.2 1.2 0 0 0-1.7 0l-.7.7a11 11 0 0 1-4.5-4.5l.7-.7a1.2 1.2 0 0 0 0-1.7L5.6 1.7a1.2 1.2 0 0 0-1.7 0Z"/>
+  </svg>,
+  // Pin: the map marker rather than a building or a door, because it is used for
+  // "where this is", not "what kind of place this is". The hole is left as a
+  // separate circle so it reads at 12px, where a filled dot would close up.
+  pin: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M13 6.5c0 3.6-5 8-5 8s-5-4.4-5-8a5 5 0 1 1 10 0Z"/>
+    <circle cx="8" cy="6.4" r="1.7"/>
   </svg>,
 };
 
@@ -4767,9 +4840,14 @@ function AlertsPage({ currentUser, token, onCountsUpdate, setToast }) {
           <div className="table-header">
             <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
               <span style={{color: alert.status==='solved' ? 'var(--green)' : 'var(--amber)'}}>{Ic.tv}</span>
-              {/* The room named is the issue's own location, not the swap's to_room:
-                  a bare "1324 -> 1301" does not say which of the two was faulty. */}
-              <span className="table-title">{alert.location}</span>
+              {/* The room named is the swap's source, not the issue's location.
+                  The issue was logged where the fault was found, which is the
+                  room that borrowed a working set; the room now left holding a
+                  dud is the one that lent its own away, and that is the room
+                  somebody has to walk to. Falls back to the issue's location so a
+                  swap recorded without a source shows something rather than a
+                  blank heading. */}
+              <span className="table-title">{alert.from_room || alert.location}</span>
               <TypeBadge type={alert.type}/>
             </div>
             <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -6941,19 +7019,32 @@ function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit,
         </span>
         <strong className="maint-name">{s.device_name}</strong>
       </div>
+      {/* The caption replaces the type pill that used to sit here. The chip beside
+          the name already says printer or phone, so a badge saying it again was
+          decoration; the words stay as plain text because the chip is
+          aria-hidden, and a card whose only statement of what it is lives in a
+          picture is unreadable to a screen reader. */}
       <div className="maint-tags">
-        <span className={`badge badge-maint-${isPhone ? 'phone' : 'printer'}`}>{typeLabel}</span>
+        <span className="maint-caption">{typeLabel}</span>
         {late && <span className="badge badge-pending">{dueText}</span>}
         {!late && soon && <span className="badge badge-ok" style={{background:'var(--amber-light)',color:'var(--amber)'}}>{dueText}</span>}
         {!s.active && <span className="badge badge-slate">{t.maintenanceRetired}</span>}
       </div>
+      {/* One fact per icon, so the line reads without labels and wraps cleanly
+          when an assignee makes it longer than the tile. */}
       <div className="maint-sub">
-        {s.department_name} · {t.maintenanceIntervalDays.replace('{days}', s.interval_days)}
+        <span className="maint-fact">
+          <span className="maint-fact-ic" aria-hidden="true">{Ic.pin}</span>{s.department_name}
+        </span>
+        <span className="maint-fact">
+          <span className="maint-fact-ic" aria-hidden="true">{Ic.refresh}</span>
+          {t.maintenanceIntervalDays.replace('{days}', s.interval_days)}
+        </span>
         {/* Shown only when someone owns it. A manager needs to see who, because
             they are the ones who reassign; a technician can only ever see their
             own or a shared one, and "all technicians" on every tile would just
             be noise. */}
-        {s.assignee_name && ` · ${s.assignee_name}`}
+        {s.assignee_name && <span className="maint-fact">{s.assignee_name}</span>}
       </div>
       {/* A retired device has no round left to run, so it gets no meter. */}
       {s.active && daysUsed !== null && (
@@ -7051,6 +7142,10 @@ function MaintenancePage({ token, currentUser, departments, setToast, onCountsUp
   // Which kind of equipment the queue is showing: '' for all, or a type. Reset
   // when the page is left, like every other filter in the app.
   const [equipFilter, setEquipFilter] = useState('');
+  // Which of the four groups the tiles are filtering down to, or null for all of
+  // them. Separate from equipFilter because the two answer different questions --
+  // what kind of equipment, and what state -- and both can be set at once.
+  const [stateFilter, setStateFilter] = useState(null);
 
   const refresh = () => setEpoch(n => n + 1);
 
@@ -7100,10 +7195,21 @@ function MaintenancePage({ token, currentUser, departments, setToast, onCountsUp
   // "what am I looking at", and only the second one follows the filter.
   const shown      = equipFilter ? all.filter(s => s.equipment_type === equipFilter) : all;
   const active     = shown.filter(s => s.active);
-  const overdue    = active.filter(s => s.due_state === 'overdue');
-  const dueSoon    = active.filter(s => s.due_state === 'due_soon');
-  const scheduled  = active.filter(s => s.due_state === 'scheduled');
-  const retired    = shown.filter(s => !s.active);
+
+  // The four groups, counted over everything the equipment filter left. These are
+  // also the tiles' numbers, which is why they are kept apart from what is on
+  // screen: a tile that counted only the selected group would read 0 on the other
+  // three, and a row of zeroes is a dead end -- you could not see what else there
+  // was to switch to. So the tiles always report the real size of each group and
+  // act as the navigation, and stateFilter only decides which groups are listed
+  // underneath them.
+  const groups = {
+    overdue:   active.filter(s => s.due_state === 'overdue'),
+    soon:      active.filter(s => s.due_state === 'due_soon'),
+    scheduled: active.filter(s => s.due_state === 'scheduled'),
+    retired:   shown.filter(s => !s.active),
+  };
+  const groupVisible = key => stateFilter === null || stateFilter === key;
 
   // Recent checks follow the filter too, so the table under the queue describes
   // the same equipment the queue does. The device is looked up in the unfiltered
@@ -7192,39 +7298,56 @@ function MaintenancePage({ token, currentUser, departments, setToast, onCountsUp
       </div>
 
       {/* Only once there is something to count. Four grey zeroes above "no
-          equipment yet" is noise, and the empty state already says it. */}
+          equipment yet" is noise, and the empty state already says it.
+
+          Each tile is a button that narrows the queue to its own group, and
+          clicking the selected one puts everything back. Real buttons rather than
+          divs with a role, so keyboard activation and focus come for free rather
+          than being reimplemented. */}
       {all.length > 0 && (
         <div className="maint-tiles">
           {[
-            { key: 'overdue',   n: overdue.length,   label: t.maintenanceOverdue },
-            { key: 'soon',      n: dueSoon.length,   label: t.maintenanceDueSoon },
-            { key: 'scheduled', n: scheduled.length, label: t.maintenanceScheduled },
-            { key: 'retired',   n: retired.length,   label: t.maintenanceRetired },
-          ].map(x => (
-            <div key={x.key} className={`maint-tile ${x.key}${x.n ? ' live' : ''}`}>
-              <div className="maint-tile-label"><span className="stat-dot" aria-hidden="true"/>{x.label}</div>
-              <div className="maint-tile-value"><CountUp value={x.n}/></div>
-            </div>
-          ))}
+            { key: 'overdue',   label: t.maintenanceOverdue },
+            { key: 'soon',      label: t.maintenanceDueSoon },
+            { key: 'scheduled', label: t.maintenanceScheduled },
+            { key: 'retired',   label: t.maintenanceRetired },
+          ].map(x => {
+            const n = groups[x.key].length;
+            const on = stateFilter === x.key;
+            return (
+              <button key={x.key} type="button"
+                className={`maint-tile ${x.key}${n ? ' live' : ''}${on ? ' is-filter' : ''}`}
+                aria-pressed={on}
+                onClick={()=>setStateFilter(on ? null : x.key)}>
+                <span className="maint-tile-label"><span className="stat-dot" aria-hidden="true"/>{x.label}</span>
+                <span className="maint-tile-value"><CountUp value={n}/></span>
+              </button>
+            );
+          })}
         </div>
       )}
 
-      {/* Two different emptinesses, and they need different words: nothing is on
-          the schedule at all, versus nothing of the kind just filtered to. The
-          second names the type so it is obvious the filter is what emptied the
-          page rather than the schedule being lost. */}
+      {/* Three different emptinesses, and they need different words: nothing is on
+          the schedule at all, nothing of the kind just filtered to, or the group
+          picked on the tiles turned out to be empty. The middle one names the
+          equipment type so it is obvious the filter emptied the page rather than
+          the schedule being lost. */}
       {!all.length ? (
         <div className="empty-state">{Ic.tool}<p>{t.maintenanceNone}</p></div>
       ) : !shown.length ? (
         <div className="empty-state">{Ic.tool}
           <p>{equipFilter === 'phone' ? t.maintenanceNoPhones : t.maintenanceNoPrinters}</p>
         </div>
+      ) : stateFilter !== null && groups[stateFilter].length === 0 ? (
+        // A group with nothing in it still gets an answer, rather than the page
+        // just going blank under a highlighted tile.
+        <div className="empty-state">{Ic.tool}<p>{t.maintenanceNothingInGroup}</p></div>
       ) : (
         <>
-          <MaintenanceQueue title={t.maintenanceOverdue}  list={overdue}   t={t} canManage={canManage} handlers={handlers} testId="overdue"/>
-          <MaintenanceQueue title={t.maintenanceDueSoon}  list={dueSoon}   t={t} canManage={canManage} handlers={handlers} testId="soon"/>
-          <MaintenanceQueue title={t.maintenanceScheduled} list={scheduled} t={t} canManage={canManage} handlers={handlers} testId="scheduled"/>
-          <MaintenanceQueue title={t.maintenanceRetired}   list={retired}   t={t} canManage={canManage} handlers={handlers} testId="retired"/>
+          <MaintenanceQueue title={t.maintenanceOverdue}   list={groupVisible('overdue')   ? groups.overdue   : []} t={t} canManage={canManage} handlers={handlers} testId="overdue"/>
+          <MaintenanceQueue title={t.maintenanceDueSoon}   list={groupVisible('soon')      ? groups.soon      : []} t={t} canManage={canManage} handlers={handlers} testId="soon"/>
+          <MaintenanceQueue title={t.maintenanceScheduled} list={groupVisible('scheduled') ? groups.scheduled : []} t={t} canManage={canManage} handlers={handlers} testId="scheduled"/>
+          <MaintenanceQueue title={t.maintenanceRetired}   list={groupVisible('retired')   ? groups.retired   : []} t={t} canManage={canManage} handlers={handlers} testId="retired"/>
         </>
       )}
 
