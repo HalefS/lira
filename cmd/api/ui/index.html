@@ -957,6 +957,49 @@ html.dark .week-nav button { background: var(--gray-50); }
 .form-control:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(24,95,165,0.1); }
 .form-control::placeholder { color: var(--gray-400); }
 select.form-control { cursor: pointer; }
+
+/* ── room typeahead ──
+   The apartment room field. A plain <select> cannot be used here: the inventory
+   is potentially hundreds of rooms and the whole point of the field is to narrow
+   it by typing, so the options have to be filtered as the user types rather than
+   scrolled through.
+
+   The panel is absolutely positioned inside a relatively positioned wrapper, so it
+   overlays the fields below it rather than pushing the form down while it is
+   open -- otherwise the form would reflow on every keystroke and the field would
+   move out from under the cursor. */
+.room-picker { position: relative; }
+.room-picker-panel {
+  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; right: 0;
+  max-height: 232px; overflow-y: auto;
+  background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md); padding: 4px;
+}
+/* The selected-or-typed value, and the keyboard cursor over the options. Both are
+   the same tint, because both mean "this is where you are". */
+.room-option {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 10px; border: none; background: none; border-radius: 6px;
+  font-family: 'DM Mono', monospace; font-size: 13px; color: var(--gray-900);
+  text-align: left; cursor: pointer;
+}
+.room-option:hover, .room-option.active { background: var(--blue-light); }
+.room-option-chosen { color: var(--blue); font-weight: 600; }
+.room-picker-foot {
+  padding: 6px 10px 4px; font-size: 11.5px; color: var(--gray-400);
+  border-top: 1px solid var(--gray-100); margin-top: 4px;
+}
+.room-picker-foot.warn { color: var(--red); }
+/* An inventory with nothing in it is a different situation from a search that
+   matched nothing, and the difference decides whether the form can be used at
+   all, so they are worded apart rather than sharing one "no results" line. */
+.room-picker-empty {
+  padding: 10px; font-size: 12.5px; color: var(--gray-500, var(--gray-400)); line-height: 1.45;
+}
+/* The field turns red once something has been typed but not chosen, because that
+   is the one state where the form looks complete and is not. */
+.room-picker.unmatched .form-control { border-color: var(--red); }
+.room-picker.unmatched .form-control:focus { box-shadow: 0 0 0 3px rgba(217,75,75,0.12); }
 /* A locked field has to look locked, or "uneditable" is invisible and people
    still try to type in it. Dimmed, flat, and explicitly not-allowed. */
 .form-control:disabled {
@@ -2239,6 +2282,12 @@ const T = {
     logDeptIssue: 'Log department issue',
     editIssue: 'Edit issue',
     aptNum: 'Apartment #',
+    aptRoomPlaceholder: 'e.g. 1234',
+    aptRoomTypeToSearch: 'Start typing a room number to see what is in the inventory.',
+    aptRoomNoMatch: 'No room matching {room} is in the inventory.',
+    aptRoomAddHint: 'A manager can add it under Settings.',
+    aptRoomMatches: '{count} rooms match',
+    aptRoomMustPick: 'Pick one of the rooms above.',
     department: 'Department',
     selectDept: 'Select…',
     issueType: 'Issue type',
@@ -2396,6 +2445,22 @@ const T = {
     // and the id it grew up with are still called -- see the comment above
     // SettingsPage. Only ever read from the nav, so renaming it changed nothing else.
     settings: 'Settings',
+    // The room inventory. The wording is deliberately concrete about ranges,
+    // because a range typed across a floor boundary expands to every number in
+    // between and the only safeguard against a hundred rooms that do not exist is
+    // the manager seeing the size of it first.
+    adminRooms: 'Rooms',
+    adminRoomsSub: 'The apartment rooms an issue can be logged against. Add a whole floor as a range rather than one room at a time.',
+    adminRoomsAdd: 'Add rooms',
+    adminRoomsPlaceholder: 'e.g. 1201-1212, or 1214 for one room',
+    adminRoomsWillAdd: '{count} rooms: {from} to {to}',
+    adminRoomsOneRoom: '1 room: {from}',
+    adminRoomsTooWide: 'That is {count} rooms. One entry may cover at most {max}.',
+    adminRoomsEmpty: 'No rooms yet. Until a room is added here, an apartment issue cannot be logged.',
+    adminRoomsAdded: 'Rooms added',
+    adminRoomsDeleted: 'Rooms removed',
+    adminRoomsRun: 'Rooms',
+    roomsCount: '{count} rooms',
     adminShowMore: 'Show more',
     adminIssueTypes: 'Issue types',
     adminIssueTypesSub: 'These types appear in the dropdown when an issue is logged. Only managers can add or remove them.',
@@ -2820,6 +2885,12 @@ const T = {
     logDeptIssue: 'Registar avaria de departamento',
     editIssue: 'Editar avaria',
     aptNum: 'Apartamento nº',
+    aptRoomPlaceholder: 'ex. 1234',
+    aptRoomTypeToSearch: 'Escreva o número do quarto para ver o que existe no inventário.',
+    aptRoomNoMatch: 'Nenhum quarto correspondente a {room} está no inventário.',
+    aptRoomAddHint: 'Um gestor pode adicioná-lo em Definições.',
+    aptRoomMatches: '{count} quartos correspondem',
+    aptRoomMustPick: 'Escolha um dos quartos acima.',
     department: 'Departamento',
     selectDept: 'Seleccionar…',
     issueType: 'Tipo de avaria',
@@ -2975,6 +3046,18 @@ const T = {
     adminView: 'Vista de administrador',
     language: 'Idioma',
     settings: 'Definições',
+    adminRooms: 'Quartos',
+    adminRoomsSub: 'Os quartos de apartamento onde se pode registar uma avaria. Adicione um piso inteiro como intervalo, em vez de um quarto de cada vez.',
+    adminRoomsAdd: 'Adicionar quartos',
+    adminRoomsPlaceholder: 'ex. 1201-1212, ou 1214 para um quarto',
+    adminRoomsWillAdd: '{count} quartos: {from} a {to}',
+    adminRoomsOneRoom: '1 quarto: {from}',
+    adminRoomsTooWide: 'Isso são {count} quartos. Uma entrada pode cobrir no máximo {max}.',
+    adminRoomsEmpty: 'Ainda não há quartos. Até ser adicionado um aqui, não é possível registar uma avaria de apartamento.',
+    adminRoomsAdded: 'Quartos adicionados',
+    adminRoomsDeleted: 'Quartos removidos',
+    adminRoomsRun: 'Quartos',
+    roomsCount: '{count} quartos',
     adminShowMore: 'Mostrar mais',
     adminIssueTypes: 'Tipos de avaria',
     adminIssueTypesSub: 'Estes tipos aparecem no menu ao registar uma avaria. Só os gestores podem adicionar ou remover tipos.',
@@ -4338,6 +4421,166 @@ function initialClockTimes(issue) {
   return { startTime: toHM(start), endTime: toHM(end) };
 }
 
+/* The apartment room field: a typeahead over the room inventory.
+
+   Why this is not a <select>: the inventory is stored as ranges and may be
+   hundreds of rooms, and the field's whole purpose is to narrow that by typing.
+   A dropdown would have to be scrolled.
+
+   Why the value is not simply what is typed: the room is the one field on this
+   form that must be an existing room rather than free text, so typing does not
+   commit anything. onChange is only called with a room that came back from the
+   server, and typing clears the committed value -- which is what makes the form
+   refuse to submit, since its validity test is on the committed value and not on
+   the text in the box. The consequence is that "1214" typed and abandoned leaves
+   an invalid form rather than an issue against a room called "1214 " that nobody
+   can find again.
+
+   The search is debounced and abandoned when the query changes, so a fast typist
+   does not get a slow room's results painted over a fast room's. It fails
+   silently: a network problem should not block logging a fault.
+*/
+function RoomPicker({ value, onChange, token, t, id }) {
+  const [query, setQuery]   = useState(value || '');
+  const [matches, setMatches] = useState([]);
+  const [open, setOpen]     = useState(false);
+  const [cursor, setCursor] = useState(0);
+  // Which query the current matches belong to. A response for "13" must never be
+  // painted as the answer to "7777", so the results carry the query they were
+  // fetched for and are discarded if the box has moved on. The server's answer is
+  // already scoped to the request that asked for it; this is about the gap between
+  // asking and being told.
+  const [answered, setAnswered] = useState('');
+  const wrapRef = useRef(null);
+  const listId  = 'room-options';
+
+  // Keep the box in step with the committed value, which changes when an issue
+  // loads into the form or when Maintenance opens this form with a room prefilled.
+  useEffect(() => { setQuery(value || ''); }, [value]);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!open || !q) { setMatches([]); setAnswered(''); return; }
+    let live = true;
+    const handle = setTimeout(() => {
+      apiFetch(`/rooms/search?q=${encodeURIComponent(q)}`, {token})
+        .then(res => {
+          if (!live) return;
+          setMatches(res.rooms || []);
+          // Recorded so "no results" is only claimed for the query these results
+          // were actually fetched with. Without it the box says a room is missing
+          // from the inventory before the search for it has even been sent, which
+          // is a confident answer to a question nobody has asked yet.
+          setAnswered(q);
+          setCursor(0);
+        })
+        .catch(() => { if (live) { setMatches([]); setAnswered(''); } });
+    }, 180);
+    return () => { live = false; clearTimeout(handle); };
+  }, [query, open, token]);
+
+  // Clicking anywhere else closes the panel. A mousedown listener rather than
+  // blur, because blur fires before a click on an option has been handled and the
+  // option would never be selected.
+  useEffect(() => {
+    if (!open) return;
+    const away = e => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    const esc   = e => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+
+  const choose = room => {
+    onChange(String(room));
+    setQuery(String(room));
+    setOpen(false);
+  };
+
+  const onKeyDown = e => {
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter') { setOpen(true); e.preventDefault(); }
+      return;
+    }
+    if (e.key === 'ArrowDown') { setCursor(c => Math.min(c + 1, matches.length - 1)); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { setCursor(c => Math.max(c - 1, 0)); e.preventDefault(); }
+    else if (e.key === 'Enter') {
+      // Enter picks the highlighted room. With nothing highlighted it is left
+      // alone, so the key still submits the form rather than silently choosing
+      // the first match in a list nobody was looking at.
+      if (matches[cursor] !== undefined) { choose(matches[cursor]); e.preventDefault(); }
+    }
+  };
+
+  const typed   = query.trim();
+  const chosen  = value || '';
+  // Red only once there is text that is not the chosen room. Empty is neutral --
+  // an empty required field is not an error until it has been filled in wrongly.
+  const unmatched = typed !== '' && typed !== chosen;
+
+  return (
+    <div className={`room-picker${unmatched ? ' unmatched' : ''}`} ref={wrapRef}>
+      <input id={id} className="form-control" autoComplete="off" role="combobox"
+        aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
+        placeholder={t.aptRoomPlaceholder}
+        value={query}
+        onChange={e => {
+          const next = e.target.value;
+          setQuery(next);
+          setOpen(true);
+          // Typing invalidates the choice: the room is only committed by picking
+          // one from the list, so the box and the form cannot disagree.
+          if (next.trim() !== chosen) onChange('');
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}/>
+
+      {open && (
+        <div className="room-picker-panel" id={listId} role="listbox">
+          {/* The "type to search" line is only for an empty box. Once there is a
+              query, an empty result is a different statement -- that room is not
+              in the inventory -- and it must not be confused with "nothing typed
+              yet", which is what an earlier version showed and why typing 7777
+              appeared to do nothing at all. */}
+          {!typed && (
+            <div className="room-picker-empty">
+              {t.aptRoomTypeToSearch}
+            </div>
+          )}
+          {typed && answered === typed && matches.length === 0 && (
+            <div className="room-picker-empty">
+              {t.aptRoomNoMatch.replace('{room}', typed)}
+              {' '}{t.aptRoomAddHint}
+            </div>
+          )}
+          {matches.map((room, i) => (
+            <button type="button" key={room} role="option"
+              aria-selected={String(room) === chosen}
+              className={`room-option${i === cursor ? ' active' : ''}${String(room) === chosen ? ' room-option-chosen' : ''}`}
+              onMouseEnter={() => setCursor(i)}
+              onMouseDown={e => e.preventDefault()}  // keep focus so the panel stays open
+              onClick={() => choose(room)}>
+              {String(room) === chosen && <span className="room-option-tick">{Ic.check}</span>}
+              {String(room)}
+            </button>
+          ))}
+          {typed && matches.length > 0 && (
+            <div className="room-picker-foot">
+              {t.aptRoomMatches.replace('{count}', matches.length)}
+            </div>
+          )}
+          {unmatched && (
+            <div className="room-picker-foot warn">{t.aptRoomMustPick}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, departments, connectaAgents, consumableItems, token, onClose, onSave }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
@@ -4466,7 +4709,11 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
             {issueMode==='apt' ? (
               <div className="form-group">
                 <label>{t.aptNum}</label>
-                <input className="form-control" placeholder="e.g. 1234" value={form.apt} onChange={e=>set('apt',e.target.value)} />
+                {/* A room must be picked from the inventory, not typed. RoomPicker
+                    only calls set('apt', ...) with a room the server confirmed
+                    exists, so form.apt is never a string nobody chose. */}
+                <RoomPicker id="apt-room" value={form.apt} token={token} t={t}
+                  onChange={room => set('apt', room)}/>
               </div>
             ) : (
               <div className="form-group">
@@ -8697,6 +8944,42 @@ function AdminShowMore({ hidden, label, onClick }) {
    themselves. The per-section translation keys kept their `admin` prefix, because
    renaming thirty strings nobody sees buys nothing and risks a typo in one of
    them. */
+/* Reads what has been typed into the room field and works out how many rooms it
+   would add, so the size of a range is visible before it is saved rather than
+   after. A range typed carelessly across a floor boundary expands to every number
+   in between, and "1399-1402" quietly becoming rooms nobody has is the one way
+   this feature can do real damage.
+
+   The rules here mirror data.ParseRoomRun, and the server is the authority: this
+   only decides what the preview says, and anything it gets wrong is caught when
+   the save is refused. Kept deliberately small rather than sharing code with the
+   server, because the alternative is a round trip per keystroke for a preview.
+*/
+function previewRoomRun(text) {
+  const normalised = String(text || '')
+    .trim()
+    .replace(/[–—]/g, '-')   // en and em dash
+    .replace(/\.\./g, '-')    // "1201..1212"
+    .replace(/\bto\b/gi, '-');
+  const parts = normalised.split('-');
+  const num = part => {
+    const p = part.trim();
+    return /^[0-9]{1,6}$/.test(p) ? parseInt(p, 10) : null;
+  };
+
+  if (parts.length === 1) {
+    const n = num(parts[0]);
+    return n && n > 0 ? { from: n, to: n, count: 1 } : null;
+  }
+  if (parts.length !== 2) return null;
+
+  const a = num(parts[0]), b = num(parts[1]);
+  if (a === null || b === null || a < 1 || b < 1) return null;
+
+  const from = Math.min(a, b), to = Math.max(a, b);
+  return { from, to, count: to - from + 1 };
+}
+
 function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartmentsUpdate, connectaAgents, onConnectaAgentsUpdate, consumableItems, onConsumableItemsUpdate, settings, onSettingsUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
@@ -8730,6 +9013,31 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
   const [savingCi, setSavingCi] = useState(false);
   const [ciErr, setCiErr] = useState('');
   const [editingIconId, setEditingIconId] = useState(null);
+
+  // The room inventory. Held here rather than lifted into the app, because the
+  // only other thing that needs rooms is the typeahead on the issue form, and that
+  // asks the server for matches as it is typed rather than carrying the list.
+  const [rooms, setRooms]           = useState([]);
+  const [roomTotal, setRoomTotal]   = useState(0);
+  const [maxRunSize, setMaxRunSize] = useState(500);
+  const [roomRun, setRoomRun]       = useState('');
+  const [savingRoom, setSavingRoom] = useState(false);
+  const [roomErr, setRoomErr]       = useState('');
+  const [roomsAll, setRoomsAll]     = useState(false);
+
+  const loadRooms = useCallback(() => {
+    if (!token) return;
+    apiFetch('/rooms', {token})
+      .then(res => {
+        setRooms(res.rooms || []);
+        setRoomTotal(res.total_rooms || 0);
+        if (res.max_run_size) setMaxRunSize(res.max_run_size);
+      })
+      .catch(() => {});
+  }, [token]);
+  useEffect(() => { loadRooms(); }, [loadRooms]);
+
+  const roomPreview = previewRoomRun(roomRun);
 
   const [windowHours, setWindowHours] = useState(settings?.duplicate_window_hours ?? 24);
   const [lcuDays, setLcuDays] = useState(settings?.lcu_window_days ?? 7);
@@ -8933,6 +9241,35 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
       onConsumableItemsUpdate(prev => prev.map(ci => ci.id===id ? res.consumable_item : ci));
       setEditingIconId(null);
       setToast(t.toastConsumableIconUpdated);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  async function addRooms(e) {
+    e.preventDefault();
+    const trimmed = roomRun.trim();
+    if (!trimmed) return;
+    setSavingRoom(true); setRoomErr('');
+    try {
+      const res = await apiFetch('/rooms', {method:'POST', body:{run: trimmed}, token});
+      // Opened on the way in, for the same reason the catalog lists are: a room
+      // added out of alphabetical order can land below the fold, and "I added it
+      // and nothing happened" is the obvious reading of that.
+      setRoomsAll(true);
+      setRoomRun('');
+      loadRooms();
+      const n = res.room.to_room - res.room.from_room + 1;
+      setToast(n === 1
+        ? t.adminRoomsAdded
+        : t.roomsCount.replace('{count}', n) + ' — ' + t.adminRoomsAdded);
+    } catch(ex) { setRoomErr(ex.message); }
+    finally { setSavingRoom(false); }
+  }
+
+  async function removeRooms(id) {
+    try {
+      await apiFetch(`/rooms/${id}`, {method:'DELETE', token});
+      setToast(t.adminRoomsDeleted);
+      loadRooms();
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
@@ -9247,6 +9584,95 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
             }
             <AdminShowMore hidden={ciAll ? 0 : Math.max(0, consumableItems.length - ADMIN_PREVIEW_ROWS)}
               label={t.adminShowMore} onClick={()=>setCiAll(true)}/>
+          </div>
+        </div>
+
+        {/* Rooms. In the same grid as the other catalogs because it is the same
+            kind of thing: a list a manager maintains, and an issue form that
+            cannot be filled in without it. */}
+        <div>
+          <div className="mini-card" style={{marginBottom:20}}>
+            <div className="mini-card-title" style={{marginBottom:6}}>{t.adminRooms}</div>
+            <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminRoomsSub}</p>
+            {roomErr && <div className="auth-error" style={{marginBottom:14}}>{roomErr}</div>}
+            <form onSubmit={addRooms} className="admin-form">
+              <div className="form-group">
+                <label>{t.adminRoomsAdd}</label>
+                <input className="form-control" placeholder={t.adminRoomsPlaceholder}
+                  value={roomRun} maxLength={40}
+                  onChange={e=>{ setRoomRun(e.target.value); setRoomErr(''); }}/>
+              </div>
+
+              {/* The size of the range, before it is saved. Every whole number in
+                  between is added, so this is the only thing standing between a
+                  mistyped range and a dropdown full of rooms that do not exist. */}
+              {roomPreview && (
+                <div style={{fontSize:12.5,marginTop:2,
+                  color: roomPreview.count > maxRunSize ? 'var(--red)' : 'var(--gray-400)'}}>
+                  {roomPreview.count > maxRunSize
+                    ? t.adminRoomsTooWide
+                        .replace('{count}', roomPreview.count)
+                        .replace('{max}', maxRunSize)
+                    : roomPreview.count === 1
+                      ? t.adminRoomsOneRoom.replace('{from}', roomPreview.from)
+                      : t.adminRoomsWillAdd
+                          .replace('{count}', roomPreview.count)
+                          .replace('{from}', roomPreview.from)
+                          .replace('{to}', roomPreview.to)}
+                </div>
+              )}
+
+              <button type="submit" className="btn btn-primary" style={{marginTop:12}}
+                disabled={savingRoom || !roomRun.trim()
+                  || !roomPreview || roomPreview.count > maxRunSize}>
+                {Ic.plus} {savingRoom ? '…' : t.adminRoomsAdd}
+              </button>
+            </form>
+          </div>
+
+          <div className="table-card">
+            <div className="table-header">
+              <span className="table-title">{t.adminRoomsRun}</span>
+              <span style={{fontSize:12,color:'var(--gray-400)'}}
+                title={t.roomsCount.replace('{count}', roomTotal)}>
+                {roomTotal}
+              </span>
+            </div>
+            {rooms.length === 0
+              ? <div className="empty-state">{Ic.list}<p>{t.adminRoomsEmpty}</p></div>
+              : <table>
+                  <thead>
+                    <tr><th>{t.adminRoomsRun}</th><th style={{width:110}}></th></tr>
+                  </thead>
+                  <tbody>
+                    {rooms.slice(0, roomsAll ? rooms.length : ADMIN_PREVIEW_ROWS).map(r=>(
+                      <tr key={r.id}>
+                        <td>
+                          {/* The run as it was typed, and what it is worth in
+                              rooms -- the second number is the one that says
+                              whether the inventory covers a floor or a wing. */}
+                          <div style={{display:'flex',alignItems:'baseline',gap:9}}>
+                            <span style={{fontFamily:"'DM Mono',monospace",fontSize:13}}>
+                              {r.from_room === r.to_room ? r.from_room : `${r.from_room}-${r.to_room}`}
+                            </span>
+                            {r.to_room !== r.from_room && (
+                              <span style={{fontSize:12,color:'var(--gray-400)'}}>
+                                {t.roomsCount.replace('{count}', r.to_room - r.from_room + 1)}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{textAlign:'right'}}>
+                          <button className="icon-btn" title={t.adminRoomsDeleted}
+                            onClick={()=>removeRooms(r.id)}>{Ic.trash}</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+            }
+            <AdminShowMore hidden={roomsAll ? 0 : Math.max(0, rooms.length - ADMIN_PREVIEW_ROWS)}
+              label={t.adminShowMore} onClick={()=>setRoomsAll(true)}/>
           </div>
         </div>
       </div>

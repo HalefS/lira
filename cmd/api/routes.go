@@ -142,6 +142,14 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPatch, "/v1/departments/:id", app.requireAuth(app.requireManager(app.updateDepartmentHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/departments/:id", app.requireAuth(app.requireManager(app.deleteDepartmentHandler)))
 
+	// Rooms — the inventory of apartment rooms, held as ranges. Every authenticated
+	// user needs the typeahead to log an apartment issue; only managers change the
+	// inventory.
+	router.HandlerFunc(http.MethodGet, "/v1/rooms", app.requireAuth(app.listRoomsHandler))
+	router.HandlerFunc(http.MethodGet, "/v1/rooms/search", app.requireAuth(app.searchRoomsHandler))
+	router.HandlerFunc(http.MethodPost, "/v1/rooms", app.requireAuth(app.requireManager(app.createRoomHandler)))
+	router.HandlerFunc(http.MethodDelete, "/v1/rooms/:id", app.requireAuth(app.requireManager(app.deleteRoomHandler)))
+
 	// Melia Connecta Agents — list for all authenticated users; mutate for managers only
 	router.HandlerFunc(http.MethodGet, "/v1/connecta-agents", app.requireAuth(app.listConnectaAgentsHandler))
 	router.HandlerFunc(http.MethodPost, "/v1/connecta-agents", app.requireAuth(app.requireManager(app.createConnectaAgentHandler)))

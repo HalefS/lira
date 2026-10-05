@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/HalefS/lira/internal/data"
@@ -188,6 +189,22 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 			v.AddError("location", "must be a valid department")
 		} else {
 			issue.Location = canonicalDept
+		}
+	}
+
+	// An apartment issue's room is checked against the inventory rather than
+	// accepted as typed. Nothing is allowed through on create -- allowCurrent is
+	// zero, so there is no stored room to fall back on.
+	//
+	// The check is on the number rather than on the string, so " 1214 " and "1214"
+	// cannot become two different rooms, and the value written back is the
+	// canonical digits with no whitespace in them.
+	if issue.Mode == "apt" {
+		canonicalRoom, err := app.resolveRoom(issue.Location, 0)
+		if err != nil {
+			v.AddError("location", "must be a room number from the inventory")
+		} else {
+			issue.Location = strconv.Itoa(canonicalRoom)
 		}
 	}
 
@@ -426,6 +443,25 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 			v.AddError("location", "must be a valid department")
 		} else {
 			issue.Location = canonicalDept
+		}
+	}
+
+	// Same rule as on create, with one exception: the room already on the issue is
+	// allowed through even if it is no longer in the inventory. That is the point
+	// at which an old record and a current catalog disagree, and refusing to edit
+	// the record would be the worse answer -- it would make a range deleted by
+	// mistake permanently un-editable along with every issue filed in it.
+	//
+	// originalLocation is read as a number, so an issue moved from a department
+	// to an apartment has no stored room to fall back on and has to be given a
+	// real one.
+	if issue.Mode == "apt" {
+		currentRoom, _ := strconv.Atoi(strings.TrimSpace(originalLocation))
+		canonicalRoom, err := app.resolveRoom(issue.Location, currentRoom)
+		if err != nil {
+			v.AddError("location", "must be a room number from the inventory")
+		} else {
+			issue.Location = strconv.Itoa(canonicalRoom)
 		}
 	}
 

@@ -28,6 +28,7 @@ type Models struct {
 	Issues          IssueModel
 	IssueTypes      IssueTypeModel
 	Departments     DepartmentModel
+	Rooms           RoomModel
 	ConnectaAgents  ConnectaAgentModel
 	Settings        SettingsModel
 	RecurringAlerts RecurringAlertModel
@@ -48,6 +49,7 @@ func NewModels(db *sql.DB) Models {
 		Issues:          IssueModel{DB: db},
 		IssueTypes:      IssueTypeModel{DB: db},
 		Departments:     DepartmentModel{DB: db},
+		Rooms:           RoomModel{DB: db},
 		ConnectaAgents:  ConnectaAgentModel{DB: db},
 		Settings:        SettingsModel{DB: db},
 		RecurringAlerts: RecurringAlertModel{DB: db},
