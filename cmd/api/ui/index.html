@@ -615,7 +615,18 @@ tbody tr.row-clickable { cursor: pointer; }
   background: var(--tile-tint, transparent);
   opacity: 0; transition: opacity 0.3s ease;
 }
-.maint-tile > * { position: relative; }
+/* The wash sits behind the tile's contents, and needs saying so. ::after is a
+   positioned pseudo-element with z-index auto, which puts it in the same painting
+   step as the positioned children and wins on tree order -- it is the last child
+   in the box tree, so it paints last, on top. Without the z-index below, a live
+   tile's tint covers its own label and number completely: the scheduled tile came
+   out as a flat mint block with nothing written on it at all.
+
+   z-index 1 puts the children in the later painting step, so the tint is behind
+   the text rather than over it. It cannot go the other way -- z-index -1 on the
+   wash would drop it behind the tile's own background, where nothing can see it.
+   A wash that is invisible and text that is legible is not an improvement. */
+.maint-tile > * { position: relative; z-index: 1; }
 .maint-tile.live::after { opacity: 1; }
 .maint-tile.live::before { background: var(--tile-color); }
 /* Pressed: a border in the group's own colour and a wider edge, which is a
