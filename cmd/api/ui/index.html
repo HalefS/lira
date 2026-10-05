@@ -2287,6 +2287,10 @@ const T = {
     aptRoomNoMatch: 'No room matching {room} is in the inventory.',
     aptRoomAddHint: 'A manager can add it under Settings.',
     aptRoomMatches: '{count} rooms match',
+    // Only shown when the server had more to give than it did. Without it the
+    // count reads as "these are all of them", which on a wide floor is a
+    // confident statement that the floor is smaller than it is.
+    aptRoomMatchesMore: 'Showing {count} of more — keep typing to narrow it down',
     aptRoomMustPick: 'Pick one of the rooms above.',
     department: 'Department',
     selectDept: 'Select…',
@@ -2890,6 +2894,7 @@ const T = {
     aptRoomNoMatch: 'Nenhum quarto correspondente a {room} está no inventário.',
     aptRoomAddHint: 'Um gestor pode adicioná-lo em Definições.',
     aptRoomMatches: '{count} quartos correspondem',
+    aptRoomMatchesMore: 'A mostrar {count} de mais — continue a escrever para afinar',
     aptRoomMustPick: 'Escolha um dos quartos acima.',
     department: 'Departamento',
     selectDept: 'Seleccionar…',
@@ -4451,6 +4456,10 @@ function RoomPicker({ value, onChange, token, t, id }) {
   // already scoped to the request that asked for it; this is about the gap between
   // asking and being told.
   const [answered, setAnswered] = useState('');
+  // Whether the server had more matches than it returned. Kept apart from
+  // matches.length because the count on screen is a number of results, not a
+  // claim that those were all of them, and only the server knows which it was.
+  const [more, setMore] = useState(false);
   const wrapRef = useRef(null);
   const listId  = 'room-options';
 
@@ -4460,7 +4469,7 @@ function RoomPicker({ value, onChange, token, t, id }) {
 
   useEffect(() => {
     const q = query.trim();
-    if (!open || !q) { setMatches([]); setAnswered(''); return; }
+    if (!open || !q) { setMatches([]); setAnswered(''); setMore(false); return; }
     let live = true;
     const handle = setTimeout(() => {
       apiFetch(`/rooms/search?q=${encodeURIComponent(q)}`, {token})
@@ -4472,9 +4481,10 @@ function RoomPicker({ value, onChange, token, t, id }) {
           // from the inventory before the search for it has even been sent, which
           // is a confident answer to a question nobody has asked yet.
           setAnswered(q);
+          setMore(!!res.more);
           setCursor(0);
         })
-        .catch(() => { if (live) { setMatches([]); setAnswered(''); } });
+        .catch(() => { if (live) { setMatches([]); setAnswered(''); setMore(false); } });
     }, 180);
     return () => { live = false; clearTimeout(handle); };
   }, [query, open, token]);
@@ -4569,7 +4579,9 @@ function RoomPicker({ value, onChange, token, t, id }) {
           ))}
           {typed && matches.length > 0 && (
             <div className="room-picker-foot">
-              {t.aptRoomMatches.replace('{count}', matches.length)}
+              {more
+                ? t.aptRoomMatchesMore.replace('{count}', matches.length)
+                : t.aptRoomMatches.replace('{count}', matches.length)}
             </div>
           )}
           {unmatched && (

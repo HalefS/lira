@@ -46,13 +46,19 @@ func (app *application) listRoomsHandler(w http.ResponseWriter, r *http.Request)
 // is completing: someone typing "12" wants 1201 and 1214 offered to them, not the
 // runs those rooms happen to belong to.
 //
+// Matching is from the left of the number only. "12" finds rooms that begin 12 --
+// not 2412 or 4512, which contain those digits further along and are not the room
+// being looked for. On a hotel with several floors that is the difference between
+// a list of the floor asked about and a list of every room that happens to share
+// two digits with it.
+//
 // An empty query returns nothing rather than everything. A dropdown that opens on
 // three hundred rooms the moment the field is focused is not a list a technician
 // can pick from, and the field is empty precisely when they have not decided yet.
 func (app *application) searchRoomsHandler(w http.ResponseWriter, r *http.Request) {
 	query := app.readString(r.URL.Query(), "q", "")
 
-	found, err := app.models.Rooms.Search(query, data.RoomSearchLimit)
+	found, more, err := app.models.Rooms.Search(query, data.RoomSearchLimit)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -61,7 +67,7 @@ func (app *application) searchRoomsHandler(w http.ResponseWriter, r *http.Reques
 		found = []int{}
 	}
 
-	app.writeJSON(w, http.StatusOK, envelope{"rooms": found}, nil)
+	app.writeJSON(w, http.StatusOK, envelope{"rooms": found, "more": more}, nil)
 }
 
 // createRoomHandler adds a room or a range of them.

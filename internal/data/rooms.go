@@ -193,21 +193,33 @@ func scanRoom(row interface{ Scan(...any) error }) (*Room, error) {
 	return &r, nil
 }
 
-// Search finds individual rooms whose number contains q, which is what a typeahead
-// wants: not runs, but the room numbers themselves.
+// Search finds individual rooms whose number begins with q, which is what a
+// typeahead wants: not runs, but the room numbers themselves.
+//
+// Prefix, not substring, and deliberately so. A room number carries its floor in
+// the leading digits, so someone looking for 1426 types "14" -- and a substring
+// search answers that with 4114 and 2414 and every other room which merely
+// contains those two digits further along. Those are not candidates for the room
+// being looked for; they are the rooms that made the list hard to read, and on a
+// large floor they push the room actually wanted off the end of it. Matching from
+// the left is also what makes the offered list predictable: what comes back is the
+// floor the prefix names, in numeric order, and one more digit narrows within it.
 //
 // The expansion happens in the database with generate_series rather than in Go,
-// so a query cannot walk every room in the inventory to filter it. Matching is
-// on the number as written, so "12" finds 1214 and 4120 both, and "120" finds
-// 1201 through 1209.
-func (m RoomModel) Search(q string, limit int) ([]int, error) {
+// so a query cannot walk every room in the inventory to filter it.
+//
+// more reports that the limit cut the list short. Without it the caller would
+// announce "12 rooms match" when forty do, and a manager would conclude a floor is
+// smaller than it is -- so one extra row is read purely to tell "that was all of
+// them" apart from "that was all you are being shown".
+func (m RoomModel) Search(q string, limit int) (found []int, more bool, err error) {
 	q = strings.TrimSpace(q)
 	if q == "" {
-		return []int{}, nil
+		return []int{}, false, nil
 	}
 	// A non-numeric query can still match nothing useful, but the cast below
 	// would fail on it, so it is turned into a pattern that matches no number.
-	pattern := "%" + escapeLike(q) + "%"
+	pattern := roomSearchPattern(q)
 
 	if limit <= 0 || limit > RoomSearchLimit*4 {
 		limit = RoomSearchLimit
@@ -221,21 +233,49 @@ func (m RoomModel) Search(q string, limit int) ([]int, error) {
 		FROM rooms, generate_series(from_room, to_room) AS n
 		WHERE n::text ILIKE $1 ESCAPE '\'
 		ORDER BY n
-		LIMIT $2`, pattern, limit)
+		LIMIT $2`, pattern, limit+1)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer rows.Close()
 
-	found := []int{}
+	found = []int{}
 	for rows.Next() {
 		var n int
 		if err := rows.Scan(&n); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		found = append(found, n)
 	}
-	return found, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+
+	if len(found) > limit {
+		return found[:limit], true, nil
+	}
+	return found, false, nil
+}
+
+// roomSearchPattern turns a typed query into the ILIKE pattern room numbers are
+// matched against.
+//
+// The single trailing wildcard is the whole rule: it anchors the match at the
+// start of the number and nowhere else. Everything typed by the user is escaped,
+// which matters more now than it did when the pattern was wrapped in wildcards on
+// both sides -- an unescaped _ would otherwise match any single character and turn
+// a prefix search back into the substring search it was changed to avoid.
+//
+// An empty query yields an empty pattern, which matches no room number. Returning
+// "%" would match every room in the inventory, and Search does refuse an empty
+// query before getting here -- but a pattern builder whose safety depends on its
+// caller remembering that is one refactor away from offering the whole hotel to
+// someone who has not decided on a room yet.
+func roomSearchPattern(q string) string {
+	if q == "" {
+		return ""
+	}
+	return escapeLike(q) + "%"
 }
 
 // escapeLike neutralises the LIKE wildcards in whatever the user typed, so a

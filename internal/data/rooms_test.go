@@ -177,3 +177,46 @@ func TestEscapeLike(t *testing.T) {
 		}
 	}
 }
+
+// The search pattern is what makes the room search match from the left. Written
+// out as its own test because it is a one-line rule that is invisible once it is
+// folded into a query string, and because the failure is silent: reverting it to
+// a substring search does not error, it just starts offering the wrong rooms.
+//
+// A prefix pattern has exactly one wildcard, at the end, and it is ours.
+func TestRoomSearchPatternIsPrefixOnly(t *testing.T) {
+	tests := []struct {
+		query string
+		want  string
+	}{
+		// The prefix cases: these anchor the start of the number.
+		{"14", "14%"},
+		{"1426", "1426%"},
+		{"1", "1%"},
+
+		// Nothing leading. A leading % is exactly the bug this test exists for:
+		// it makes "14" match 4114, which is not the room being looked for.
+		{"14", "14%"},
+
+		// An empty query matches nothing. "%" would match every room there is,
+		// and this is the one place that could happen without a caller noticing.
+		{"", ""},
+
+		// Wildcards belonging to the user are escaped, so they cannot act as
+		// wildcards -- and cannot reintroduce the substring match either.
+		{"%", `\%` + "%"},
+		{"_", `\_` + "%"},
+		{"1_4", `1\_4%`},
+		{"14%", `14\%%`},
+		{`1\4`, `1\\4%`},
+	}
+	for _, tc := range tests {
+		got := roomSearchPattern(tc.query)
+		if got != tc.want {
+			t.Errorf("roomSearchPattern(%q) = %q, want %q", tc.query, got, tc.want)
+		}
+		if strings.HasPrefix(got, "%") {
+			t.Errorf("roomSearchPattern(%q) = %q: a pattern starting with %% matches anywhere in the number, not from the start", tc.query, got)
+		}
+	}
+}
