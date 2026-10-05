@@ -2,6 +2,7 @@ package data
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -118,25 +119,180 @@ func TestRoomCountAndLabel(t *testing.T) {
 	}
 }
 
-// The overlap message names the run in the way, because "rooms 1201-1210 are
-// already in the inventory" is something a manager can act on and "conflict" is
-// not.
-func TestRoomOverlapMessageNamesTheRun(t *testing.T) {
-	err := &RoomOverlap{Existing: &Room{FromRoom: 1201, ToRoom: 1210}}
-	if !errors.Is(err, ErrRoomOverlap) {
-		t.Errorf("RoomOverlap should unwrap to ErrRoomOverlap")
+// Which parts of a requested range are missing is the whole of "ignore the rooms
+// that already exist and carry on", so it is tested directly rather than only
+// through a database.
+//
+// Every case below states what the inventory already holds and what the manager
+// typed, because the interesting situations are all about the two disagreeing.
+func TestUncoveredRooms(t *testing.T) {
+	run := func(from, to int) *Room { return &Room{FromRoom: from, ToRoom: to} }
+
+	tests := []struct {
+		name     string
+		from, to int
+		existing []*Room
+		want     [][2]int // each pair is one run that would be inserted
+	}{
+		{
+			name: "nothing exists yet, so the whole range goes in",
+			from: 1401, to: 1412,
+			want: [][2]int{{1401, 1412}},
+		},
+		{
+			// The case the change was made for: the range starts where an
+			// existing run ends, so only the tail is new.
+			name: "range extends past an existing run",
+			from: 1401, to: 1420, existing: []*Room{run(1401, 1412)},
+			want: [][2]int{{1413, 1420}},
+		},
+		{
+			// The other direction: the range ends where an existing run starts.
+			name: "range stops before an existing run",
+			from: 1401, to: 1420, existing: []*Room{run(1415, 1420)},
+			want: [][2]int{{1401, 1414}},
+		},
+		{
+			// A single room already listed in the middle splits the range in two.
+			name: "one room in the middle splits it in two",
+			from: 1401, to: 1420, existing: []*Room{run(1410, 1410)},
+			want: [][2]int{{1401, 1409}, {1411, 1420}},
+		},
+		{
+			name: "run in the middle splits it in two",
+			from: 1401, to: 1420, existing: []*Room{run(1405, 1410)},
+			want: [][2]int{{1401, 1404}, {1411, 1420}},
+		},
+		{
+			name: "several runs leave several gaps",
+			from: 1401, to: 1420,
+			existing: []*Room{run(1403, 1405), run(1409, 1409), run(1415, 1417)},
+			want:     [][2]int{{1401, 1402}, {1406, 1408}, {1410, 1414}, {1418, 1420}},
+		},
+		{
+			// Already fully covered: nothing to do, and it is not an error.
+			name: "range is already fully covered",
+			from: 1401, to: 1420, existing: []*Room{run(1401, 1420)},
+			want: nil,
+		},
+		{
+			name: "range is covered by several adjacent runs",
+			from: 1401, to: 1420,
+			existing: []*Room{run(1401, 1410), run(1411, 1415), run(1416, 1420)},
+			want:     nil,
+		},
+		{
+			name: "exact single room already exists",
+			from: 1214, to: 1214, existing: []*Room{run(1214, 1214)},
+			want: nil,
+		},
+		{
+			// Everything already listed is outside the range, so none of it is
+			// relevant and the range goes in whole.
+			name: "existing runs are entirely outside the range",
+			from: 1401, to: 1412,
+			existing: []*Room{run(1201, 1212), run(1501, 1512)},
+			want:     [][2]int{{1401, 1412}},
+		},
+		{
+			// Touching without overlapping still leaves a gap the size of one room.
+			name: "existing run abuts the start of the range",
+			from: 1401, to: 1412, existing: []*Room{run(1400, 1400)},
+			want: [][2]int{{1401, 1412}},
+		},
+		{
+			name: "existing run abuts the end of the range",
+			from: 1401, to: 1412, existing: []*Room{run(1413, 1413)},
+			want: [][2]int{{1401, 1412}},
+		},
+		{
+			// Order of the query must not matter. The caller gets this from an
+			// ORDER BY, but the function sorts anyway so a future query that
+			// forgets cannot produce gaps that overlap what is already stored.
+			name: "existing runs given out of order",
+			from: 1401, to: 1420,
+			existing: []*Room{run(1415, 1417), run(1403, 1405), run(1409, 1409)},
+			want:     [][2]int{{1401, 1402}, {1406, 1408}, {1410, 1414}, {1418, 1420}},
+		},
+		{
+			// Defensive: reversed bounds are corrected rather than producing an
+			// empty range that silently adds nothing.
+			name: "reversed bounds are treated as the same range",
+			from: 1412, to: 1401, existing: []*Room{run(1401, 1405)},
+			want: [][2]int{{1406, 1412}},
+		},
 	}
-	for _, want := range []string{"1201-1210", "already in the inventory"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("overlap message %q should contain %q", err, want)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := uncoveredRooms(tc.from, tc.to, tc.existing)
+
+			if len(got) != len(tc.want) {
+				t.Fatalf("uncoveredRooms(%d, %d, %d existing) = %v, want %v",
+					tc.from, tc.to, len(tc.existing), spans(got), tc.want)
+			}
+			for i, w := range tc.want {
+				if got[i].from != w[0] || got[i].to != w[1] {
+					t.Errorf("gap %d = %d-%d, want %d-%d", i, got[i].from, got[i].to, w[0], w[1])
+				}
+			}
+
+			// The gaps must cover only rooms that were asked for and not already
+			// held, and between them they must account for every added room.
+			// These two properties are what make the result safe to insert.
+			covered, overlapsExisting := checkSpans(t, tc.from, tc.to, tc.existing, got)
+			if overlapsExisting {
+				t.Errorf("a returned gap overlaps a run that already exists")
+			}
+			lo, hi := tc.from, tc.to
+			if lo > hi {
+				lo, hi = hi, lo
+			}
+			if covered > hi-lo+1 {
+				t.Errorf("gaps cover %d rooms, more than the %d requested", covered, hi-lo+1)
+			}
+		})
+	}
+}
+
+// checkSpans reports how many rooms the gaps cover, and whether any of them
+// collides with a room an existing run already holds.
+func checkSpans(t *testing.T, from, to int, existing []*Room, gaps []roomSpan) (covered int, collided bool) {
+	t.Helper()
+	// The bounds are normalised the same way uncoveredRooms normalises them, or
+	// the "was not requested" check below would fire on every room of a reversed
+	// range and blame the function for the helper's own arithmetic.
+	if from > to {
+		from, to = to, from
+	}
+	inside := func(n, lo, hi int) bool { return n >= lo && n <= hi }
+	for _, g := range gaps {
+		for n := g.from; n <= g.to; n++ {
+			if !inside(n, from, to) {
+				t.Errorf("gap %d-%d reaches room %d, which was not requested", g.from, g.to, n)
+			}
+			for _, r := range existing {
+				if inside(n, r.FromRoom, r.ToRoom) {
+					t.Errorf("gap %d-%d includes room %d, already held by %d-%d", g.from, g.to, n, r.FromRoom, r.ToRoom)
+					collided = true
+				}
+			}
+			covered++
 		}
 	}
-	// An overlap with nothing known about it still has to be reportable, so a
-	// nil Existing cannot panic the error path.
-	bare := &RoomOverlap{}
-	if bare.Error() == "" {
-		t.Error("a RoomOverlap with no existing run should still say something")
+	return covered, collided
+}
+
+// spans renders gaps readably in test failure output.
+func spans(s []roomSpan) string {
+	if len(s) == 0 {
+		return "[]"
 	}
+	parts := make([]string, len(s))
+	for i, g := range s {
+		parts[i] = strconv.Itoa(g.from) + "-" + strconv.Itoa(g.to)
+	}
+	return "[" + strings.Join(parts, " ") + "]"
 }
 
 // Expansion must produce exactly the rooms the bounds say, in order, and nothing

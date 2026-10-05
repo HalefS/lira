@@ -6,15 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
-
-// ErrRoomOverlap is returned when a new run would cover a room an existing run
-// already covers. It is distinct from a bad request because the caller can say
-// something useful about it: which run is in the way, and what it covers.
-var ErrRoomOverlap = errors.New("room range overlaps an existing one")
 
 // ErrRoomRangeTooLarge is returned for a run wider than MaxRoomRun. A fat-fingered
 // "1-99999" would otherwise put a hundred thousand nonexistent rooms into the
@@ -139,20 +135,54 @@ func (r *Room) Expand() []int {
 	return out
 }
 
-// RoomOverlap describes the existing run that blocked a new one, so the error
-// can name it rather than just refusing.
-type RoomOverlap struct {
-	Existing *Room
-}
+// roomSpan is a run of consecutive rooms, used before anything is stored to say
+// which parts of a requested range still need adding.
+type roomSpan struct{ from, to int }
 
-func (o *RoomOverlap) Error() string {
-	if o == nil || o.Existing == nil {
-		return ErrRoomOverlap.Error()
+// uncoveredRooms returns the parts of [from, to] that no run in existing already
+// covers, in ascending order.
+//
+// This is the whole of "if the room already exists, ignore it and carry on". A
+// manager typing 1401-1420 into a hotel where 1401-1412 is already listed gets
+// 1413-1420 added, not a refusal: the rooms they asked for are the rooms that
+// were missing, and a message about a conflict would make them work out by hand
+// which twelve of the twenty were already there.
+//
+// existing is sorted first, so the result does not depend on the caller having
+// remembered to order a query. The sort does not copy the slice, and nothing here
+// writes to it.
+func uncoveredRooms(from, to int, existing []*Room) []roomSpan {
+	if from > to {
+		from, to = to, from
 	}
-	return fmt.Sprintf("%s: rooms %s are already in the inventory", ErrRoomOverlap.Error(), o.Existing.Label())
-}
+	sorted := make([]*Room, len(existing))
+	copy(sorted, existing)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].FromRoom < sorted[j].FromRoom })
 
-func (o *RoomOverlap) Unwrap() error { return ErrRoomOverlap }
+	var gaps []roomSpan
+	cursor := from
+	for _, r := range sorted {
+		// Behind the cursor: already consumed by an earlier run.
+		if r.ToRoom < cursor {
+			continue
+		}
+		// Ahead of the range being added: nothing further can intersect.
+		if r.FromRoom > to {
+			break
+		}
+		// A hole before this run.
+		if r.FromRoom > cursor {
+			gaps = append(gaps, roomSpan{from: cursor, to: r.FromRoom - 1})
+		}
+		if r.ToRoom >= cursor {
+			cursor = r.ToRoom + 1
+		}
+	}
+	if cursor <= to {
+		gaps = append(gaps, roomSpan{from: cursor, to: to})
+	}
+	return gaps
+}
 
 type RoomModel struct {
 	DB *sql.DB
@@ -353,19 +383,73 @@ func (m RoomModel) GetByRoom(room int) (*Room, error) {
 	return r, err
 }
 
-// Add inserts a run, refusing one that overlaps an existing run.
+// AddResult reports what an addition actually did, rather than only what was
+// asked for.
+//
+// The two counts are what a manager needs in order to believe what happened.
+// Asking for twenty rooms when twelve are already listed should say that eight
+// were added -- not report a success that quietly did less than was requested,
+// and not report a conflict that was resolved without them being asked. Added
+// being zero is a normal outcome rather than a failure: it means the range was
+// already fully covered.
+type AddResult struct {
+	Rooms   []*Room `json:"rooms"`
+	Added   int     `json:"added_rooms"`
+	Skipped int     `json:"skipped_rooms"`
+}
+
+// Add inserts whatever parts of [from, to] are not already in the inventory, and
+// ignores the parts that are.
+//
+// A manager who types 1401-1420 into a hotel where 1401-1412 is already listed
+// gets 1413-1420 added. Refusing the whole thing instead would make them work out
+// by hand which twelve of the twenty were already there, which is a puzzle about
+// the data rather than a decision they were trying to make. The rooms they asked
+// for are the rooms that were missing.
+//
+// Nothing is ever stored twice, so the invariant that makes "does 1207 exist?"
+// answerable with one row still holds. Only the parts that were missing are
+// written, so adding a range that is already fully covered adds nothing and says
+// so.
 //
 // The overlap read and the insert are serialised against each other by a table
-// lock, because "is 1207 a room?" having two answers is the one thing this table
-// must never do, and two managers saving overlapping ranges in the same second is
-// exactly how that happens. A row lock would not do it: FOR UPDATE on a query that
-// matched nothing locks nothing, so the second insert would sail past the check.
+// lock. Reading what already exists and inserting what does not has to be one
+// indivisible act: if two adds interleaved, both would read the inventory before
+// either had written to it, both would decide the same rooms were missing, and
+// both would insert them.
+//
+// A row lock would not do it. FOR UPDATE on a query that matched nothing locks
+// nothing, so an add over an empty part of the table would sail past it.
 //
 // SHARE ROW EXCLUSIVE conflicts with itself and with the ROW EXCLUSIVE a plain
 // insert takes, so two Adds cannot interleave. It is held for the length of one
 // save against a table of a few dozen rows, which is the right trade for being
 // able to say the inventory has no duplicates in it.
-func (m RoomModel) Add(from, to int, createdBy *int64) (*Room, error) {
+// overlappingRooms reads the runs that touch [from, to], which is what decides
+// which parts of the requested range are still missing.
+func overlappingRooms(ctx context.Context, tx *sql.Tx, from, to int) ([]*Room, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, from_room, to_room, created_at, created_by, version
+		FROM rooms
+		WHERE $1 <= to_room AND from_room <= $2
+		ORDER BY from_room`, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var found []*Room
+	for rows.Next() {
+		r, err := scanRoom(rows)
+		if err != nil {
+			return nil, err
+		}
+		found = append(found, r)
+	}
+	return found, rows.Err()
+}
+
+func (m RoomModel) Add(from, to int, createdBy *int64) (*AddResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -379,34 +463,33 @@ func (m RoomModel) Add(from, to int, createdBy *int64) (*Room, error) {
 		return nil, err
 	}
 
-	var clashFrom, clashTo int
-	clashErr := tx.QueryRowContext(ctx, `
-		SELECT from_room, to_room FROM rooms
-		WHERE $1 <= to_room AND from_room <= $2
-		ORDER BY from_room LIMIT 1`, from, to).Scan(&clashFrom, &clashTo)
-	if clashErr == nil {
-		return nil, &RoomOverlap{Existing: &Room{FromRoom: clashFrom, ToRoom: clashTo}}
-	}
-	if !errors.Is(clashErr, sql.ErrNoRows) {
-		return nil, clashErr
-	}
-
-	var created Room
-	err = tx.QueryRowContext(ctx, `
-		INSERT INTO rooms (from_room, to_room, created_by)
-		VALUES ($1, $2, $3)
-		RETURNING id, from_room, to_room, created_at, created_by, version`,
-		from, to, createdBy).Scan(
-		&created.ID, &created.FromRoom, &created.ToRoom,
-		&created.CreatedAt, &created.CreatedBy, &created.Version)
+	existing, err := overlappingRooms(ctx, tx, from, to)
 	if err != nil {
 		return nil, err
 	}
 
+	result := &AddResult{Rooms: []*Room{}}
+	for _, gap := range uncoveredRooms(from, to, existing) {
+		var created Room
+		err = tx.QueryRowContext(ctx, `
+			INSERT INTO rooms (from_room, to_room, created_by)
+			VALUES ($1, $2, $3)
+			RETURNING id, from_room, to_room, created_at, created_by, version`,
+			gap.from, gap.to, createdBy).Scan(
+			&created.ID, &created.FromRoom, &created.ToRoom,
+			&created.CreatedAt, &created.CreatedBy, &created.Version)
+		if err != nil {
+			return nil, err
+		}
+		result.Rooms = append(result.Rooms, &created)
+		result.Added += created.Count()
+	}
+	result.Skipped = to - from + 1 - result.Added
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &created, nil
+	return result, nil
 }
 
 // Delete removes one run.

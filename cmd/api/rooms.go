@@ -72,6 +72,13 @@ func (app *application) searchRoomsHandler(w http.ResponseWriter, r *http.Reques
 
 // createRoomHandler adds a room or a range of them.
 //
+// Rooms already in the inventory are skipped rather than refused, so adding a
+// range that partly exists tops up the missing part and says how many of each
+// there were. The response carries added_rooms and skipped_rooms rather than a
+// bare count, because a manager who asked for twenty rooms and got eight needs to
+// be told that twelve were already there rather than left to wonder whether the
+// other twelve silently failed.
+//
 // The body is the same string a manager typed into the field, not a pair of
 // numbers, so the rules about what counts as a range live in exactly one place --
 // data.ParseRoomRun -- and the field and the API cannot disagree about it.
@@ -101,29 +108,34 @@ func (app *application) createRoomHandler(w http.ResponseWriter, r *http.Request
 	user := app.contextGetUser(r)
 	createdBy := user.ID
 
-	room, err := app.models.Rooms.Add(from, to, &createdBy)
+	result, err := app.models.Rooms.Add(from, to, &createdBy)
 	if err != nil {
-		switch {
-		case errors.Is(err, data.ErrRoomOverlap):
-			// 422 rather than 400: the request was well formed, it just cannot be
-			// satisfied because of the current state of the inventory, and the
-			// manager can fix that by editing what is there.
-			var overlap *data.RoomOverlap
-			msg := "these rooms are already in the inventory"
-			if errors.As(err, &overlap) && overlap.Existing != nil {
-				msg = "rooms " + overlap.Existing.Label() + " are already in the inventory"
-			}
-			app.writeJSON(w, http.StatusUnprocessableEntity, envelope{
-				"error": msg,
-				"code":  "room_overlap",
-			}, nil)
-		default:
-			app.serverErrorResponse(w, r, err)
-		}
+		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	app.writeJSON(w, http.StatusCreated, envelope{"room": room}, nil)
+	// A range that was already fully covered is not a failure. The request was
+	// understood and the inventory already satisfies it, so this is a 200 and the
+	// counts say why nothing was written. Answering 201 would claim a room was
+	// created when none was, and a 4xx would call it an error when the manager
+	// asked for something the system already agreed to.
+	status := http.StatusCreated
+	if result.Added == 0 {
+		status = http.StatusOK
+	}
+
+	total, err := app.models.Rooms.CountRooms()
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.writeJSON(w, status, envelope{
+		"rooms":         result.Rooms,
+		"added_rooms":   result.Added,
+		"skipped_rooms": result.Skipped,
+		"total_rooms":   total,
+	}, nil)
 }
 
 // deleteRoomHandler removes one run.

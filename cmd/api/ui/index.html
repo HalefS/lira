@@ -2461,7 +2461,11 @@ const T = {
     adminRoomsOneRoom: '1 room: {from}',
     adminRoomsTooWide: 'That is {count} rooms. One entry may cover at most {max}.',
     adminRoomsEmpty: 'No rooms yet. Until a room is added here, an apartment issue cannot be logged.',
-    adminRoomsAdded: 'Rooms added',
+    // Three outcomes, because adding a range is no longer all-or-nothing. The
+    // middle one is the common case after the first floor of a hotel is in.
+    adminRoomsAddedCount: '{count} rooms added',
+    adminRoomsAddedSkipped: '{added} rooms added — {skipped} were already in the inventory',
+    adminRoomsAddedNone: 'Those {count} rooms are already in the inventory',
     adminRoomsDeleted: 'Rooms removed',
     adminRoomsRun: 'Rooms',
     roomsCount: '{count} rooms',
@@ -3059,7 +3063,9 @@ const T = {
     adminRoomsOneRoom: '1 quarto: {from}',
     adminRoomsTooWide: 'Isso são {count} quartos. Uma entrada pode cobrir no máximo {max}.',
     adminRoomsEmpty: 'Ainda não há quartos. Até ser adicionado um aqui, não é possível registar uma avaria de apartamento.',
-    adminRoomsAdded: 'Quartos adicionados',
+    adminRoomsAddedCount: '{count} quartos adicionados',
+    adminRoomsAddedSkipped: '{added} quartos adicionados — {skipped} já estavam no inventário',
+    adminRoomsAddedNone: 'Esses {count} quartos já estão no inventário',
     adminRoomsDeleted: 'Quartos removidos',
     adminRoomsRun: 'Quartos',
     roomsCount: '{count} quartos',
@@ -8936,6 +8942,16 @@ function SystemStatusPage({ token }) {
    length of the list is never a surprise -- only its tail is deferred. */
 const ADMIN_PREVIEW_ROWS = 5;
 
+/* Rooms get their own preview length, twice the other catalogs' five.
+
+   A room run is much shorter than a catalog entry -- "1401-1412", a handful of
+   characters -- so a list of five of them is a couple of lines of screen. Rooms
+   are also added in floors, which means the list grows in visible steps and a
+   manager checking whether a floor went in wants to see it without a click. Ten
+   is still short enough that the load-more button stays meaningful on a hotel
+   with many floors, which is the case it exists for. */
+const ROOMS_PREVIEW_ROWS = 10;
+
 // Rendered only while something is actually hidden, so a short list carries no
 // button and no ruled footer. The number in brackets is what the click buys, which
 // is the part that makes it safe to press without opening a dialog to find out.
@@ -9263,16 +9279,33 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
     setSavingRoom(true); setRoomErr('');
     try {
       const res = await apiFetch('/rooms', {method:'POST', body:{run: trimmed}, token});
-      // Opened on the way in, for the same reason the catalog lists are: a room
-      // added out of alphabetical order can land below the fold, and "I added it
-      // and nothing happened" is the obvious reading of that.
-      setRoomsAll(true);
       setRoomRun('');
       loadRooms();
-      const n = res.room.to_room - res.room.from_room + 1;
-      setToast(n === 1
-        ? t.adminRoomsAdded
-        : t.roomsCount.replace('{count}', n) + ' — ' + t.adminRoomsAdded);
+
+      // The toast reports what the server did, not what was typed. A range can
+      // be partly or wholly already in the inventory now, and the difference is
+      // the whole point of the operation: a manager who asked for twenty rooms
+      // and is told "rooms added" has no way to tell whether eight were added
+      // and twelve were quietly refused, or twenty were added.
+      const added   = res.added_rooms   || 0;
+      const skipped = res.skipped_rooms || 0;
+
+      if (added === 0) {
+        setToast(t.adminRoomsAddedNone.replace('{count}', skipped));
+      } else if (skipped === 0) {
+        setToast(t.adminRoomsAddedCount.replace('{count}', added));
+      } else {
+        setToast(t.adminRoomsAddedSkipped
+          .replace('{added}', added)
+          .replace('{skipped}', skipped));
+      }
+
+      // Opened on the way in when something was added, for the same reason the
+      // catalog lists are: a range added out of order can land below the fold,
+      // and "I added it and nothing happened" is the obvious reading of that.
+      // Left collapsed when nothing was added, because there is nothing new to
+      // go and look at.
+      if (added > 0) setRoomsAll(true);
     } catch(ex) { setRoomErr(ex.message); }
     finally { setSavingRoom(false); }
   }
@@ -9657,7 +9690,7 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
                     <tr><th>{t.adminRoomsRun}</th><th style={{width:110}}></th></tr>
                   </thead>
                   <tbody>
-                    {rooms.slice(0, roomsAll ? rooms.length : ADMIN_PREVIEW_ROWS).map(r=>(
+                    {rooms.slice(0, roomsAll ? rooms.length : ROOMS_PREVIEW_ROWS).map(r=>(
                       <tr key={r.id}>
                         <td>
                           {/* The run as it was typed, and what it is worth in
@@ -9683,7 +9716,7 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
                   </tbody>
                 </table>
             }
-            <AdminShowMore hidden={roomsAll ? 0 : Math.max(0, rooms.length - ADMIN_PREVIEW_ROWS)}
+            <AdminShowMore hidden={roomsAll ? 0 : Math.max(0, rooms.length - ROOMS_PREVIEW_ROWS)}
               label={t.adminShowMore} onClick={()=>setRoomsAll(true)}/>
           </div>
         </div>
