@@ -33,6 +33,14 @@
   --teal:        #1D9E75;
   --teal-light:  #E1F5EE;
   --teal-mid:    #9FE1CB;
+  /* Orange sits between the amber and the red on purpose. Amber is too close to
+     white to carry 13px text -- #D88A18 on #FFF4DF measures 2.54:1 -- and red is
+     this app's error colour, already spoken for by the API error banner and every
+     "incorrect details" message. This pair is a deeper, redder orange that clears
+     4.5:1 against its own wash (4.9:1) while still reading as caution rather than
+     as something having gone wrong. */
+  --orange:      #C2410C;
+  --orange-light:#FFF7ED;
   --amber:       #D88A18;
   --amber-light: #FFF4DF;
   --green:       #2E8B57;
@@ -63,6 +71,10 @@ html.dark {
   --teal:        #5DCAA5;
   --teal-light:  #085041;
   --teal-mid:    #0F6E56;
+  /* Lightened for a dark surface, the same way --red and --amber are: a mid-dark
+     wash with a bright hue on it, 5.9:1 here. */
+  --orange:      #F59B5C;
+  --orange-light:#4A2A10;
   --amber:       #F0A63C;
   --amber-light: #4A320D;
   --green:       #52B37F;
@@ -148,6 +160,17 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
   background: var(--red-light); color: var(--red);
   border: 1px solid var(--red-mid); border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px;
 }
+/* Not an error. Being signed out for inactivity is the app working, so this is
+   stated in the same blue as the rest of the informational furniture rather than
+   in the red of a failure, and it sits above the form where it is read before the
+   email field rather than after a failed attempt to use it. */
+.auth-notice {
+  background: var(--blue-light); color: var(--blue);
+  border: 1px solid var(--blue-mid); border-radius: var(--radius-md);
+  padding: 11px 14px; font-size: 13px; line-height: 1.45; margin-bottom: 18px;
+  display: flex; align-items: flex-start; gap: 8px;
+}
+.auth-notice svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
 .demo-box {
   margin-top: 16px; padding: 12px 14px;
   background: var(--gray-50); border-radius: var(--radius-md); border: 1px solid var(--gray-200);
@@ -168,6 +191,23 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
   display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
 }
 .content { flex: 1; overflow-y: auto; padding: 24px 28px; }
+
+/* A message that sits under the topbar and applies to the whole page rather than
+   to one panel: an API error, and the inactivity warning.
+
+   The svg rule is not decoration. These icons carry only a viewBox, which gives
+   an inline SVG no intrinsic size of its own, so with nothing to size it a flex
+   row hands it whatever width is going and a one-line message renders as a
+   several-hundred-pixel slab with a giant icon in it. The API error banner had
+   been doing exactly that for as long as it had existed. */
+.page-banner {
+  margin: 16px 28px 0; border-radius: var(--radius-md); padding: 11px 16px;
+  font-size: 13px; display: flex; align-items: center; gap: 9px;
+}
+.page-banner svg { width: 15px; height: 15px; flex-shrink: 0; }
+.page-banner-error   { background: var(--red-light);    color: var(--red); }
+.page-banner-warning { background: var(--orange-light); color: var(--orange); border: 1px solid var(--orange); }
+.page-banner-dismiss { margin-left: auto; background: none; border: none; cursor: pointer; color: inherit; }
 
 /* ── Sidebar ── */
 .sidebar-logo {
@@ -1422,7 +1462,13 @@ async function apiFetch(path, { method='GET', body, token } = {}) {
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json();
+  // Read as text and parse by hand, because res.json() rejects an empty body with
+  // a SyntaxError that is indistinguishable from a failed request. Signing out
+  // answers 204 with nothing in it, and a successful sign-out must not look like
+  // a broken network call to whatever asked for it.
+  const raw = await res.text();
+  let data = {};
+  if (raw) { try { data = JSON.parse(raw); } catch (_) { data = {}; } }
   if (!res.ok) {
     const msg = data.error
       ? (typeof data.error === 'object' ? Object.values(data.error).join(', ') : data.error)
@@ -1837,6 +1883,11 @@ const T = {
     historyNoIssues: 'No issues logged on this date.',
     team: 'Team',
     signOut: 'Sign out',
+    // The inactivity timeout, said out loud. "30 minutes" is repeated in the
+    // sign-in notice because someone reading it there has no memory of the
+    // banner that preceded it, or of the app at all.
+    idleWarning: 'No activity for 25 minutes. You will be signed out in 5 minutes unless you keep using LIRA.',
+    signedOutIdle: 'You were signed out after 30 minutes without activity. Sign in again to carry on.',
     deptIssueBtn: 'Dept. issue',
     aptIssueBtn: 'Apt. issue',
     totalToday: 'Total issues today',
@@ -2341,7 +2392,10 @@ const T = {
     managerLabel: 'Manager',
     adminView: 'Admin view',
     language: 'Language',
-    admin: 'Admin',
+    // The nav label. The page is the settings destination, whatever the component
+    // and the id it grew up with are still called -- see the comment above
+    // SettingsPage. Only ever read from the nav, so renaming it changed nothing else.
+    settings: 'Settings',
     adminShowMore: 'Show more',
     adminIssueTypes: 'Issue types',
     adminIssueTypesSub: 'These types appear in the dropdown when an issue is logged. Only managers can add or remove them.',
@@ -2403,6 +2457,8 @@ const T = {
     historyNoIssues: 'Nenhuma avaria registada nesta data.',
     team: 'Equipa',
     signOut: 'Sair',
+    idleWarning: 'Sem atividade há 25 minutos. A sessão será terminada dentro de 5 minutos, a não ser que continue a usar o LIRA.',
+    signedOutIdle: 'A sua sessão foi terminada após 30 minutos sem atividade. Inicie sessão novamente para continuar.',
     deptIssueBtn: 'Avaria Dept.',
     aptIssueBtn: 'Avaria Apt.',
     totalToday: 'Total de avarias hoje',
@@ -2918,7 +2974,7 @@ const T = {
     managerLabel: 'Gestor',
     adminView: 'Vista de administrador',
     language: 'Idioma',
-    admin: 'Administração',
+    settings: 'Definições',
     adminShowMore: 'Mostrar mais',
     adminIssueTypes: 'Tipos de avaria',
     adminIssueTypesSub: 'Estes tipos aparecem no menu ao registar uma avaria. Só os gestores podem adicionar ou remover tipos.',
@@ -2988,6 +3044,15 @@ const Ic = {
   check:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 8l3.5 3.5L13 4"/></svg>,
   logout: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6"/></svg>,
   shield: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2l5 2v4c0 3-2.5 5.5-5 6C5.5 13.5 3 11 3 8V4l5-2z"/></svg>,
+  // The gear, for the settings destination. A hub plus eight teeth rather than a
+  // full cog outline: at the 15px the nav gives it, an outlined gear closes up
+  // into a blob, whereas separate strokes stay countable. The teeth start at r=2.4
+  // and the hub's own stroke reaches r=2.95, so they overlap and read as one
+  // shape -- drawn clear of the hub instead, the gap is about a pixel at this size
+  // and the whole thing looks like a sun. Distinct from `tool` (the wrench, which
+  // means maintenance) and from `shield`, which still means "manager" everywhere it
+  // is genuinely about a person's role.
+  gear:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 3.4v2.2M8 10.6v2.2M12.6 8h-2.2M5.4 8H3.2M9.7 6.3l1.55-1.55M9.7 9.7l1.55 1.55M6.3 9.7l-1.55 1.55M6.3 6.3L4.75 4.75"/></svg>,
   tool:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.5 2a3.5 3.5 0 00-3.3 4.6L2 11.8 4.2 14l5.2-5.2A3.5 3.5 0 1010.5 2z"/></svg>,
   eye:    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>,
   eyeoff: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 2l12 12M6.5 6.6A2 2 0 0010 9.5M4 4.3C2.4 5.5 1 8 1 8s2.5 5 7 5a7 7 0 003-.7M7 3.1A7 7 0 0115 8s-.8 1.7-2 3"/></svg>,
@@ -3177,7 +3242,88 @@ function PwField({ label, value, onChange, placeholder, showPw, onToggleShow }) 
   );
 }
 
-function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
+/* ── inactivity sign-out ──
+   Thirty minutes of doing nothing ends the session. The reasons for the shape of
+   this are not obvious, so they are written down rather than left to be
+   rediscovered:
+
+   The clock is wall-clock, not a tick count. setInterval is throttled hard in a
+   background tab -- to once a minute, sometimes less -- so counting ticks would
+   keep a session alive for hours in a tab nobody is looking at, which is exactly
+   the case this exists for. Comparing Date.now() against the last moment of
+   activity gives the same answer whatever the browser does with the timer, and a
+   tab coming back into focus finds itself already signed out rather than waiting
+   out the remainder of its throttled interval.
+
+   mousemove counts, but only once every two seconds. Someone reading a long page
+   is often barely moving, and being signed out for reading is worse than the risk
+   it guards against. The throttle is there so a trackpad reporting a pixel of
+   drift cannot hold a session open indefinitely.
+
+   Everything else counted is a deliberate act -- a click, a key, a scroll, a tap.
+   A password field left half-filled on a reception PC is exactly what this is for,
+   which is why the warning below comes first: five minutes of it, and any movement
+   takes it away. */
+const IDLE_LIMIT_MS      = 30 * 60 * 1000;
+const IDLE_WARN_AFTER_MS = 25 * 60 * 1000;
+const IDLE_TICK_MS       = 15 * 1000;
+const IDLE_MOVE_EVERY_MS = 2000;
+
+function useIdleSignOut(active, { onWarn, onIdle }) {
+  const lastRef   = useRef(Date.now());
+  const movedRef  = useRef(0);
+  const warnedRef = useRef(false);
+  // The callbacks are held in a ref so that a caller passing an inline arrow --
+  // which is the normal way to write them -- does not restart the timer on every
+  // render of the page above this one.
+  const cbsRef    = useRef({ onWarn, onIdle });
+  useEffect(() => { cbsRef.current = { onWarn, onIdle }; });
+
+  useEffect(() => {
+    if (!active) return;
+
+    const dropWarning = () => {
+      if (!warnedRef.current) return;
+      warnedRef.current = false;
+      cbsRef.current.onWarn(false);
+    };
+    const bump = () => { lastRef.current = Date.now(); dropWarning(); };
+    const move = () => {
+      const now = Date.now();
+      if (now - movedRef.current < IDLE_MOVE_EVERY_MS) return;
+      movedRef.current = now;
+      bump();
+    };
+
+    // No focus, and no visibilitychange. Returning to the tab is not using it:
+    // counting either would mean that coming back after an hour away always reset
+    // the clock before a throttled background tick could notice, so the timeout
+    // could only ever fire while somebody was already watching the screen -- which
+    // is the one case it does not exist for. A tab left alone for half an hour is
+    // signed out when it is looked at again, which is the correct outcome and the
+    // reason the notice on the sign-in screen names the reason.
+    const events = ['mousedown', 'keydown', 'wheel', 'touchstart', 'pointerdown', 'scroll'];
+    events.forEach(e => window.addEventListener(e, bump, { passive: true }));
+    window.addEventListener('mousemove', move, { passive: true });
+
+    const tick = setInterval(() => {
+      const idleFor = Date.now() - lastRef.current;
+      if (idleFor >= IDLE_LIMIT_MS) { cbsRef.current.onIdle(); return; }
+      if (idleFor >= IDLE_WARN_AFTER_MS && !warnedRef.current) {
+        warnedRef.current = true;
+        cbsRef.current.onWarn(true);
+      }
+    }, IDLE_TICK_MS);
+
+    return () => {
+      clearInterval(tick);
+      events.forEach(e => window.removeEventListener(e, bump));
+      window.removeEventListener('mousemove', move);
+    };
+  }, [active]);
+}
+
+function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange, notice }) {
   const t = T[lang];
   // 'login' | 'register' | 'forgot'
   //
@@ -3331,6 +3477,14 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange }) {
           <>
           <div className="auth-card-title">{mode==='login' ? t.welcomeBack : t.createAccount}</div>
           <div className="auth-card-sub">{mode==='login' ? t.signIn : t.joinTeam}</div>
+
+          {/* Why the sign-in form is here when the user did not ask for it. Shown
+              on the login step only -- carrying it into "create account" or the
+              reset form would be explaining a sign-out they are no longer on the
+              path to. */}
+          {notice && mode==='login' && (
+            <div className="auth-notice" role="status">{Ic.info}<span>{notice}</span></div>
+          )}
 
           <form className="auth-form" onSubmit={mode==='login' ? doLogin : doRegister}>
             {err && <div className="auth-error">{err}</div>}
@@ -8537,7 +8691,13 @@ function AdminShowMore({ hidden, label, onClick }) {
   );
 }
 
-function AdminPage({ token, issueTypes, onTypesUpdate, departments, onDepartmentsUpdate, connectaAgents, onConnectaAgentsUpdate, consumableItems, onConsumableItemsUpdate, settings, onSettingsUpdate, setToast }) {
+/* The settings page. Named for what it is called in the nav rather than for what
+   it grew out of: it holds the catalogs the rest of the app is configured from --
+   issue types, departments, Connecta agents, consumable items -- plus the settings
+   themselves. The per-section translation keys kept their `admin` prefix, because
+   renaming thirty strings nobody sees buys nothing and risks a typo in one of
+   them. */
+function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartmentsUpdate, connectaAgents, onConnectaAgentsUpdate, consumableItems, onConsumableItemsUpdate, settings, onSettingsUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [name, setName] = useState('');
@@ -9147,6 +9307,11 @@ function App() {
   const [lang,    setLang]    = useState(()=>loadLS('lira_lang','en'));
   const [theme,   setTheme]   = useState(()=>loadLS('lira_theme','light'));
   const [session, setSession] = useState(()=>loadLS('lira_session', null)); // {user, token}
+  // The two pieces of the inactivity timeout's own state: whether to show the
+  // five-minute warning, and whether the sign-in screen owes the user an
+  // explanation for why they are back at it.
+  const [idleWarning, setIdleWarning]     = useState(false);
+  const [signedOutIdle, setSignedOutIdle] = useState(false);
   const [users,   setUsers]   = useState([]);
   // Counts only, straight from the alerts endpoint. The alert lists are the
   // Alerts page's business and are fetched there, a pageful at a time.
@@ -9201,7 +9366,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
   const me    = session?.user;
 
   useEffect(()=>{
-    if ((page === 'admin' || page === 'system') && me?.role !== 'manager') setPage('dashboard');
+    if ((page === 'settings' || page === 'system') && me?.role !== 'manager') setPage('dashboard');
   }, [page, me]);
 
   useEffect(()=>{ saveLS('lira_lang', lang); }, [lang]);
@@ -9299,12 +9464,37 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
   function login(user, token) {
     setSession({user, token});
     setPage('dashboard');
+    // Cleared here rather than at sign-out, so a notice can never survive into the
+    // next session and greet someone who signed in normally.
+    setSignedOutIdle(false);
   }
 
-  function logout() {
+  /* Signing out tells the server as well as forgetting the token here.
+
+     This used to be local only, which left a row in the tokens table good for
+     another seven days -- fine on a laptop, not fine on the shared machine at a
+     reception desk, and it would have made the inactivity timeout cosmetic: the
+     session would end on screen and still be usable if the token were copied out
+     of localStorage.
+
+     The request is best effort. If it fails -- offline, server restarting -- the
+     local session still goes, because leaving someone signed in on screen because
+     a network call failed is the worse of the two failures. */
+  async function logout(reason) {
+    try {
+      if (token) await apiFetch('/tokens/authentication', {method:'DELETE', token});
+    } catch (_) { /* signed out locally regardless */ }
+
     setSession(null);
+    setIdleWarning(false);
+    setSignedOutIdle(reason === 'idle');
     setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlertsPendingCount(0); setUserIssueStats([]); setMaintenanceDueCount(0); setMaintIssue(null);
   }
+
+  useIdleSignOut(!!session, {
+    onWarn: setIdleWarning,
+    onIdle: () => logout('idle'),
+  });
 
   // Called when profile updates come back from API
   function onSessionUpdate(updatedUser) {
@@ -9443,7 +9633,8 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
 
   if (!session) return (
     <LangCtx.Provider value={lang}>
-      <AuthScreen onLogin={login} lang={lang} onLangChange={setLang} theme={theme} onThemeChange={setTheme}/>
+      <AuthScreen onLogin={login} lang={lang} onLangChange={setLang} theme={theme} onThemeChange={setTheme}
+        notice={signedOutIdle ? t.signedOutIdle : null}/>
     </LangCtx.Provider>
   );
 
@@ -9462,7 +9653,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     {id:'team',      label:t.team,       icon:Ic.users},
     {id:'reports',   label:'Reports',    icon:Ic.report},
     ...(me.role === 'manager' ? [{id:'system', label:t.systemStatus, icon:Ic.server}] : []),
-    ...(me.role === 'manager' ? [{id:'admin', label:t.admin, icon:Ic.shield}] : []),
+    ...(me.role === 'manager' ? [{id:'settings', label:t.settings, icon:Ic.gear}] : []),
     // A collapsible group rather than a destination: it only reveals its
     // children, so it never takes the .active class itself.
     {id:'misc', label:t.miscellaneous, icon:Ic.grid, group:true, children:[
@@ -9542,7 +9733,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
                 <div className="sidebar-user-role">{me.role==='manager' ? t.managerRole : t.techRole}</div>
               </div>
             </div>
-            <button className="logout-btn" onClick={logout}>{Ic.logout} {t.signOut}</button>
+            <button className="logout-btn" onClick={()=>logout()}>{Ic.logout} {t.signOut}</button>
           </div>
         </aside>
 
@@ -9563,8 +9754,20 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
           </div>
 
           {apiErr && (
-            <div style={{margin:'16px 28px 0',background:'var(--red-light)',color:'var(--red)',borderRadius:'var(--radius-md)',padding:'10px 16px',fontSize:13,display:'flex',alignItems:'center',gap:8}}>
-              {Ic.info} {apiErr} <button style={{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',color:'var(--red)'}} onClick={()=>setApiErr('')}>{Ic.x}</button>
+            <div className="page-banner page-banner-error">
+              {Ic.info} <span>{apiErr}</span>
+              <button className="page-banner-dismiss" onClick={()=>setApiErr('')}>{Ic.x}</button>
+            </div>
+          )}
+
+          {/* The five-minute warning. Not a toast: a toast is gone in under three
+              seconds, which is not long enough to notice a countdown you have to
+              act on. This sits under the topbar until it is dealt with, and any
+              movement of the mouse or key takes it away, so the only thing anyone
+              has to do about it is keep working. */}
+          {idleWarning && (
+            <div className="page-banner page-banner-warning" role="status">
+              {Ic.clock} <span>{t.idleWarning}</span>
             </div>
           )}
 
@@ -9599,7 +9802,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
               refreshKey={lcuEpoch}
               onLcuRequired={ex=>setLcuPrompt({units:ex.lcuUnits, today:ex.lcuToday})}/>}
             {page==='system' && me.role==='manager' && <SystemStatusPage token={token}/>}
-            {page==='admin' && me.role==='manager' && <AdminPage
+            {page==='settings' && me.role==='manager' && <SettingsPage
               token={token}
               issueTypes={issueTypes}
               onTypesUpdate={setIssueTypes}
@@ -9653,7 +9856,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
         {lcuPrompt && (
           <LCUPrompt units={lcuPrompt.units} token={token}
             onDone={()=>{ setLcuPrompt(null); setLcuEpoch(e=>e+1); loadEverything(); }}
-            onLogout={logout}/>
+            onLogout={()=>logout()}/>
         )}
         {editing && (
           <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token}

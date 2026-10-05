@@ -39,6 +39,10 @@ func (app *application) routes() http.Handler {
 	// Auth
 	router.HandlerFunc(http.MethodPost, "/v1/users", app.registerUserHandler)
 	router.HandlerFunc(http.MethodPost, "/v1/tokens/authentication", app.createAuthTokenHandler)
+	// Signing out has to reach the server: a token only forgotten by the browser
+	// that held it is still a valid token for the rest of its life. Both the
+	// button and the inactivity timeout go through this.
+	router.HandlerFunc(http.MethodDelete, "/v1/tokens/authentication", app.requireAuth(app.deleteAuthTokenHandler))
 
 	// Password change. Deliberately outside authenticate: the account has been
 	// signed out of every session and has no token to present.

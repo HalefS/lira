@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/HalefS/lira/internal/data"
@@ -79,4 +80,29 @@ func (app *application) createAuthTokenHandler(w http.ResponseWriter, r *http.Re
 		"token": token.Plaintext,
 		"user":  user,
 	}, nil)
+}
+
+// deleteAuthTokenHandler signs the caller out.
+//
+// Until this existed, signing out only forgot the token in the browser: the row
+// stayed in the database and the token stayed good for the full seven days. On a
+// shared machine that is the machine in a hotel reception, and it is also what
+// would make an inactivity timeout decorative -- the session would end on screen
+// and carry on being usable.
+//
+// Idempotent, and deliberately quiet about what it removed: a caller whose token
+// has already expired, or who signs out twice, gets the same answer as one who
+// signs out once. There is nothing for them to do differently either way.
+func (app *application) deleteAuthTokenHandler(w http.ResponseWriter, r *http.Request) {
+	headerParts := strings.Split(r.Header.Get("Authorization"), " ")
+	if len(headerParts) == 2 && headerParts[0] == "Bearer" {
+		if err := app.models.Tokens.DeleteByPlaintext(data.ScopeAuthentication, headerParts[1]); err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
+	// 204 rather than 200 with a body: there is nothing to report, and a body
+	// would only invite a client to look for a field in it.
+	w.WriteHeader(http.StatusNoContent)
 }
