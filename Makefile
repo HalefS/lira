@@ -95,6 +95,24 @@ audit:
 # BUILD
 # ==================================================================================== #
 
+## ui: compile the JSX in cmd/api/ui/src/index.html into the embeddable cmd/api/ui/index.html
+#
+# The app shell is authored as JSX and compiled to JavaScript here, once, rather
+# than in the browser on every page load. It used to be compiled by Babel
+# standalone fetched from a CDN, which cost ~3.7s to download and then ~6.6s of
+# main-thread transpile on every single page load -- measured, not estimated.
+#
+# cmd/api/ui/index.html is generated and committed, so `go build` and every build
+# target above still need nothing but Go. Node is needed only to regenerate it,
+# which is what this target is for: edit cmd/api/ui/src/index.html, then run this.
+#
+# Requires node and npx on PATH. esbuild is pinned in build.mjs so the output does
+# not depend on which version happens to be current.
+.PHONY: ui
+ui:
+	@echo 'Compiling the frontend...'
+	node cmd/api/ui/build.mjs
+
 ## build/api: build for current OS (single binary with embedded frontend)
 .PHONY: build/api
 build/api:

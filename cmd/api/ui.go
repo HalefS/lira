@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"io/fs"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -66,9 +67,51 @@ func loadUI() {
 			if entry.IsDir() {
 				continue
 			}
-			uiVendors.Store(entry.Name(), newAsset("ui/vendor/"+entry.Name(), "text/javascript; charset=utf-8"))
+			uiVendors.Store(entry.Name(), newAsset("ui/vendor/"+entry.Name(), vendorContentType(entry.Name())))
 		}
 	})
+}
+
+// vendorContentType says how a vendored file must be served.
+//
+// This was a single hardcoded JavaScript type back when the only vendored files
+// were the three frontend libraries, and a browser enforces that: a woff2 sent as
+// text/javascript is rejected outright, so the font silently never loads and
+// nothing says why. Deriving it from the extension keeps the two facts that used
+// to be the same fact -- what a file is, and how it has to be served -- from
+// drifting apart the moment a fourth kind of file appears.
+//
+// The fonts are also the first vendored files that are not text, which is why
+// alreadyCompressed below exists alongside this.
+func vendorContentType(name string) string {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".woff2":
+		return "font/woff2"
+	case ".woff":
+		return "font/woff"
+	case ".js", ".mjs":
+		return "text/javascript; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+// alreadyCompressed reports whether a file's bytes are already in a compressed
+// container, so compressing them again is work for nothing.
+//
+// woff2 is Brotli-compressed inside a woff2 wrapper. Gzipping it costs CPU at
+// startup and at every cold build to produce bytes that are larger than what went
+// in, and the response is then decoded by the browser on every load to arrive
+// back where it started.
+func alreadyCompressed(name string) bool {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".woff2", ".woff", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".zip", ".gz":
+		return true
+	default:
+		return false
+	}
 }
 
 func newAsset(name, contentType string) asset {
@@ -84,21 +127,28 @@ func newAsset(name, contentType string) asset {
 
 	// BestCompression rather than the default: this runs once per process, and
 	// the frontend is by far the largest thing the server sends.
-	var buf bytes.Buffer
-	zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
-	if err != nil {
-		panic("lira: gzip writer: " + err.Error())
-	}
-	if _, err := zw.Write(data); err != nil {
-		panic("lira: gzip write: " + err.Error())
-	}
-	if err := zw.Close(); err != nil {
-		panic("lira: gzip close: " + err.Error())
+	//
+	// Nil for a file that is already compressed, which leaves serve sending the
+	// original bytes with no Content-Encoding. See alreadyCompressed.
+	var compressed []byte
+	if !alreadyCompressed(name) {
+		var buf bytes.Buffer
+		zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+		if err != nil {
+			panic("lira: gzip writer: " + err.Error())
+		}
+		if _, err := zw.Write(data); err != nil {
+			panic("lira: gzip write: " + err.Error())
+		}
+		if err := zw.Close(); err != nil {
+			panic("lira: gzip close: " + err.Error())
+		}
+		compressed = buf.Bytes()
 	}
 
 	return asset{
 		body:        data,
-		gzip:        buf.Bytes(),
+		gzip:        compressed,
 		etag:        `"` + hex.EncodeToString(sum[:16]) + `"`,
 		contentType: contentType,
 	}
