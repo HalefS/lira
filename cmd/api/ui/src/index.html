@@ -826,6 +826,97 @@ html.dark .maint-choice.on   { background: var(--blue-light); border-color: var(
 .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
 .mini-card { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: 18px 20px; }
 .mini-card-title { font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+
+/* ── Settings: collapsible groups ────────────────────────────────────────
+   The page used to be ten sibling cards -- three global thresholds, then five
+   catalogs, each of which was two cards of its own -- all the same weight, with
+   nothing on screen saying how any two of them related. That is what made it
+   hard to take in: no entry point, and every catalog announced its own name
+   twice, once over its add form and once over its list.
+
+   Two levels now, and only the top level is a card. A group is a card because a
+   group is a thing; a catalog inside one is a row, because a catalog is a detail
+   of the group rather than a destination in its own right.
+
+   Height animates with grid-template-rows 0fr -> 1fr rather than a max-height.
+   A catalog can hold any number of rows and a max-height has to be a guess:
+   guess low and the bottom of a long list is clipped with no scrollbar and no
+   way to reach the rows behind it. At 0fr the row collapses to the height of a
+   hidden child, which is right for any content and needs no number kept in step
+   with the data. */
+.set-group { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); }
+.set-group + .set-group { margin-top: 14px; }
+
+/* One button, not a heading with a toggle button beside it: the native element
+   brings Enter, Space, the button role and a focus ring without any of it being
+   reimplemented, and the whole 44px row is one tab stop instead of two. */
+.set-group-head {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%;
+  padding: 14px 18px; text-align: left;
+  background: transparent; border: 0; border-radius: var(--radius-lg);
+  font-family: inherit; color: var(--gray-900); cursor: pointer;
+}
+.set-group-head:hover { background: var(--gray-100); }
+/* The one place a hover has to be spelled out per theme. The greys run the other
+   way in dark -- --gray-100 is darker than the --gray-50 card it sits on -- so the
+   token that reads as "raised" in light reads as "punched in" in dark. */
+html.dark .set-group-head:hover { background: var(--gray-200); }
+.set-group-head:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+
+.set-group-icon { width: 18px; height: 18px; flex: 0 0 auto; margin-top: 2px; color: var(--gray-400); }
+.set-group-title { display: block; font-size: 15px; font-weight: 600; line-height: 1.3; }
+.set-group-sub { display: block; font-size: 12.5px; color: var(--gray-400); margin-top: 3px; line-height: 1.45; }
+/* min-width:0 so a long word in the subtitle wraps instead of pushing the count
+   and the chevron off the right edge of the row. */
+.set-group-label { min-width: 0; }
+/* Eats the slack, so the count and the chevron stay pinned to the right edge at
+   any width instead of drifting inwards as the title wraps. */
+.set-group-spacer { flex: 1 1 auto; }
+.set-group-count {
+  flex: 0 0 auto; align-self: center; padding: 2px 9px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; color: var(--gray-600); background: var(--gray-100);
+}
+.set-group-chev {
+  width: 18px; height: 18px; flex: 0 0 auto; align-self: center;
+  color: var(--gray-400); transition: transform .2s ease;
+}
+/* Rotates rather than flips, so the chevron keeps pointing the way it travels:
+   sideways when open and shut alike, down when the group is closed. */
+.set-group.open > .set-group-head .set-group-chev { transform: rotate(90deg); }
+
+.set-group-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s ease; }
+.set-group.open > .set-group-body { grid-template-rows: 1fr; }
+.set-group-inner { overflow: hidden; min-height: 0; }
+.set-group.open > .set-group-body > .set-group-inner { padding: 0 18px 18px; }
+
+/* Nested: no border and no fill of its own. The divider is enough to say "this
+   is inside something", and a second ring of cards inside the first is the same
+   nesting that made the old page hard to read. */
+.set-group--sub { background: transparent; border: 0; border-radius: 0; border-top: 1px solid var(--gray-200); }
+.set-group--sub:first-child { border-top: 0; }
+.set-group--sub .set-group-head { padding: 13px 0; border-radius: 0; }
+.set-group--sub .set-group-head:hover { background: transparent; }
+.set-group--sub .set-group-head:hover .set-group-title { color: var(--blue); }
+.set-group--sub.open > .set-group-body > .set-group-inner { padding: 0 0 18px; }
+
+/* Inside an open catalog the add form sits beside the list rather than above it.
+   Stacked, each catalog had to be two cards and so had to repeat its own name;
+   side by side the section heading already says what this is, and the form
+   column can stay a width a number input and a button actually fit in. */
+.set-body { display: grid; grid-template-columns: minmax(250px, 300px) 1fr; gap: 22px; align-items: start; }
+.set-body > .table-card { margin-bottom: 0; }
+/* --gray-100 rather than --gray-50 for the fill: the card it sits on is white in
+   light and --gray-50 in dark, and --gray-100 is distinguishable from both --
+   lighter than white there, darker than the dark card there. One token, both
+   themes, and neither of them ends up with an invisible box. */
+.set-form { background: var(--gray-100); border: 1px solid var(--gray-200); border-radius: var(--radius-md); padding: 14px; }
+.set-form-cap {
+  font-size: 11px; font-weight: 600; letter-spacing: .4pt; text-transform: uppercase;
+  color: var(--gray-400); margin-bottom: 12px;
+}
+@media (max-width: 860px) {
+  .set-body { grid-template-columns: 1fr; }
+}
 .bar-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--gray-100); }
 .bar-row:last-child { border-bottom: none; }
 .bar-label { font-size: 13px; display: flex; align-items: center; gap: 7px; min-width: 90px; }
@@ -1477,6 +1568,7 @@ html.dark .topbar,
 html.dark .stat-card,
 html.dark .table-card,
 html.dark .mini-card,
+html.dark .set-group,
 html.dark .maint-card,
 html.dark .maint-tile,
 html.dark .support-stat-card,
@@ -1492,6 +1584,7 @@ html.dark .topbar  { border-color: var(--gray-200) !important; }
 html.dark .stat-card,
 html.dark .table-card,
 html.dark .mini-card,
+html.dark .set-group,
 html.dark .maint-card,
 html.dark .maint-tile,
 html.dark .support-stat-card { border-color: var(--gray-200) !important; }
@@ -2614,6 +2707,13 @@ const T = {
     // and the id it grew up with are still called -- see the comment above
     // SettingsPage. Only ever read from the nav, so renaming it changed nothing else.
     settings: 'Settings',
+    // The two collapsible groups on the Settings page. The subtitle is the only
+    // thing still on screen once a group is collapsed, so it says what lives
+    // inside rather than restating the heading.
+    appConfiguration: 'App configuration',
+    appConfigurationSub: 'Thresholds that apply to every issue. Set once and rarely touched.',
+    catalogManagement: 'Catalogs',
+    catalogManagementSub: 'The lists that every issue is written against. Add a floor in one go rather than room by room.',
     // The room inventory. The wording is deliberately concrete about ranges,
     // because a range typed across a floor boundary expands to every number in
     // between and the only safeguard against a hundred rooms that do not exist is
@@ -3221,6 +3321,13 @@ const T = {
     adminView: 'Vista de administrador',
     language: 'Idioma',
     settings: 'Definições',
+    // The two collapsible groups on the Settings page. The subtitle is the only
+    // thing still on screen once a group is collapsed, so it says what lives
+    // inside rather than restating the heading.
+    appConfiguration: 'Configuração da aplicação',
+    appConfigurationSub: 'Limites que se aplicam a todas as avarias. Defina uma vez e raramente mexa.',
+    catalogManagement: 'Catálogos',
+    catalogManagementSub: 'As listas contra as quais cada avaria é registada. Adicione um piso inteiro de uma vez.',
     adminRooms: 'Quartos',
     adminRoomsSub: 'Os quartos de apartamento onde se pode registar uma avaria. Adicione um piso inteiro como intervalo, em vez de um quarto de cada vez.',
     adminRoomsAdd: 'Adicionar quartos',
@@ -9510,6 +9617,77 @@ function AdminShowMore({ hidden, label, onClick }) {
   );
 }
 
+/* Which Settings groups are open, remembered between visits.
+   Re-deriving it every visit is part of what made the page feel unpredictable: a
+   manager who had closed Departments to get at Rooms found Departments open
+   again the next time they came looking, and had to put it back. Only a manager
+   ever reaches this page, so there is no per-account state to keep apart, and a
+   read that throws -- private browsing, storage disabled -- falls back to the
+   caller's default rather than taking the page down with it. */
+const SET_OPEN_KEY = 'lira_set_open_';
+function setGroupPrefOpen(id, fallback) {
+  try {
+    const raw = localStorage.getItem(SET_OPEN_KEY + id);
+    return raw === null ? fallback : raw === '1';
+  } catch (e) { return fallback; }
+}
+function rememberSetGroupOpen(id, open) {
+  try { localStorage.setItem(SET_OPEN_KEY + id, open ? '1' : '0'); } catch (e) { /* nothing to do */ }
+}
+
+/* One collapsible group, used at both levels of the page.
+   The header is a single <button> rather than a heading with a toggle button
+   beside it: the native element brings Enter, Space, the button role and a focus
+   ring without any of it being reimplemented, and the whole 44px row is one tab
+   stop instead of two. aria-expanded is what tells a screen reader whether the
+   region below is there at all, which is the only thing a collapsed group needs
+   announced -- hence no role="region" per group, which would put seven more
+   landmarks in the way of someone trying to skim the page. */
+function SetGroup({ id, icon, title, sub, count, level, defaultOpen, children }) {
+  const [open, setOpen] = useState(() => setGroupPrefOpen(id, !!defaultOpen));
+  const inner = useRef(null);
+
+  // A collapsed group keeps its children in the DOM -- that is what lets the
+  // height animate -- so its inputs would otherwise still take focus and a
+  // keyboard user could tab into a panel they cannot see. inert drops the subtree
+  // out of the tab order and out of the accessibility tree without removing the
+  // node, so the transition still has something to measure. Set as a DOM property
+  // rather than a JSX attribute because React 18 has no `inert` in its property
+  // list and would render inert="true", which does nothing.
+  useEffect(() => { if (inner.current) inner.current.inert = !open; }, [open]);
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    rememberSetGroupOpen(id, next);
+  };
+
+  const Heading = level === 1 ? 'h3' : 'h2';
+  return (
+    <section className={'set-group' + (open ? ' open' : '') + (level === 1 ? ' set-group--sub' : '')}>
+      <Heading style={{margin:0}}>
+        <button type="button" className="set-group-head"
+          aria-expanded={open} aria-controls={id + '-body'} onClick={toggle}>
+          {icon && <span className="set-group-icon" aria-hidden="true">{icon}</span>}
+          <span className="set-group-label">
+            <span className="set-group-title">{title}</span>
+            {sub && <span className="set-group-sub">{sub}</span>}
+          </span>
+          <span className="set-group-spacer" />
+          {/* count != null, not count > 0: an empty catalog still has to say so
+              on its collapsed header, or "empty" is indistinguishable from
+              "not loaded". */}
+          {count != null && <span className="set-group-count">{count}</span>}
+          <span className="set-group-chev" aria-hidden="true">{Ic.chevron}</span>
+        </button>
+      </Heading>
+      <div className="set-group-body" id={id + '-body'}>
+        <div className="set-group-inner" ref={inner}>{children}</div>
+      </div>
+    </section>
+  );
+}
+
 /* The settings page. Named for what it is called in the nav rather than for what
    it grew out of: it holds the catalogs the rest of the app is configured from --
    issue types, departments, Connecta agents, consumable items -- plus the settings
@@ -9863,411 +10041,410 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
   }
 
   return (
-    <div style={{maxWidth:1360}}>
-      {/* Three separate cards, because these are unrelated settings and saving
-          one should not look like it saved the others. They sit in the same grid
-          as the add-a-type and add-a-department cards below, so the whole page
-          reads as paired cards rather than one full-width row stacked on
-          another. Each form sends every value, since the endpoint writes the
-          settings row as a whole -- but the visible outcome of each save is only
-          its own field. */}
-      <div className="admin-grid" style={{marginBottom:20}}>
-        <div className="mini-card">
-          <div className="mini-card-title" style={{marginBottom:6}}>{t.adminAlerts}</div>
-          <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminAlertsSub}</p>
-          <form onSubmit={saveAlertWindow} className="admin-form">
-            <div className="form-group" style={{maxWidth:180}}>
-              <label htmlFor="set-dupe-window">{t.duplicateWindowLabel}</label>
-              <input id="set-dupe-window" className="form-control" type="number" min="1" max="720" value={windowHours}
-                onChange={e=>setWindowHours(e.target.value)} />
-            </div>
-            <button type="submit" className="btn btn-primary"
-              disabled={savingSettings || !windowHours}>
-              {Ic.check} {savingSettings ? '…' : t.saveChanges}
-            </button>
-          </form>
-        </div>
+    <div style={{maxWidth:1160}}>
 
-        <div className="mini-card">
-          <div className="mini-card-title" style={{marginBottom:6}}>{t.adminLcuWindow}</div>
-          <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.lcuWindowHint}</p>
-          <form onSubmit={saveLcuWindow} className="admin-form">
-            <div className="form-group" style={{maxWidth:180}}>
-              <label htmlFor="set-lcu-window">{t.lcuWindowLabel}</label>
-              <input id="set-lcu-window" className="form-control" type="number" min="1" max="60" value={lcuDays}
-                onChange={e=>setLcuDays(e.target.value)} />
-            </div>
-            <button type="submit" className="btn btn-primary"
-              disabled={savingSettings || !lcuDays}>
-              {Ic.check} {savingSettings ? '…' : t.saveChanges}
-            </button>
-          </form>
-        </div>
-
-        <div className="mini-card">
-          <div className="mini-card-title" style={{marginBottom:6}}>{t.adminSla}</div>
-          <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminSlaSub}</p>
-          <form onSubmit={saveSla} className="admin-form">
-            <div className="form-group" style={{maxWidth:180}}>
-              <label htmlFor="set-sla">{t.slaMinutesLabel}</label>
-              {/* No placeholder number on purpose: a greyed-out 30 would be read as
-                  a real threshold by anyone who skimmed it, and the difference
-                  between "30 minutes" and "no SLA" is exactly what this field has
-                  to make obvious. */}
-              <input id="set-sla" className="form-control" type="number" min="1" max="14400"
-                value={slaMinutes} placeholder={t.slaUnsetPlaceholder}
-                onChange={e=>setSlaMinutes(e.target.value)} />
-            </div>
-            <button type="submit" className="btn btn-primary"
-              disabled={savingSettings || String(slaMinutes).trim() === ''}>
-              {Ic.check} {savingSettings ? '…' : t.saveChanges}
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <div className="admin-grid">
-        <div>
-          <div className="mini-card" style={{marginBottom:20}}>
-            <div className="mini-card-title" style={{marginBottom:6}}>{t.adminIssueTypes}</div>
-            <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminIssueTypesSub}</p>
-            {err && <div className="auth-error" style={{marginBottom:14}}>{err}</div>}
-            <form onSubmit={addType} className="admin-form">
-              <div className="form-group">
-                <label htmlFor="set-type-name">{t.issueType}</label>
-                <input id="set-type-name" className="form-control" placeholder={t.issueTypePlaceholder} value={name}
-                  onChange={e=>setName(e.target.value)} maxLength={50}/>
+      {/* ── App configuration ─────────────────────────────────────────
+          The three thresholds, together and shut by default. Each is a number
+          typed once and then left alone, none of them feeds another, and having
+          all three open on arrival put three input boxes above the thing a
+          manager actually came here to do. */}
+      <SetGroup id="cfg" icon={Ic.clock} title={t.appConfiguration} sub={t.appConfigurationSub}>
+        <div className="admin-grid">
+          <div className="mini-card">
+            <div className="mini-card-title" style={{marginBottom:6}}>{t.adminAlerts}</div>
+            <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminAlertsSub}</p>
+            <form onSubmit={saveAlertWindow} className="admin-form">
+              <div className="form-group" style={{maxWidth:180}}>
+                <label htmlFor="set-dupe-window">{t.duplicateWindowLabel}</label>
+                <input id="set-dupe-window" className="form-control" type="number" min="1" max="720" value={windowHours}
+                  onChange={e=>setWindowHours(e.target.value)} />
               </div>
-              <button type="submit" className="btn btn-primary" disabled={saving || !name.trim()}>
-                {Ic.plus} {saving ? '…' : t.addIssueType}
+              <button type="submit" className="btn btn-primary"
+                disabled={savingSettings || !windowHours}>
+                {Ic.check} {savingSettings ? '…' : t.saveChanges}
               </button>
             </form>
           </div>
 
-          <div className="table-card">
-            <div className="table-header">
-              <span className="table-title">{t.adminIssueTypes}</span>
-              <span style={{fontSize:12,color:'var(--gray-400)'}}>{issueTypes.length}</span>
-            </div>
-            {issueTypes.length === 0
-              ? <div className="empty-state">{Ic.list}<p>{t.noIssueTypes}</p></div>
-              : <table>
-                  <thead>
-                    <tr><th>{t.type}</th><th style={{width:130}}>{t.adminSwapsCol}</th><th></th></tr>
-                  </thead>
-                  <tbody>
-                    {issueTypes.slice(0, typesAll ? issueTypes.length : ADMIN_PREVIEW_ROWS).map(it=>(
-                      <tr key={it.id}>
-                        <td><TypeBadge type={it.name}/></td>
-                        {/* Turn the "record equipment swaps" prompt on for this
-                            type. A checkbox rather than a button because the
-                            state it shows is the state it sets. */}
-                        <td>
-                          <label className="swap-toggle" title={t.adminSwapsHint}>
-                            <input type="checkbox" checked={!!it.tracks_swaps}
-                              onChange={e=>updateTypeTracksSwaps(it.id, e.target.checked)}/>
-                            <span>{it.tracks_swaps ? t.adminSwapsOn : t.adminSwapsOff}</span>
-                          </label>
-                        </td>
-                        <td style={{textAlign:'right'}}>
-                          <input type="color" className="color-swatch-input" title={t.changeColor}
-                            aria-label={`${t.changeColor} — ${it.name}`}
-                            value={it.color} onChange={e=>updateTypeColor(it.id, e.target.value)}/>
-                          <button className="icon-btn" title={t.removeType} onClick={()=>removeType(it.id)}>{Ic.trash}</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-            }
-            <AdminShowMore hidden={typesAll ? 0 : Math.max(0, issueTypes.length - ADMIN_PREVIEW_ROWS)}
-              label={t.adminShowMore} onClick={()=>setTypesAll(true)}/>
-          </div>
-        </div>
-
-        <div>
-          <div className="mini-card" style={{marginBottom:20}}>
-            <div className="mini-card-title" style={{marginBottom:6}}>{t.adminDepartments}</div>
-            <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminDepartmentsSub}</p>
-            {deptErr && <div className="auth-error" style={{marginBottom:14}}>{deptErr}</div>}
-            <form onSubmit={addDept} className="admin-form">
-              <div className="form-group">
-                <label htmlFor="set-dept-name">{t.department}</label>
-                <input id="set-dept-name" className="form-control" placeholder={t.departmentPlaceholder} value={deptName}
-                  onChange={e=>setDeptName(e.target.value)} maxLength={50}/>
+          <div className="mini-card">
+            <div className="mini-card-title" style={{marginBottom:6}}>{t.adminLcuWindow}</div>
+            <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.lcuWindowHint}</p>
+            <form onSubmit={saveLcuWindow} className="admin-form">
+              <div className="form-group" style={{maxWidth:180}}>
+                <label htmlFor="set-lcu-window">{t.lcuWindowLabel}</label>
+                <input id="set-lcu-window" className="form-control" type="number" min="1" max="60" value={lcuDays}
+                  onChange={e=>setLcuDays(e.target.value)} />
               </div>
-              <button type="submit" className="btn btn-primary" disabled={savingDept || !deptName.trim()}>
-                {Ic.plus} {savingDept ? '…' : t.addDepartment}
+              <button type="submit" className="btn btn-primary"
+                disabled={savingSettings || !lcuDays}>
+                {Ic.check} {savingSettings ? '…' : t.saveChanges}
               </button>
             </form>
           </div>
 
-          <div className="table-card">
-            <div className="table-header">
-              <span className="table-title">{t.adminDepartments}</span>
-              <span style={{fontSize:12,color:'var(--gray-400)'}}>{departments.length}</span>
-            </div>
-            {departments.length === 0
-              ? <div className="empty-state">{Ic.list}<p>{t.noDepartments}</p></div>
-              : <table>
-                  <thead>
-                    <tr><th>{t.department}</th><th></th></tr>
-                  </thead>
-                  <tbody>
-                    {departments.slice(0, deptsAll ? departments.length : ADMIN_PREVIEW_ROWS).map(d => (
-                      <tr key={d.id}>
-                        {editingDeptId === d.id ? (
-                          <td>
-                            <input className="form-control" autoFocus maxLength={50}
-                              aria-label={`${t.renameDepartment} — ${d.name}`}
-                              value={deptDraft}
-                              onChange={e=>setDeptDraft(e.target.value)}
-                              onKeyDown={e=>{
-                                if (e.key === 'Enter') saveDeptEdit(d.id);
-                                if (e.key === 'Escape') cancelDeptEdit();
-                              }}/>
-                            {deptErr && <div style={{fontSize:12,color:'var(--red)',marginTop:5}}>{deptErr}</div>}
-                          </td>
-                        ) : (
-                          <td>{d.name}</td>
-                        )}
-                        <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
-                          {editingDeptId === d.id ? (
-                            <>
-                              <button className="btn btn-primary" style={{padding:'4px 12px',fontSize:12}}
-                                onClick={()=>saveDeptEdit(d.id)} disabled={savingDept || !deptDraft.trim()}>
-                                {savingDept ? '…' : t.saveChanges}
-                              </button>
-                              <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
-                                onClick={cancelDeptEdit} disabled={savingDept}>{t.cancel}</button>
-                            </>
-                          ) : (
-                            <>
-                              <button className="icon-btn" title={t.renameDepartment}
-                                onClick={()=>startDeptEdit(d)}>{Ic.edit}</button>
-                              <button className="icon-btn" title={t.removeDepartment}
-                                onClick={()=>removeDept(d.id)}>{Ic.trash}</button>
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-            }
-            <AdminShowMore hidden={deptsAll ? 0 : Math.max(0, departments.length - ADMIN_PREVIEW_ROWS)}
-              label={t.adminShowMore} onClick={()=>setDeptsAll(true)}/>
-          </div>
-        </div>
-
-        <div>
-          <div className="mini-card" style={{marginBottom:20}}>
-            <div className="mini-card-title" style={{marginBottom:6}}>{t.adminAgents}</div>
-            <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminAgentsSub}</p>
-            {agentErr && <div className="auth-error" style={{marginBottom:14}}>{agentErr}</div>}
-            <form onSubmit={addAgent} className="admin-form">
-              <div className="form-group">
-                <label htmlFor="set-agent-name">{t.connectaAgent}</label>
-                <input id="set-agent-name" className="form-control" placeholder={t.agentPlaceholder} value={agentName}
-                  onChange={e=>setAgentName(e.target.value)} maxLength={100}/>
+          <div className="mini-card">
+            <div className="mini-card-title" style={{marginBottom:6}}>{t.adminSla}</div>
+            <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminSlaSub}</p>
+            <form onSubmit={saveSla} className="admin-form">
+              <div className="form-group" style={{maxWidth:180}}>
+                <label htmlFor="set-sla">{t.slaMinutesLabel}</label>
+                {/* No placeholder number on purpose: a greyed-out 30 would be read as
+                    a real threshold by anyone who skimmed it, and the difference
+                    between "30 minutes" and "no SLA" is exactly what this field has
+                    to make obvious. */}
+                <input id="set-sla" className="form-control" type="number" min="1" max="14400"
+                  value={slaMinutes} placeholder={t.slaUnsetPlaceholder}
+                  onChange={e=>setSlaMinutes(e.target.value)} />
               </div>
-              <button type="submit" className="btn btn-primary" disabled={savingAgent || !agentName.trim()}>
-                {Ic.plus} {savingAgent ? '…' : t.addAgent}
+              <button type="submit" className="btn btn-primary"
+                disabled={savingSettings || String(slaMinutes).trim() === ''}>
+                {Ic.check} {savingSettings ? '…' : t.saveChanges}
               </button>
             </form>
           </div>
-
-          <div className="table-card">
-            <div className="table-header">
-              <span className="table-title">{t.adminAgents}</span>
-              <span style={{fontSize:12,color:'var(--gray-400)'}}>{connectaAgents.length}</span>
-            </div>
-            {connectaAgents.length === 0
-              ? <div className="empty-state">{Ic.list}<p>{t.noAgents}</p></div>
-              : <table>
-                  <thead>
-                    <tr><th>{t.connectaAgent}</th><th></th></tr>
-                  </thead>
-                  <tbody>
-                    {connectaAgents.slice(0, agentsAll ? connectaAgents.length : ADMIN_PREVIEW_ROWS).map(a=>(
-                      <tr key={a.id}>
-                        <td>{a.name}</td>
-                        <td style={{textAlign:'right'}}>
-                          <button className="icon-btn" title={t.removeAgent} onClick={()=>removeAgent(a.id)}>{Ic.trash}</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-            }
-            <AdminShowMore hidden={agentsAll ? 0 : Math.max(0, connectaAgents.length - ADMIN_PREVIEW_ROWS)}
-              label={t.adminShowMore} onClick={()=>setAgentsAll(true)}/>
-          </div>
         </div>
+      </SetGroup>
 
-        <div>
-          <div className="mini-card" style={{marginBottom:20}}>
-            <div className="mini-card-title" style={{marginBottom:6}}>{t.adminConsumables}</div>
-            <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminConsumablesSub}</p>
-            {ciErr && <div className="auth-error" style={{marginBottom:14}}>{ciErr}</div>}
-            <form onSubmit={addConsumableItem}>
-              <div className="form-group">
-                <label htmlFor="set-consumable-name">{t.consumableName}</label>
-                <input id="set-consumable-name" className="form-control" placeholder={t.consumableNamePlaceholder} value={ciName}
-                  onChange={e=>setCiName(e.target.value)} maxLength={50}/>
-              </div>
-              <div className="form-group" style={{marginTop:14}}>
-                {/* A caption over a grid of choices, not a label for one of them. */}
-                <div className="form-group-h" id="set-consumable-icon-h">{t.consumableIconLabel}</div>
-                <ConsumableIconGrid labelledBy="set-consumable-icon-h" value={ciIcon} onChange={setCiIcon}/>
-              </div>
-              <div className="admin-form-inline" style={{marginTop:16}}>
-                <div className="ci-preview">
-                  <ConsumableIcon name={ciIcon} size={36}/>
-                  <span style={{color: ciName.trim() ? 'var(--gray-900)' : 'var(--gray-400)'}}>{ciName.trim() || t.consumableNamePlaceholder}</span>
+      {/* ── Catalogs ──────────────────────────────────────────────────
+          Open, because this is where the work is. Each catalog is a row of its
+          own rather than a stack of two cards, so its name is stated once
+          instead of twice and the five of them read as a list instead of as a
+          wall. All five start shut: a collapsed header still carries the name,
+          the explanation and the row count, so nothing is hidden -- it is just
+          not open. Whichever ones do get opened stay open next time, which is
+          the other half of not having to set the page up on every visit. */}
+      <SetGroup id="cat" icon={Ic.grid} title={t.catalogManagement} sub={t.catalogManagementSub} defaultOpen>
+
+        <SetGroup id="cat-types" level={1} title={t.adminIssueTypes} sub={t.adminIssueTypesSub}
+          count={issueTypes.length}>
+          <div className="set-body">
+            <div className="set-form">
+              <div className="set-form-cap">{t.addIssueType}</div>
+              {err && <div className="auth-error" style={{marginBottom:14}}>{err}</div>}
+              <form onSubmit={addType} className="admin-form">
+                <div className="form-group">
+                  <label htmlFor="set-type-name">{t.issueType}</label>
+                  <input id="set-type-name" className="form-control" placeholder={t.issueTypePlaceholder} value={name}
+                    onChange={e=>setName(e.target.value)} maxLength={50}/>
                 </div>
-                <button type="submit" className="btn btn-primary" disabled={savingCi || !ciName.trim()}>
-                  {Ic.plus} {savingCi ? '…' : t.addConsumable}
+                <button type="submit" className="btn btn-primary" disabled={saving || !name.trim()}>
+                  {Ic.plus} {saving ? '…' : t.addIssueType}
                 </button>
-              </div>
-            </form>
-          </div>
-
-          <div className="table-card">
-            <div className="table-header">
-              <span className="table-title">{t.adminConsumables}</span>
-              <span style={{fontSize:12,color:'var(--gray-400)'}}>{consumableItems.length}</span>
+              </form>
             </div>
-            {consumableItems.length === 0
-              ? <div className="empty-state">{Ic.box}<p>{t.noConsumableItems}</p></div>
-              : <table>
-                  <thead>
-                    <tr><th>{t.consumableName}</th><th></th></tr>
-                  </thead>
-                  <tbody>
-                    {consumableItems.slice(0, ciAll ? consumableItems.length : ADMIN_PREVIEW_ROWS).map(ci=>(
-                      <React.Fragment key={ci.id}>
-                        <tr>
+
+            <div className="table-card">
+              {issueTypes.length === 0
+                ? <div className="empty-state">{Ic.list}<p>{t.noIssueTypes}</p></div>
+                : <table>
+                    <thead>
+                      <tr><th>{t.type}</th><th style={{width:130}}>{t.adminSwapsCol}</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {issueTypes.slice(0, typesAll ? issueTypes.length : ADMIN_PREVIEW_ROWS).map(it=>(
+                        <tr key={it.id}>
+                          <td><TypeBadge type={it.name}/></td>
+                          {/* Turn the "record equipment swaps" prompt on for this
+                              type. A checkbox rather than a button because the
+                              state it shows is the state it sets. */}
                           <td>
-                            <div style={{display:'flex',alignItems:'center',gap:10}}>
-                              <button type="button" className="cicon-btn" title={t.changeIcon}
-                                onClick={()=>setEditingIconId(editingIconId===ci.id ? null : ci.id)}>
-                                <ConsumableIcon name={ci.icon} size={34}/>
-                              </button>
-                              <span style={{fontWeight:500}}>{ci.name}</span>
+                            <label className="swap-toggle" title={t.adminSwapsHint}>
+                              <input type="checkbox" checked={!!it.tracks_swaps}
+                                onChange={e=>updateTypeTracksSwaps(it.id, e.target.checked)}/>
+                              <span>{it.tracks_swaps ? t.adminSwapsOn : t.adminSwapsOff}</span>
+                            </label>
+                          </td>
+                          <td style={{textAlign:'right'}}>
+                            <input type="color" className="color-swatch-input" title={t.changeColor}
+                              aria-label={`${t.changeColor} — ${it.name}`}
+                              value={it.color} onChange={e=>updateTypeColor(it.id, e.target.value)}/>
+                            <button className="icon-btn" title={t.removeType} onClick={()=>removeType(it.id)}>{Ic.trash}</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+              }
+              <AdminShowMore hidden={typesAll ? 0 : Math.max(0, issueTypes.length - ADMIN_PREVIEW_ROWS)}
+                label={t.adminShowMore} onClick={()=>setTypesAll(true)}/>
+            </div>
+          </div>
+        </SetGroup>
+
+        <SetGroup id="cat-depts" level={1} title={t.adminDepartments} sub={t.adminDepartmentsSub}
+          count={departments.length}>
+          <div className="set-body">
+            <div className="set-form">
+              <div className="set-form-cap">{t.addDepartment}</div>
+              {deptErr && <div className="auth-error" style={{marginBottom:14}}>{deptErr}</div>}
+              <form onSubmit={addDept} className="admin-form">
+                <div className="form-group">
+                  <label htmlFor="set-dept-name">{t.department}</label>
+                  <input id="set-dept-name" className="form-control" placeholder={t.departmentPlaceholder} value={deptName}
+                    onChange={e=>setDeptName(e.target.value)} maxLength={50}/>
+                </div>
+                <button type="submit" className="btn btn-primary" disabled={savingDept || !deptName.trim()}>
+                  {Ic.plus} {savingDept ? '…' : t.addDepartment}
+                </button>
+              </form>
+            </div>
+
+            <div className="table-card">
+              {departments.length === 0
+                ? <div className="empty-state">{Ic.list}<p>{t.noDepartments}</p></div>
+                : <table>
+                    <thead>
+                      <tr><th>{t.department}</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {departments.slice(0, deptsAll ? departments.length : ADMIN_PREVIEW_ROWS).map(d => (
+                        <tr key={d.id}>
+                          {editingDeptId === d.id ? (
+                            <td>
+                              <input className="form-control" autoFocus maxLength={50}
+                                aria-label={`${t.renameDepartment} — ${d.name}`}
+                                value={deptDraft}
+                                onChange={e=>setDeptDraft(e.target.value)}
+                                onKeyDown={e=>{
+                                  if (e.key === 'Enter') saveDeptEdit(d.id);
+                                  if (e.key === 'Escape') cancelDeptEdit();
+                                }}/>
+                              {deptErr && <div style={{fontSize:12,color:'var(--red)',marginTop:5}}>{deptErr}</div>}
+                            </td>
+                          ) : (
+                            <td>{d.name}</td>
+                          )}
+                          <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                            {editingDeptId === d.id ? (
+                              <>
+                                <button className="btn btn-primary" style={{padding:'4px 12px',fontSize:12}}
+                                  onClick={()=>saveDeptEdit(d.id)} disabled={savingDept || !deptDraft.trim()}>
+                                  {savingDept ? '…' : t.saveChanges}
+                                </button>
+                                <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
+                                  onClick={cancelDeptEdit} disabled={savingDept}>{t.cancel}</button>
+                              </>
+                            ) : (
+                              <>
+                                <button className="icon-btn" title={t.renameDepartment}
+                                  onClick={()=>startDeptEdit(d)}>{Ic.edit}</button>
+                                <button className="icon-btn" title={t.removeDepartment}
+                                  onClick={()=>removeDept(d.id)}>{Ic.trash}</button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+              }
+              <AdminShowMore hidden={deptsAll ? 0 : Math.max(0, departments.length - ADMIN_PREVIEW_ROWS)}
+                label={t.adminShowMore} onClick={()=>setDeptsAll(true)}/>
+            </div>
+          </div>
+        </SetGroup>
+
+        <SetGroup id="cat-agents" level={1} title={t.adminAgents} sub={t.adminAgentsSub}
+          count={connectaAgents.length}>
+          <div className="set-body">
+            <div className="set-form">
+              <div className="set-form-cap">{t.addAgent}</div>
+              {agentErr && <div className="auth-error" style={{marginBottom:14}}>{agentErr}</div>}
+              <form onSubmit={addAgent} className="admin-form">
+                <div className="form-group">
+                  <label htmlFor="set-agent-name">{t.connectaAgent}</label>
+                  <input id="set-agent-name" className="form-control" placeholder={t.agentPlaceholder} value={agentName}
+                    onChange={e=>setAgentName(e.target.value)} maxLength={100}/>
+                </div>
+                <button type="submit" className="btn btn-primary" disabled={savingAgent || !agentName.trim()}>
+                  {Ic.plus} {savingAgent ? '…' : t.addAgent}
+                </button>
+              </form>
+            </div>
+
+            <div className="table-card">
+              {connectaAgents.length === 0
+                ? <div className="empty-state">{Ic.list}<p>{t.noAgents}</p></div>
+                : <table>
+                    <thead>
+                      <tr><th>{t.connectaAgent}</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {connectaAgents.slice(0, agentsAll ? connectaAgents.length : ADMIN_PREVIEW_ROWS).map(a=>(
+                        <tr key={a.id}>
+                          <td>{a.name}</td>
+                          <td style={{textAlign:'right'}}>
+                            <button className="icon-btn" title={t.removeAgent} onClick={()=>removeAgent(a.id)}>{Ic.trash}</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+              }
+              <AdminShowMore hidden={agentsAll ? 0 : Math.max(0, connectaAgents.length - ADMIN_PREVIEW_ROWS)}
+                label={t.adminShowMore} onClick={()=>setAgentsAll(true)}/>
+            </div>
+          </div>
+        </SetGroup>
+
+        <SetGroup id="cat-consumables" level={1} title={t.adminConsumables} sub={t.adminConsumablesSub}
+          count={consumableItems.length}>
+          <div className="set-body">
+            <div className="set-form">
+              <div className="set-form-cap">{t.addConsumable}</div>
+              {ciErr && <div className="auth-error" style={{marginBottom:14}}>{ciErr}</div>}
+              <form onSubmit={addConsumableItem}>
+                <div className="form-group">
+                  <label htmlFor="set-consumable-name">{t.consumableName}</label>
+                  <input id="set-consumable-name" className="form-control" placeholder={t.consumableNamePlaceholder} value={ciName}
+                    onChange={e=>setCiName(e.target.value)} maxLength={50}/>
+                </div>
+                <div className="form-group" style={{marginTop:14}}>
+                  {/* A caption over a grid of choices, not a label for one of them. */}
+                  <div className="form-group-h" id="set-consumable-icon-h">{t.consumableIconLabel}</div>
+                  <ConsumableIconGrid labelledBy="set-consumable-icon-h" value={ciIcon} onChange={setCiIcon}/>
+                </div>
+                <div className="admin-form-inline" style={{marginTop:16}}>
+                  <div className="ci-preview">
+                    <ConsumableIcon name={ciIcon} size={36}/>
+                    <span style={{color: ciName.trim() ? 'var(--gray-900)' : 'var(--gray-400)'}}>{ciName.trim() || t.consumableNamePlaceholder}</span>
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={savingCi || !ciName.trim()}>
+                    {Ic.plus} {savingCi ? '…' : t.addConsumable}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="table-card">
+              {consumableItems.length === 0
+                ? <div className="empty-state">{Ic.box}<p>{t.noConsumableItems}</p></div>
+                : <table>
+                    <thead>
+                      <tr><th>{t.consumableName}</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {consumableItems.slice(0, ciAll ? consumableItems.length : ADMIN_PREVIEW_ROWS).map(ci=>(
+                        <React.Fragment key={ci.id}>
+                          <tr>
+                            <td>
+                              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                                <button type="button" className="cicon-btn" title={t.changeIcon}
+                                  onClick={()=>setEditingIconId(editingIconId===ci.id ? null : ci.id)}>
+                                  <ConsumableIcon name={ci.icon} size={34}/>
+                                </button>
+                                <span style={{fontWeight:500}}>{ci.name}</span>
+                              </div>
+                            </td>
+                            <td style={{textAlign:'right'}}>
+                              <button className="icon-btn" title={t.removeConsumable} onClick={()=>removeConsumableItem(ci.id)}>{Ic.trash}</button>
+                            </td>
+                          </tr>
+                          {editingIconId === ci.id && (
+                            <tr className="icon-editor-row">
+                              <td colSpan={2}>
+                                <div className="icon-editor-label">{t.changeIcon}</div>
+                                <ConsumableIconGrid value={ci.icon} onChange={icon=>updateConsumableItemIcon(ci.id, icon)}/>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+              }
+              <AdminShowMore hidden={ciAll ? 0 : Math.max(0, consumableItems.length - ADMIN_PREVIEW_ROWS)}
+                label={t.adminShowMore} onClick={()=>setCiAll(true)}/>
+            </div>
+          </div>
+        </SetGroup>
+
+        {/* Rooms, grouped with the others because it is the same kind of thing: a
+            list a manager maintains, and an issue form that cannot be filled in
+            without it. Its count is the number of rooms rather than the number of
+            rows, because one row is a run and the manager is counting rooms. */}
+        <SetGroup id="cat-rooms" level={1} title={t.adminRooms} sub={t.adminRoomsSub}
+          count={roomTotal}>
+          <div className="set-body">
+            <div className="set-form">
+              <div className="set-form-cap">{t.adminRoomsAdd}</div>
+              {roomErr && <div className="auth-error" style={{marginBottom:14}}>{roomErr}</div>}
+              <form onSubmit={addRooms} className="admin-form">
+                <div className="form-group">
+                  <label htmlFor="set-rooms-add">{t.adminRoomsAdd}</label>
+                  <input id="set-rooms-add" className="form-control" placeholder={t.adminRoomsPlaceholder}
+                    value={roomRun} maxLength={40}
+                    onChange={e=>{ setRoomRun(e.target.value); setRoomErr(''); }}/>
+                </div>
+
+                {/* The size of the range, before it is saved. Every whole number in
+                    between is added, so this is the only thing standing between a
+                    mistyped range and a dropdown full of rooms that do not exist. */}
+                {roomPreview && (
+                  <div style={{fontSize:12.5,marginTop:2,
+                    color: roomPreview.count > maxRunSize ? 'var(--red)' : 'var(--gray-400)'}}>
+                    {roomPreview.count > maxRunSize
+                      ? t.adminRoomsTooWide
+                          .replace('{count}', roomPreview.count)
+                          .replace('{max}', maxRunSize)
+                      : roomPreview.count === 1
+                        ? t.adminRoomsOneRoom.replace('{from}', roomPreview.from)
+                        : t.adminRoomsWillAdd
+                            .replace('{count}', roomPreview.count)
+                            .replace('{from}', roomPreview.from)
+                            .replace('{to}', roomPreview.to)}
+                  </div>
+                )}
+
+                <button type="submit" className="btn btn-primary" style={{marginTop:12}}
+                  disabled={savingRoom || !roomRun.trim()
+                    || !roomPreview || roomPreview.count > maxRunSize}>
+                  {Ic.plus} {savingRoom ? '…' : t.adminRoomsAdd}
+                </button>
+              </form>
+            </div>
+
+            <div className="table-card">
+              {rooms.length === 0
+                ? <div className="empty-state">{Ic.list}<p>{t.adminRoomsEmpty}</p></div>
+                : <table>
+                    <thead>
+                      <tr><th>{t.adminRoomsRun}</th><th style={{width:110}}></th></tr>
+                    </thead>
+                    <tbody>
+                      {rooms.slice(0, roomsAll ? rooms.length : ROOMS_PREVIEW_ROWS).map(r=>(
+                        <tr key={r.id}>
+                          <td>
+                            {/* The run as it was typed, and what it is worth in
+                                rooms -- the second number is the one that says
+                                whether the inventory covers a floor or a wing. */}
+                            <div style={{display:'flex',alignItems:'baseline',gap:9}}>
+                              <span style={{fontFamily:"'DM Mono',monospace",fontSize:13}}>
+                                {r.from_room === r.to_room ? r.from_room : `${r.from_room}-${r.to_room}`}
+                              </span>
+                              {r.to_room !== r.from_room && (
+                                <span style={{fontSize:12,color:'var(--gray-400)'}}>
+                                  {t.roomsCount.replace('{count}', r.to_room - r.from_room + 1)}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td style={{textAlign:'right'}}>
-                            <button className="icon-btn" title={t.removeConsumable} onClick={()=>removeConsumableItem(ci.id)}>{Ic.trash}</button>
+                            <button className="icon-btn" title={t.adminRoomsDeleted}
+                              onClick={()=>removeRooms(r.id)}>{Ic.trash}</button>
                           </td>
                         </tr>
-                        {editingIconId === ci.id && (
-                          <tr className="icon-editor-row">
-                            <td colSpan={2}>
-                              <div className="icon-editor-label">{t.changeIcon}</div>
-                              <ConsumableIconGrid value={ci.icon} onChange={icon=>updateConsumableItemIcon(ci.id, icon)}/>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
-            }
-            <AdminShowMore hidden={ciAll ? 0 : Math.max(0, consumableItems.length - ADMIN_PREVIEW_ROWS)}
-              label={t.adminShowMore} onClick={()=>setCiAll(true)}/>
-          </div>
-        </div>
-
-        {/* Rooms. In the same grid as the other catalogs because it is the same
-            kind of thing: a list a manager maintains, and an issue form that
-            cannot be filled in without it. */}
-        <div>
-          <div className="mini-card" style={{marginBottom:20}}>
-            <div className="mini-card-title" style={{marginBottom:6}}>{t.adminRooms}</div>
-            <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminRoomsSub}</p>
-            {roomErr && <div className="auth-error" style={{marginBottom:14}}>{roomErr}</div>}
-            <form onSubmit={addRooms} className="admin-form">
-              <div className="form-group">
-                <label htmlFor="set-rooms-add">{t.adminRoomsAdd}</label>
-                <input id="set-rooms-add" className="form-control" placeholder={t.adminRoomsPlaceholder}
-                  value={roomRun} maxLength={40}
-                  onChange={e=>{ setRoomRun(e.target.value); setRoomErr(''); }}/>
-              </div>
-
-              {/* The size of the range, before it is saved. Every whole number in
-                  between is added, so this is the only thing standing between a
-                  mistyped range and a dropdown full of rooms that do not exist. */}
-              {roomPreview && (
-                <div style={{fontSize:12.5,marginTop:2,
-                  color: roomPreview.count > maxRunSize ? 'var(--red)' : 'var(--gray-400)'}}>
-                  {roomPreview.count > maxRunSize
-                    ? t.adminRoomsTooWide
-                        .replace('{count}', roomPreview.count)
-                        .replace('{max}', maxRunSize)
-                    : roomPreview.count === 1
-                      ? t.adminRoomsOneRoom.replace('{from}', roomPreview.from)
-                      : t.adminRoomsWillAdd
-                          .replace('{count}', roomPreview.count)
-                          .replace('{from}', roomPreview.from)
-                          .replace('{to}', roomPreview.to)}
-                </div>
-              )}
-
-              <button type="submit" className="btn btn-primary" style={{marginTop:12}}
-                disabled={savingRoom || !roomRun.trim()
-                  || !roomPreview || roomPreview.count > maxRunSize}>
-                {Ic.plus} {savingRoom ? '…' : t.adminRoomsAdd}
-              </button>
-            </form>
-          </div>
-
-          <div className="table-card">
-            <div className="table-header">
-              <span className="table-title">{t.adminRoomsRun}</span>
-              <span style={{fontSize:12,color:'var(--gray-400)'}}
-                title={t.roomsCount.replace('{count}', roomTotal)}>
-                {roomTotal}
-              </span>
+                      ))}
+                    </tbody>
+                  </table>
+              }
+              <AdminShowMore hidden={roomsAll ? 0 : Math.max(0, rooms.length - ROOMS_PREVIEW_ROWS)}
+                label={t.adminShowMore} onClick={()=>setRoomsAll(true)}/>
             </div>
-            {rooms.length === 0
-              ? <div className="empty-state">{Ic.list}<p>{t.adminRoomsEmpty}</p></div>
-              : <table>
-                  <thead>
-                    <tr><th>{t.adminRoomsRun}</th><th style={{width:110}}></th></tr>
-                  </thead>
-                  <tbody>
-                    {rooms.slice(0, roomsAll ? rooms.length : ROOMS_PREVIEW_ROWS).map(r=>(
-                      <tr key={r.id}>
-                        <td>
-                          {/* The run as it was typed, and what it is worth in
-                              rooms -- the second number is the one that says
-                              whether the inventory covers a floor or a wing. */}
-                          <div style={{display:'flex',alignItems:'baseline',gap:9}}>
-                            <span style={{fontFamily:"'DM Mono',monospace",fontSize:13}}>
-                              {r.from_room === r.to_room ? r.from_room : `${r.from_room}-${r.to_room}`}
-                            </span>
-                            {r.to_room !== r.from_room && (
-                              <span style={{fontSize:12,color:'var(--gray-400)'}}>
-                                {t.roomsCount.replace('{count}', r.to_room - r.from_room + 1)}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td style={{textAlign:'right'}}>
-                          <button className="icon-btn" title={t.adminRoomsDeleted}
-                            onClick={()=>removeRooms(r.id)}>{Ic.trash}</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-            }
-            <AdminShowMore hidden={roomsAll ? 0 : Math.max(0, rooms.length - ROOMS_PREVIEW_ROWS)}
-              label={t.adminShowMore} onClick={()=>setRoomsAll(true)}/>
           </div>
-        </div>
-      </div>
+        </SetGroup>
+
+      </SetGroup>
     </div>
   );
 }
