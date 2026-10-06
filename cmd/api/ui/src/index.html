@@ -913,6 +913,410 @@ html.dark .set-group-head:hover { background: var(--gray-200); }
 @media (max-width: 860px) {
   .set-body { grid-template-columns: 1fr; }
 }
+
+/* -- Weekly rota -----------------------------------------------------------
+   One standing weekly pattern, read down a column and across a week. Three
+   things this block is opinionated about, and why:
+
+   1. Colour is spent on two facts and no others. Blue means "you are here"
+      everywhere else in this file -- active nav item, selected chip, active
+      language button, the avatar -- so painting every assigned cell blue would
+      leave nothing for the column that genuinely needs it, which is today. And
+      shifts are NOT colour-coded by index: the API carries no colour on a shift,
+      so the mapping would live only in this stylesheet and the seventh shift
+      would be a design change. A new shift gets a new name and nothing else.
+
+   2. --orange appears exactly once, as a 3px left edge. Its ink value reaches
+      4.9:1 on --orange-light and only just clears 4.5:1 against the --gray-100
+      the chips sit on, and a border is a non-text cue that only has to clear 3:1
+      -- which it does several times over.
+
+   3. Nothing here invents a surface. --gray-50 is the card in both themes
+      (white in light, and --gray-50 under the dark block at the end of this
+      stylesheet), which is the same reasoning .set-form was built on. */
+
+/* Visually hidden, still announced. This file has no such utility and the rota
+   needs one: "day off" sits behind the dash, and the times sit behind a cell,
+   and neither is a control, so aria-label cannot carry them. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* The standing-pattern note. Four declarations lifted from .lcu-howto under a
+   name of their own: that class means the LCU gate, and a rota borrowing it
+   would say so in the markup to anyone reading it. */
+.rota-note {
+  display: flex; gap: 11px; padding: 12px 14px;
+  margin: 0 18px 14px; border-radius: var(--radius-md);
+  background: var(--blue-light); font-size: 12.5px; color: var(--gray-600);
+  line-height: 1.5;
+}
+.rota-note svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--blue); margin-top: 1px; }
+
+/* Week navigation. Present so a different set of dates can be printed and so
+   "today" can be pointed at. Deliberately the quietest thing in the header: a
+   control that looks like a destination is a promise a standing rota cannot
+   keep. */
+.rota-week { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.rota-week-btn {
+  width: 28px; height: 28px; border-radius: var(--radius-sm); flex-shrink: 0;
+  border: 1px solid var(--gray-200); background: none; color: var(--gray-600);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.12s;
+}
+.rota-week-btn:hover:not(:disabled) { background: var(--gray-100); color: var(--gray-900); border-color: var(--gray-300); }
+.rota-week-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.rota-week-btn svg { width: 13px; height: 13px; }
+/* Rotated rather than mirrored, so the chevron points the way it travels -- the
+   same reasoning .set-group-chev gives. */
+.rota-week-prev svg { transform: rotate(180deg); }
+.rota-week-range {
+  min-width: 172px; padding: 0 8px; text-align: center;
+  font-size: 13px; font-weight: 500; color: var(--gray-900);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+/* When the week on screen IS the current one there is nowhere to jump to, so
+   the same slot stops being a control and becomes the fact it reports. A
+   permanently disabled button reads as broken; a pill that only becomes a button
+   when it would do something is the same control with an honest affordance. */
+.rota-week-pill {
+  padding: 4px 11px; border-radius: 999px; border: 1px solid var(--gray-200);
+  background: var(--gray-100); font-family: 'DM Sans', sans-serif;
+  font-size: 12px; font-weight: 600; color: var(--gray-600); white-space: nowrap;
+}
+button.rota-week-pill { cursor: pointer; transition: all 0.12s; }
+button.rota-week-pill:hover { background: var(--blue-light); border-color: var(--blue-mid); color: var(--blue); }
+.rota-week-pill:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+html.dark .rota-week-pill { background: var(--gray-200); border-color: var(--gray-300); }
+
+/* View / edit. Four declarations from .lang-toggle: this app already owns
+   exactly one two-state segmented control and this is the second, so it is built
+   from the same shape rather than a new one. */
+.rota-modeswitch {
+  display: inline-flex; align-items: center; flex-shrink: 0;
+  border-radius: var(--radius-md); border: 1px solid var(--gray-200); overflow: hidden;
+}
+.rota-mode-btn {
+  padding: 6px 13px; font-size: 12.5px; font-weight: 500; cursor: pointer;
+  border: none; background: none; color: var(--gray-600);
+  font-family: 'DM Sans', sans-serif; transition: all 0.12s; line-height: 1.4;
+  display: flex; align-items: center; gap: 6px;
+}
+.rota-mode-btn + .rota-mode-btn { border-left: 1px solid var(--gray-200); }
+.rota-mode-btn svg { width: 13px; height: 13px; }
+.rota-mode-btn[aria-checked="true"] { background: var(--blue-light); color: var(--blue); font-weight: 600; }
+.rota-mode-btn:hover { background: var(--gray-100); color: var(--gray-900); }
+.rota-mode-btn[aria-checked="true"]:hover { background: var(--blue-light); color: var(--blue); }
+.rota-mode-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+html.dark .rota-modeswitch { border-color: var(--gray-300) !important; }
+html.dark .rota-mode-btn + .rota-mode-btn { border-left-color: var(--gray-300) !important; }
+html.dark .rota-mode-btn:hover { background: var(--gray-200) !important; color: var(--gray-900) !important; }
+html.dark .rota-mode-btn[aria-checked="true"] { background: var(--blue-light) !important; color: var(--blue) !important; }
+
+/* The read-only chip. What stands in for the mode switch when can_edit is false.
+   Grey, not amber and not red: being shown a rota you cannot change is the app
+   working, and .badge-slate already set the precedent that "not one of the
+   states" is a neutral rather than an alarm.
+
+   Its entire job is to answer "is this page broken?" before anyone has to ask.
+   An anonymous visitor lands on a PUBLIC endpoint, finds no Edit button, and
+   without this the absence is indistinguishable from a failed load. It never
+   says the word "permission", and there is no second variant of it for
+   technicians -- one chip covers both, because the server says the same thing
+   about both. */
+.rota-readonly {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  padding: 6px 12px; border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200); background: var(--gray-100);
+  font-size: 12.5px; font-weight: 500; color: var(--gray-600);
+}
+.rota-readonly svg { width: 13px; height: 13px; color: var(--gray-400); flex-shrink: 0; }
+html.dark .rota-readonly { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
+
+/* The legend. The grid prints shift names and nothing else, so "Night" arrives
+   with no hours attached -- and the reader of a pinned-up rota has never seen
+   this UI. It sits in the card, always open, never behind a hover: it is half of
+   what the page is for, not a tooltip about it.
+
+   Each item carries the same orange left edge as the cells that use it, so the
+   mapping from legend to grid is visual as well as verbal. */
+.rota-legend {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  padding: 11px 18px; border-top: 1px solid var(--gray-200);
+  background: var(--gray-50);
+}
+.rota-legend-item {
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+  padding: 4px 10px 4px 8px; border-radius: var(--radius-sm);
+  border: 1px solid var(--gray-200);
+}
+.rota-legend-name { font-size: 12.5px; font-weight: 600; color: var(--gray-900); white-space: nowrap; }
+.rota-legend-hours {
+  font-family: 'DM Mono', monospace; font-size: 11.5px; color: var(--gray-600);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+/* Counted from the grid, not read off assignment_count: a person on Night five
+   times is one person, and "5 people" beside a shift worked by two technicians
+   is a number nobody believes. */
+.rota-legend-count { font-size: 11px; color: var(--gray-400); white-space: nowrap; }
+.rota-legend-item.is-night { border-left: 3px solid var(--orange); padding-left: 6px; }
+/* Only reachable for a manager: /v1/shifts honours include_retired for managers
+   alone, so nobody else is told a retired shift exists. */
+.rota-legend-retired {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 1px 6px; border-radius: 999px; white-space: nowrap;
+  background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200);
+}
+html.dark .rota-legend-retired { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
+
+/* The grid. */
+.rota-table-wrap { overflow-x: auto; }
+/* separate, not collapsed. This stylesheet sets border-collapse:collapse on every
+   table, and a sticky cell in a collapsed table takes its border with it as the
+   table scrolls -- so the name column loses its right-hand rule exactly when it
+   is doing the job of being a fixed edge. Spacing 0 keeps every existing cell
+   border on this table looking identical to every other table in the app. */
+.rota-table {
+  width: 100%; min-width: 852px;
+  border-collapse: separate; border-spacing: 0; table-layout: fixed;
+}
+.rota-table thead th { padding: 7px 10px; text-align: center; }
+/* The number under the day name is what makes a printed sheet worth printing;
+   the name above it is what makes the grid readable on screen. */
+.rota-daynum {
+  display: block; margin-top: 1px; font-family: 'DM Mono', monospace;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--gray-400);
+}
+.rota-table tbody td { padding: 5px; text-align: center; vertical-align: middle; }
+/* Column rules in --gray-100 and row rules in the same token, deliberately: the
+   row divider is what you notice scanning across, the column divider is what
+   you notice scanning down, and neither should out-shout the other. */
+.rota-table tbody td.rota-day { border-left: 1px solid var(--gray-100); }
+html.dark .rota-table tbody td.rota-day { border-left-color: var(--gray-200) !important; }
+
+/* The name column, pinned. 208px holds a 24px avatar, a name and the weekly
+   hours without wrapping, and it is the same width in view and in edit mode: a
+   column that changes width when Edit is pressed throws the eye off the row it
+   is reading. */
+.rota-table thead th.rota-name-head,
+.rota-table tbody td.rota-name-cell {
+  position: sticky; left: 0; width: 208px; box-shadow: 1px 0 0 var(--gray-200);
+}
+.rota-table thead th.rota-name-head { z-index: 4; }
+.rota-table tbody td.rota-name-cell { z-index: 2; text-align: left; }
+/* The header is given no background at all: `thead th` already paints it
+   --gray-50 in light and the dark block repaints it --gray-200, and both are
+   correct for a pinned cell. Declaring one here would have to fight an
+   !important and win it back for no gain. */
+.rota-table tbody td.rota-name-cell { background: var(--gray-50); }
+.rota-table tbody tr:hover td.rota-name-cell { background: var(--gray-100); }
+/* !important because the blanket dark rule near the end of this stylesheet
+   paints every td on hover with it, and this cell has to be told otherwise or
+   the name column goes white-on-white against the dark card. */
+html.dark .rota-table tbody tr:hover td.rota-name-cell { background: var(--gray-200) !important; }
+
+.rota-member { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.rota-member-text { min-width: 0; }
+.rota-member-name {
+  font-size: 13.5px; font-weight: 600; color: var(--gray-900);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* The standing week's total, from the durations of the shifts actually in the
+   row. It answers "is this person on forty hours or twenty", which seven names
+   cannot, and it makes an uneven rota visible before anybody reads a word.
+   Tabular figures so the column of them lines up. */
+.rota-member-hours {
+  margin-top: 1px; font-family: 'DM Mono', monospace; font-size: 11px;
+  font-weight: 600; color: var(--gray-600); font-variant-numeric: tabular-nums;
+}
+/* Nobody said this person has left -- they may simply not be on this rota -- so
+   the row dims rather than disappearing. A rota that hides people is a more
+   frightening document than one that shows them greyed out, and --gray-600 clears
+   4.5:1 where --gray-400 was the tempting choice. */
+.rota-table tr.rota-inactive .rota-member-name { color: var(--gray-600); font-weight: 500; }
+
+/* A member with nothing assigned all week. The seven day-off cells are the truth
+   and they stay: replacing them with one merged cell would break the eight
+   columns that every arrow key and every screen reader is counting. So the row
+   is marked from the name side instead. */
+.rota-free {
+  display: inline-flex; margin-top: 3px; padding: 1px 7px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 600; white-space: nowrap;
+  background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200);
+}
+html.dark .rota-free { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
+
+/* Cells. Two states and no more. A day off is a visible centred dash rather than
+   an empty cell: in a bordered grid a blank reads as loading, and a rota that
+   looks like it is still loading looks broken. --gray-400 clears 4.5:1 on the
+   card surface in both themes, and the words behind it are there for anyone who
+   is not looking at it. */
+.rota-cell {
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  width: 100%; min-width: 0; min-height: 40px; padding: 6px;
+  border: 1px solid var(--gray-200); border-radius: var(--radius-sm);
+  background: var(--gray-100); font-family: 'DM Sans', sans-serif;
+  font-size: 12.5px; font-weight: 500; line-height: 1.25; text-align: center;
+  color: var(--gray-900);
+}
+.rota-cell-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rota-table tr.rota-inactive .rota-cell { opacity: 0.72; }
+.rota-cell.is-off {
+  background: none; border-color: transparent;
+  font-family: 'DM Mono', monospace; font-size: 15px; font-weight: 400; color: var(--gray-400);
+}
+/* In edit mode every cell is a control, and then they are the primary touch
+   targets of this page -- so they get the 44px this file otherwise does not
+   insist on, because its controls are secondary icon buttons at 28px. */
+.rota-cell.is-editable { min-height: 44px; cursor: pointer; }
+.rota-cell.is-editable:hover { border-color: var(--blue-mid); background: var(--blue-light); color: var(--blue); }
+.rota-cell.is-editable:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+/* Overnight: the single use of --orange on this page, and only as an edge. */
+.rota-cell.is-night { border-left: 3px solid var(--orange); padding-left: 4px; }
+.rota-cell.is-off.is-night { border-left: 1px solid transparent; }
+/* "+1" on the same baseline as the name so it reads as part of it rather than
+   as a badge stuck on the side. DM Mono 11px in --gray-600: small, but this is a
+   redundant cue for a fact the orange edge and the legend already state. */
+.rota-cell-plus1 {
+  flex-shrink: 0; font-family: 'DM Mono', monospace;
+  font-size: 11px; font-weight: 600; color: var(--gray-600);
+}
+/* The "that landed" moment, reusing the pulse already written for the status
+   column, so a change feels like every other save in this app. */
+.rota-cell.just-saved { animation: statusHighlightPulse 700ms ease-out; }
+
+/* Today. Today is a COLUMN, so it is marked as one. The header takes the
+   established "you are here" pairing -- --blue-light wash, --blue ink -- used by
+   .nav-item.active, .chip.active and .lang-btn.active, so it is already
+   understood here. The body cells are fenced by two --blue-mid vertical rules
+   rather than washed, because a body wash would need a fourth blue and there is
+   not one that is both faint enough to sit under seven chips and strong enough
+   to survive on the dark card.
+
+   !important on the background because the dark block sets `thead th` with one;
+   .rota-table thead th.<class> out-specifies `html.dark thead th`, so both are
+   !important and this one wins on specificity rather than order. */
+.rota-table thead th.rota-headcol-today {
+  background: var(--blue-light) !important; color: var(--blue); border-bottom-color: var(--blue-mid);
+}
+.rota-table thead th.rota-headcol-today .rota-daynum { color: var(--blue); }
+.rota-table tbody td.rota-col-today { box-shadow: inset 1px 0 0 var(--blue-mid), inset -1px 0 0 var(--blue-mid); }
+
+/* The cell picker. The geometry is RoomPicker's, deliberately: absolutely
+   positioned inside a relatively positioned cell, overlaying the rows below
+   rather than pushing them down, z-index 30 above everything else in the content
+   area. A second popover here would mean a second set of answers to the
+   questions .room-picker already answers -- what Escape does, what a click
+   outside does. The JSX reuses its outside-click and capture-phase-Escape
+   handlers verbatim. */
+.rota-picker { position: relative; display: block; }
+.rota-picker-panel {
+  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0;
+  min-width: 216px; max-height: 244px; overflow-y: auto; padding: 4px;
+  background: #fff; border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+}
+/* Two of the seven sit against the right edge of the card, and .table-card is
+   overflow:hidden to clip its own corners -- a panel opening rightwards would be
+   silently cut in half. Saturday and Sunday open leftwards. */
+.rota-picker-panel.align-right { left: auto; right: 0; }
+/* And the last two rows, vertically, for the same reason: the panel would open
+   under the fold with no way to reach it but scrolling the grid out from under
+   the pointer. */
+.rota-picker-panel.open-up { top: auto; bottom: calc(100% + 4px); }
+html.dark .rota-picker-panel { background: var(--gray-50); border-color: var(--gray-300); }
+
+/* Forked from .room-option for exactly one reason: that class sets DM Mono,
+   which is right for a room number read character by character and wrong for
+   "Night". Everything else is the same, on purpose. */
+.rota-option {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; border: none; background: none; border-radius: 6px;
+  font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--gray-900);
+  text-align: left; cursor: pointer;
+}
+.rota-option:hover, .rota-option.active { background: var(--blue-light); }
+.rota-option-chosen { color: var(--blue); font-weight: 600; }
+.rota-option-tick { display: inline-flex; align-items: center; flex-shrink: 0; }
+.rota-option-tick svg { width: 13px; height: 13px; flex-shrink: 0; }
+.rota-option-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rota-option-hours {
+  font-family: 'DM Mono', monospace; font-size: 11px; color: var(--gray-600);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.rota-option.is-night { border-left: 3px solid var(--orange); }
+.rota-picker-foot {
+  margin-top: 4px; padding: 6px 10px 4px; font-size: 11.5px; color: var(--gray-400);
+  border-top: 1px solid var(--gray-100);
+}
+
+/* The dirty count and the save bar. The count sits in the header so the state of
+   the edit is visible without scrolling; the actions sit under the grid, because
+   .table-footer is already this file's home for "a button about the list as a
+   whole rather than an action on one row" -- Save is exactly that -- and because
+   DOM order puts them after the grid, so Tab out of the last cell lands on
+   Cancel and then Save with no key handling at all. */
+.rota-dirty {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  padding: 4px 11px; border-radius: 999px; white-space: nowrap;
+  font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 700;
+  color: var(--blue); background: #fff; border: 1px solid var(--blue-mid);
+}
+html.dark .rota-dirty { background: var(--gray-50); }
+.rota-savebar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 11px 18px; text-align: left;
+  background: var(--blue-light); border-top: 1px solid var(--blue-mid);
+  font-size: 12.5px; color: var(--gray-600); line-height: 1.45;
+}
+.rota-savebar svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--blue); }
+.rota-savebar-spacer { flex: 1 1 auto; }
+/* .table-footer centres; this one does not, because it carries a sentence on the
+   left and two buttons on the right. */
+.rota-savebar .btn { font-size: 12px; padding: 6px 14px; }
+
+/* Empty states. */
+.rota-empty-head { margin: 0; font-size: 15px; font-weight: 600; color: var(--gray-900); }
+.rota-empty-sub  { margin: 0; max-width: 46ch; font-size: 13px; color: var(--gray-600); line-height: 1.55; }
+/* The one empty state on this page that carries an action, and only for a
+   manager. It navigates to the Settings group rather than opening a second copy
+   of the shift form -- the form has exactly one home and duplicating it would be
+   the second of them in a fortnight. */
+.rota-empty-cta { margin-top: 8px; }
+
+/* The shift templates card, on the Settings page. Nothing here that .set-body,
+   .set-form and .table-card do not already do. Only the rows needed three things
+   the catalogs did not: two time fields side by side, an in-place edit holding
+   three controls in one row, and the night marker surviving at 12.5px. */
+.rota-settings-times { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.rota-settings-times .form-control { width: 88px; padding: 6px 8px; text-align: center; }
+.rota-settings-dash { font-size: 13px; color: var(--gray-400); }
+/* Stated, not predicted. The hint appears only once the server has said
+   overnight:true, so a disagreement between here and there cannot show a manager
+   a warning that turns out to be wrong. */
+.rota-settings-night {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  margin-top: 9px; padding: 6px 9px; border-radius: var(--radius-sm);
+  border: 1px solid var(--orange); background: var(--orange-light);
+  font-size: 12px; color: var(--gray-600);
+}
+.rota-settings-night svg { width: 13px; height: 13px; flex-shrink: 0; color: var(--orange); }
+
+/* Print. The week navigation exists largely for this: the same standing pattern,
+   printed with a different week's dates on it. The mode switch and the save bar
+   are the two things that must not reach paper, and the pinned column has to let
+   go or the sheet prints with every name on top of every other row. The day
+   header repeats on each sheet, which is the whole reason a rota gets printed. */
+@media print {
+  .rota-modeswitch, .rota-savebar, .rota-readonly, .rota-week-btn { display: none !important; }
+  .rota-table-wrap { overflow: visible; }
+  .rota-table { min-width: 0; }
+  .rota-table thead th.rota-name-head,
+  .rota-table tbody td.rota-name-cell { position: static; box-shadow: none; }
+  .rota-table thead { display: table-header-group; }
+}
 .bar-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--gray-100); }
 .bar-row:last-child { border-bottom: none; }
 .bar-label { font-size: 13px; display: flex; align-items: center; gap: 7px; min-width: 90px; }
@@ -2703,6 +3107,80 @@ const T = {
     // and the id it grew up with are still called -- see the comment above
     // SettingsPage. Only ever read from the nav, so renaming it changed nothing else.
     settings: 'Settings',
+    // The weekly rota. The premise strings come first because they are the
+    // premise: a reader who has not internalised "this repeats every week" will
+    // read the grid as next week's plan and be misled by every cell in it.
+    rotaTitle: 'Team rota',
+    rotaNameColumn: 'Member',
+    rotaDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    yesDiscard: 'Discard them',
+    rotaSubtitle: '{members} people, {shifts} shifts',
+    // The standing pattern, and the reason the week navigation exists at all.
+    rotaStanding: 'This is a standing rota. The same hours apply every week until they are changed — this is not a plan for one particular week.',
+    rotaOtherWeek: 'These are the dates this standing rota is shown against. The shifts themselves do not change from week to week.',
+    rotaWeekNav: 'Week',
+    rotaThisWeek: 'This week',
+    rotaPrevWeek: 'Previous week',
+    rotaNextWeek: 'Next week',
+    rotaModeSwitch: 'Viewing mode',
+    rotaView: 'View',
+    rotaEdit: 'Edit',
+    // One chip for a technician and for an anonymous visitor alike, because
+    // the server reports can_edit:false for both and inventing a difference
+    // here would be a guess about somebody's permissions.
+    rotaReadOnly: 'Read only',
+    rotaEnteredEdit: 'Edit mode. Each cell is a button; choose a shift or a day off.',
+    rotaUnsaved: '{count} unsaved',
+    rotaEditHint: 'Pick a shift for each day. Days you clear become days off.',
+    rotaEditHintClean: 'Nothing changed yet.',
+    rotaSave: 'Save changes',
+    rotaCancel: 'Cancel',
+    rotaDiscardTitle: 'Discard unsaved changes?',
+    rotaDiscardBody: 'One person has edits that have not been saved. Leaving edit mode now throws them away.',
+    rotaDiscardBodyMany: '{count} people have edits that have not been saved. Leaving edit mode now throws them away.',
+    rotaSaved: 'Rota updated',
+    rotaDayOff: 'Day off',
+    rotaChooseShift: 'Choose a shift',
+    rotaCellLabel: '{name}, {shift}',
+    rotaCellLabelOff: '{name}, day off',
+    rotaCellLabelUnset: '{name}, no shift chosen',
+    rotaNoShiftsHead: 'No shifts defined yet',
+    rotaNoShiftsBody: 'The rota is a list of shifts and who is on each of them. With no shifts defined there is nothing to assign, so define one first.',
+    rotaDefineShifts: 'Define shifts',
+    rotaNoMembersHead: 'Nobody to schedule',
+    rotaNoMembersBody: 'Shifts are defined, but there is nobody in the team to put them on.',
+    rotaLoadFailed: 'The rota could not be loaded',
+    rotaFreeWeek: 'Not on this rota',
+    rotaWeekHours: '{hours} h/week',
+    rotaPeopleOn: '{count} on it',
+    rotaPlusOne: ' +1',
+    rotaRetired: 'Retired',
+    // The shift templates, on the Settings page.
+    shiftName: 'Shift name',
+    shiftNamePlaceholder: 'e.g. Morning',
+    shiftTimes: 'Hours',
+    shiftStart: 'Start',
+    shiftEnd: 'End',
+    shiftAdd: 'Add shift',
+    shiftEdit: 'Edit shift',
+    shiftSaveChanges: 'Save shift',
+    shiftCancelEdit: 'Cancel',
+    shiftRetire: 'Retire',
+    shiftReinstate: 'Put back in use',
+    shiftDeleteConfirmTitle: 'Delete this shift?',
+    shiftDeleteConfirmOne: 'This shift is on {count} day of the rota. Deleting it makes those days days off.',
+    shiftDeleteConfirmMany: 'This shift is on {count} days of the rota. Deleting it makes those days days off.',
+    shiftDeleted: 'Shift deleted',
+    shiftDeleteConfirmYes: 'Delete',
+    shiftNoneYet: 'No shifts yet',
+    shiftNoneYetBody: 'Add the shifts this hotel runs on — Morning, Late, Night — and then put people on them from the Team rota page.',
+    shiftOvernightHint: 'This shift runs past midnight, so it finishes the following morning.',
+    shiftRetiredHint: 'Retired. It stays on days already assigned to it, and is no longer offered when choosing a shift.',
+    shiftInUse: 'Days on it',
+    shiftInUseOne: '1 day',
+    shiftInUseMany: '{count} days',
+    shiftAdded: 'Shift added',
+    shiftUpdated: 'Shift updated',
     // The two collapsible groups on the Settings page. The subtitle is the only
     // thing still on screen once a group is collapsed, so it says what lives
     // inside rather than restating the heading.
@@ -2715,6 +3193,8 @@ const T = {
     // between and the only safeguard against a hundred rooms that do not exist is
     // the manager seeing the size of it first.
     adminRooms: 'Rooms',
+    adminShifts: 'Shifts',
+    adminShiftsSub: 'The hours this hotel runs on. Define them here, then put people on them from the rota page.',
     adminRoomsSub: 'The apartment rooms an issue can be logged against. Add a whole floor as a range rather than one room at a time.',
     adminRoomsAdd: 'Add rooms',
     adminRoomsPlaceholder: 'e.g. 1201-1212, or 1214 for one room',
@@ -3317,6 +3797,75 @@ const T = {
     adminView: 'Vista de administrador',
     language: 'Idioma',
     settings: 'Definições',
+    // The weekly rota. The premise strings come first because they are the
+    // premise: a reader who has not internalised "this repeats every week" will
+    // read the grid as next week's plan and be misled by every cell in it.
+    rotaTitle: 'Escala da equipa',
+    rotaNameColumn: 'Membro',
+    rotaDays: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'],
+    yesDiscard: 'Descartar',
+    rotaSubtitle: '{members} pessoas, {shifts} turnos',
+    rotaStanding: 'Esta é uma escala permanente. As mesmas horas aplicam-se todas as semanas até serem alteradas — não é um plano para uma semana em particular.',
+    rotaOtherWeek: 'Estas são as datas contra as quais esta escala permanente é mostrada. Os turnos não mudam de semana para semana.',
+    rotaWeekNav: 'Semana',
+    rotaThisWeek: 'Esta semana',
+    rotaPrevWeek: 'Semana anterior',
+    rotaNextWeek: 'Semana seguinte',
+    rotaModeSwitch: 'Modo de visualização',
+    rotaView: 'Ver',
+    rotaEdit: 'Editar',
+    rotaReadOnly: 'Apenas leitura',
+    rotaEnteredEdit: 'Modo de edição. Cada célula é um botão; escolha um turno ou um dia de folga.',
+    rotaUnsaved: '{count} por guardar',
+    rotaEditHint: 'Escolha um turno para cada dia. Os dias que limpar passam a ser dias de folga.',
+    rotaEditHintClean: 'Nada alterado ainda.',
+    rotaSave: 'Guardar alterações',
+    rotaCancel: 'Cancelar',
+    rotaDiscardTitle: 'Descartar alterações por guardar?',
+    rotaDiscardBody: 'Uma pessoa tem alterações que não foram guardadas. Sair do modo de edição agora descarta-as.',
+    rotaDiscardBodyMany: '{count} pessoas têm alterações que não foram guardadas. Sair do modo de edição agora descarta-as.',
+    rotaSaved: 'Escala atualizada',
+    rotaDayOff: 'Dia de folga',
+    rotaChooseShift: 'Escolher um turno',
+    rotaCellLabel: '{name}, {shift}',
+    rotaCellLabelOff: '{name}, dia de folga',
+    rotaCellLabelUnset: '{name}, sem turno escolhido',
+    rotaNoShiftsHead: 'Ainda não há turnos definidos',
+    rotaNoShiftsBody: 'A escala é uma lista de turnos e de quem está em cada um deles. Sem turnos definidos não há nada para atribuir, por isso defina um primeiro.',
+    rotaDefineShifts: 'Definir turnos',
+    rotaNoMembersHead: 'Ninguém para escalar',
+    rotaNoMembersBody: 'Os turnos estão definidos, mas não há ninguém na equipa para os atribuir.',
+    rotaLoadFailed: 'Não foi possível carregar a escala',
+    rotaFreeWeek: 'Não está nesta escala',
+    rotaWeekHours: '{hours} h/semana',
+    rotaPeopleOn: '{count} neste',
+    rotaPlusOne: ' +1',
+    rotaRetired: 'Desativado',
+    shiftName: 'Nome do turno',
+    shiftNamePlaceholder: 'ex. Manhã',
+    shiftTimes: 'Horas',
+    shiftStart: 'Início',
+    shiftEnd: 'Fim',
+    shiftAdd: 'Adicionar turno',
+    shiftEdit: 'Editar turno',
+    shiftSaveChanges: 'Guardar turno',
+    shiftCancelEdit: 'Cancelar',
+    shiftRetire: 'Desativar',
+    shiftReinstate: 'Voltar a usar',
+    shiftDeleteConfirmTitle: 'Apagar este turno?',
+    shiftDeleteConfirmOne: 'Este turno está em {count} dia da escala. Apagá-lo torna esses dias dias de folga.',
+    shiftDeleteConfirmMany: 'Este turno está em {count} dias da escala. Apagá-lo torna esses dias dias de folga.',
+    shiftDeleted: 'Turno apagado',
+    shiftDeleteConfirmYes: 'Apagar',
+    shiftNoneYet: 'Ainda não há turnos',
+    shiftNoneYetBody: 'Adicione os turnos que este hotel faz — Manhã, Tarde, Noite — e depois atribua pessoas a partir da página Escala da equipa.',
+    shiftOvernightHint: 'Este turno passa da meia-noite, por isso termina na manhã seguinte.',
+    shiftRetiredHint: 'Desativado. Continua nos dias que já lhe estão atribuídos e deixa de ser oferecido ao escolher um turno.',
+    shiftInUse: 'Dias atribuídos',
+    shiftInUseOne: '1 dia',
+    shiftInUseMany: '{count} dias',
+    shiftAdded: 'Turno adicionado',
+    shiftUpdated: 'Turno atualizado',
     // The two collapsible groups on the Settings page. The subtitle is the only
     // thing still on screen once a group is collapsed, so it says what lives
     // inside rather than restating the heading.
@@ -3325,6 +3874,8 @@ const T = {
     catalogManagement: 'Catálogos',
     catalogManagementSub: 'As listas contra as quais cada avaria é registada. Adicione um piso inteiro de uma vez.',
     adminRooms: 'Quartos',
+    adminShifts: 'Turnos',
+    adminShiftsSub: 'As horas que este hotel faz. Defina-as aqui e depois atribua pessoas a partir da página da escala.',
     adminRoomsSub: 'Os quartos de apartamento onde se pode registar uma avaria. Adicione um piso inteiro como intervalo, em vez de um quarto de cada vez.',
     adminRoomsAdd: 'Adicionar quartos',
     adminRoomsPlaceholder: 'ex. 1201-1212, ou 1214 para um quarto',
@@ -9684,6 +10235,1031 @@ function SetGroup({ id, icon, title, sub, count, level, defaultOpen, children })
   );
 }
 
+/* -- Weekly rota ----------------------------------------------------------
+   A standing weekly pattern: who is on which shift on which weekday. The same
+   seven answers every week until somebody changes them, which is why the week
+   navigation below moves dates rather than data.
+
+   Helpers first. Four of them, and three exist only because of the recurring
+   design:
+
+   - mondayISO: the week this date falls in. Built on the local calendar rather
+     than toISOString(), for the reason the comment beside localISODate gives --
+     a local Monday in a timezone west of UTC formats through toISOString as the
+     Sunday before it, which here would make "next week" a dead button.
+   - shiftISO: a day offset from a week anchor.
+   - shiftMinutes: how long a shift occupies on the day it starts. The wrap is
+     what makes 22:00-06:00 count as 8 hours rather than -16. end === start is
+     refused by the server and never arrives, but the 0-to-1440 fallback keeps a
+     malformed row from printing a negative week.
+   - rotaWeekHours: the standing week's total for one member, which is the number
+     that makes an uneven rota visible before anybody reads a word.
+   The client computes the total rather than being told it because the server
+   sends durations nowhere: Shift has no minutes field, and adding one would mean
+   two places computing the same thing. */
+function mondayISO(d) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return localISODate(x);
+}
+function shiftISO(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return localISODate(new Date(y, m - 1, d + n));
+}
+function isoToDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function shiftMinutes(s) {
+  if (!s) return 0;
+  const mins = t => {
+    const [h, m] = String(t || '0:00').split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+  const raw = mins(s.end_time) - mins(s.start_time);
+  return raw > 0 ? raw : raw + 1440;
+}
+function rotaWeekHours(member) {
+  return (member.days || []).reduce((n, s) => n + shiftMinutes(s), 0);
+}
+
+/* One cell's shift chooser.
+   The panel geometry, the outside-click mousedown and the capture-phase Escape
+   handler are RoomPicker's, deliberately. A second popover in this file would
+   mean a second set of answers to the questions .room-picker already answers --
+   what Escape does, what a click outside does, whether the panel survives the
+   dialog that owns it -- and the two would drift.
+
+   alignRight and openUp are the two corrections RoomPicker does not need: it sits
+   in a form with room below it, and a 49-cell grid has its right-hand and
+   bottom-row cells against the clipped edge of a .table-card. */
+function RotaPicker({ cellId, value, shifts, onPick, t, alignRight, openUp }) {
+  const [open, setOpen] = useState(false);
+  const [cursor, setCursor] = useState(0);
+  const wrapRef = useRef(null);
+  const listId = cellId + '-options';
+
+  useEffect(() => {
+    if (!open) return;
+    const away = e => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    // Capture phase, and it claims the event -- the same reason RoomPicker does
+    // it: Escape should dismiss this panel and leave the page it belongs to
+    // alone, and capture reliably runs ahead of a bubble-phase listener on
+    // document whatever order they were attached in.
+    const esc = e => {
+      if (e.key !== 'Escape') return;
+      e.claimedByDialog = true;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc, true);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', esc, true);
+    };
+  }, [open]);
+
+  // "Day off" first, then every shift in the order a day happens. The current
+  // choice is in that list already, so it is picked by clicking it again rather
+  // than by a separate control that would have to mean the same thing.
+  const options = [{off: true, name: t.rotaDayOff, start_time: '', end_time: '', overnight: false}]
+    .concat(shifts.map(s => ({ ...s })));
+  const chosenIdx = value
+    ? options.findIndex(o => !o.off && o.id === value.id)
+    : 0;
+
+  const choose = o => {
+    onPick(o.off ? null : o);
+    setOpen(false);
+  };
+
+  const onKeyDown = e => {
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+        setOpen(true);
+        setCursor(Math.max(chosenIdx, 0));
+        e.preventDefault();
+      }
+      return;
+    }
+    if (e.key === 'ArrowDown') { setCursor(c => Math.min(c + 1, options.length - 1)); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { setCursor(c => Math.max(c - 1, 0)); e.preventDefault(); }
+    else if (e.key === 'Home') { setCursor(0); e.preventDefault(); }
+    else if (e.key === 'End') { setCursor(options.length - 1); e.preventDefault(); }
+    else if (e.key === 'Enter' || e.key === ' ') {
+      // Enter picks the highlighted option. With nothing highlighted it is left
+      // alone, so the key still does whatever the key does outside a picker.
+      if (options[cursor] !== undefined) { choose(options[cursor]); e.preventDefault(); }
+    }
+  };
+
+  const optionId = i => listId + '-' + i;
+  const activeId = (open && options[cursor] !== undefined) ? optionId(cursor) : undefined;
+
+  return (
+    <div className="rota-picker" ref={wrapRef}>
+      <button type="button"
+        className={'rota-cell' + (value ? '' : ' is-off') + (value && value.overnight ? ' is-night' : '') + ' is-editable'}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-activedescendant={activeId}
+        aria-haspopup="listbox"
+        onClick={() => { setOpen(o => !o); setCursor(Math.max(chosenIdx, 0)); }}
+        onKeyDown={onKeyDown}>
+        {value
+          ? <>
+              <span className="rota-cell-name">{value.name}</span>
+              {/* "+1" on the name's baseline, so it reads as part of the shift
+                  rather than as a badge stuck on the side. */}
+              {value.overnight && <span className="rota-cell-plus1">+1</span>}
+            </>
+          : <span aria-hidden="true">&mdash;</span>}
+      </button>
+
+      {open && (
+        <div className={'rota-picker-panel' + (alignRight ? ' align-right' : '') + (openUp ? ' open-up' : '')}
+          id={listId} role="listbox">
+          {options.map((o, i) => {
+            const selected = o.off ? !value : (!!value && o.id === value.id);
+            return (
+              <button type="button" key={o.off ? 'off' : o.id}
+                role="option"
+                id={optionId(i)}
+                aria-selected={selected}
+                className={'rota-option' + (i === cursor ? ' active' : '') +
+                  (selected ? ' rota-option-chosen' : '') + (o.overnight ? ' is-night' : '')}
+                onMouseEnter={() => setCursor(i)}
+                onMouseDown={e => e.preventDefault()}   // keep focus so the panel stays open
+                onClick={() => choose(o)}>
+                {selected && <span className="rota-option-tick">{Ic.check}</span>}
+                <span className="rota-option-name">{o.name}</span>
+                {!o.off && <span className="rota-option-hours">
+                  {o.start_time}&ndash;{o.end_time}{o.overnight ? t.rotaPlusOne : ''}
+                </span>}
+                {/* The same badge the legend uses. A retired shift reaches
+                    this list through a cell that is still assigned to it, which
+                    is the only way it can be here at all -- so the picker is
+                    exactly where the badge is needed most. */}
+                {!o.off && o.active === false &&
+                  <span className="rota-legend-retired">{t.rotaRetired}</span>}
+              </button>
+            );
+          })}
+          {shifts.length === 0 && (
+            /* Reachable only in the narrow window where a manager has deleted
+               every shift while the grid they came from is still on screen. */
+            <div className="rota-picker-foot">{t.rotaNoShiftsHead}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* The rota grid, in view mode.
+   Split from SchedulePage so the read-only rendering has no `editing` branch
+   anywhere inside it -- an anonymous visitor and a manager looking at the rota
+   produce byte-identical DOM here, which is the only way to be sure the
+   permission flag cannot produce a rendering difference nobody looked at. */
+function RotaTable({ t, week, members, shifts, editing, draft, setCell }) {
+  const shown = editing ? (draft || []) : members;
+  const gridRef = useRef(null);
+
+  // Entering edit mode hands focus to the grid's first real cell. On the way out
+  // it is left alone: the segmented control is still on screen, so a Tab from
+  // wherever the focus ended up still lands somewhere sensible.
+  useEffect(() => {
+    if (!editing) return;
+    const first = gridRef.current && gridRef.current.querySelector('.rota-cell.is-editable');
+    if (first) first.focus();
+  }, [editing]);
+
+  const peopleOn = shiftId => members.filter(m => (m.days || []).some(d => d && d.id === shiftId)).length;
+
+  return (
+    <div className="rota-table-wrap" ref={gridRef}>
+      <table className="rota-table">
+        <caption className="sr-only">
+          {t.rotaTitle} &mdash; {week.start} to {week.end}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col" className="rota-name-head">{t.rotaNameColumn}</th>
+            {week.days.map((d, i) => (
+              <th key={d.weekday} scope="col"
+                className={d.is_today ? 'rota-headcol-today' : undefined}
+                aria-current={d.is_today ? 'date' : undefined}>
+                {t.rotaDays[d.weekday - 1] || d.label}
+                <span className="rota-daynum">{d.date.slice(8)}</span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {shown.map(m => {
+            const mins = rotaWeekHours(m);
+            const free = !(m.days || []).some(Boolean);
+            return (
+              <tr key={m.user_id} className={m.active ? undefined : 'rota-inactive'}>
+                <th scope="row" className="rota-name-cell">
+                  <div className="rota-member">
+                    <Avatar name={m.name} idx={m.avatar_idx} size="sm"/>
+                    <span className="rota-member-text">
+                      <span className="rota-member-name">{m.name}</span>
+                      {free
+                        ? <span className="rota-free">{t.rotaFreeWeek}</span>
+                        : <div className="rota-member-hours">
+                            {t.rotaWeekHours.replace('{hours}', (mins / 60).toFixed(mins % 60 ? 1 : 0))}
+                          </div>}
+                    </span>
+                  </div>
+                </th>
+                {week.days.map((d, i) => {
+                  const shift = (m.days || [])[i] || null;
+                  const cellId = 'rota-u' + m.user_id + '-d' + (i + 1);
+                  // "Nobody on this rota" and "a day off" both print a dash, and
+                  // aria-label is what tells them apart -- the row badge already
+                  // carries the first, so the cell only has to carry the second.
+                  const label = shift
+                    ? t.rotaCellLabel.replace('{name}', m.name).replace('{shift}', shift.name)
+                    : (editing
+                        ? t.rotaCellLabelUnset.replace('{name}', m.name)
+                        : t.rotaCellLabelOff.replace('{name}', m.name));
+                  return (
+                    <td key={d.weekday}
+                      className={'rota-day' + (d.is_today ? ' rota-col-today' : '')}>
+                      {editing
+                        ? <RotaPicker
+                          cellId={cellId}
+                          value={shift}
+                          shifts={shifts}
+                          onPick={s => setCell(m.user_id, i, s)}
+                          t={t}
+                          // The last two columns open leftwards, so the panel
+                          // never lands against the clipped right edge of the
+                          // card. The bottom rows are handled the same way by
+                          // openUp, which is left off here only because the
+                          // table scrolls rather than running under the fold.
+                          alignRight={i >= 5}
+                          openUp={false}/>
+                        : <div className={'rota-cell' + (shift ? '' : ' is-off') +
+                            (shift && shift.overnight ? ' is-night' : '')}>
+                            {shift
+                              ? <>
+                                  <span className="rota-cell-name">{shift.name}</span>
+                                  {shift.overnight && <span className="rota-cell-plus1">+1</span>}
+                                </>
+                              : <span aria-hidden="true">&mdash;</span>}
+                            <span className="sr-only">{label}</span>
+                          </div>}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* The shift templates card, for the Settings page.
+
+   Shaped like the other catalogs SettingsPage holds -- a .set-form on the left,
+   the list on the right -- so it reads as one of them rather than as a new kind
+   of thing. Only the rows needed three things the catalogs did not: two time
+   fields side by side, an in-place edit holding three controls in one row, and
+   the night marker surviving at 12.5px.
+
+   The whole card is manager-only, so there is no can_edit branch inside it. The
+   page that holds it already refuses to render for anybody else. */
+function ShiftSettingsCard({ token, setToast }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+
+  const [shifts, setShifts] = useState(null);
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [draft, setDraft] = useState(null);   // {name, start_time, end_time}
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  const [name, setName] = useState('');
+  const [start, setStart] = useState('08:00');
+  const [end, setEnd] = useState('16:00');
+
+  const load = useCallback(() => {
+    return apiFetch('/shifts?include_retired=true', {token})
+      .then(res => { setShifts(res.shifts || []); setErr(''); })
+      .catch(ex => setErr((ex && ex.message) || 'Request failed'));
+  }, [token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Whether the times in the form cross midnight, so the form can say so before
+  // the save rather than after it. Derived here with the same rule the server
+  // uses -- the end is earlier in the day than the start, and is not midnight
+  // itself -- because 16:00-00:00 is eight hours finishing at midnight and a bare
+  // end < start gets that wrong.
+  const looksOvernight = (() => {
+    const mins = x => {
+      const [h, m] = String(x || '').split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    };
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(end)) return false;
+    const e = mins(end);
+    return e > 0 && e < mins(start);
+  })();
+
+  function beginAdd() {
+    setName(''); setStart('08:00'); setEnd('16:00'); setErr('');
+  }
+
+  async function addShift(e) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      await apiFetch('/shifts', {
+        method: 'POST', token,
+        body: { name: name.trim(), start_time: start, end_time: end },
+      });
+      setName(''); setErr('');
+      await load();
+      setToast(t.shiftAdded);
+    } catch (ex) {
+      setErr((ex && ex.message) || 'Request failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function beginEdit(s) {
+    setEditingId(s.id);
+    setDraft({ name: s.name, start_time: s.start_time, end_time: s.end_time });
+    setErr('');
+  }
+
+  async function saveEdit(id, version) {
+    if (!draft || !draft.name.trim()) return;
+    setSaving(true);
+    try {
+      await apiFetch('/shifts/' + id, {
+        method: 'PATCH', token,
+        body: {
+          name: draft.name.trim(),
+          start_time: draft.start_time,
+          end_time: draft.end_time,
+          active: true,
+          version,
+        },
+      });
+      setEditingId(null); setDraft(null); setErr('');
+      await load();
+      setToast(t.shiftUpdated);
+    } catch (ex) {
+      // A 409 is the server saying somebody else saved first. The message it
+      // sends already says so, and the reload is what makes the row editable
+      // again -- the version the form holds is no longer current.
+      setErr((ex && ex.message) || 'Request failed');
+      if (ex && ex.status === 409) { setEditingId(null); setDraft(null); load(); }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function setActive(s, active) {
+    setSaving(true);
+    try {
+      await apiFetch('/shifts/' + s.id, {
+        method: 'PATCH', token,
+        body: { name: s.name, start_time: s.start_time, end_time: s.end_time,
+                active, version: s.version },
+      });
+      await load();
+    } catch (ex) {
+      setErr((ex && ex.message) || 'Request failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function doDelete(s) {
+    setSaving(true);
+    try {
+      await apiFetch('/shifts/' + s.id, { method: 'DELETE', token });
+      setConfirmDelete(null);
+      await load();
+      setToast(t.shiftDeleted);
+    } catch (ex) {
+      setErr((ex && ex.message) || 'Request failed');
+      setConfirmDelete(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!shifts) {
+    return <div className="set-form">{Ic.calendar}<p style={{margin:0}}>{t.analyticsLoading}</p></div>;
+  }
+
+  return (
+    <div className="set-body">
+      <div className="set-form">
+        <div className="set-form-cap">{t.shiftAdd}</div>
+        {err && <div className="auth-error" style={{marginBottom:14}}>{err}</div>}
+        <form onSubmit={addShift}>
+          <div className="form-group">
+            <label htmlFor="shift-new-name">{t.shiftName}</label>
+            <input id="shift-new-name" className="form-control" maxLength={50}
+              placeholder={t.shiftNamePlaceholder} value={name}
+              onChange={e => { setName(e.target.value); setErr(''); }}/>
+          </div>
+          <div className="form-group" style={{marginTop:14}}>
+            {/* A caption over a group of two fields, not a label for one of them. */}
+            <div className="form-group-h" id="shift-new-times-h">{t.shiftTimes}</div>
+            <div className="rota-settings-times" role="group" aria-labelledby="shift-new-times-h">
+              <label htmlFor="shift-new-start" className="sr-only">{t.shiftStart}</label>
+              <input id="shift-new-start" className="form-control" type="time" step={60}
+                value={start} onChange={e => { setStart(e.target.value); setErr(''); }}/>
+              <span className="rota-settings-dash">&ndash;</span>
+              <label htmlFor="shift-new-end" className="sr-only">{t.shiftEnd}</label>
+              <input id="shift-new-end" className="form-control" type="time" step={60}
+                value={end} onChange={e => { setEnd(e.target.value); setErr(''); }}/>
+            </div>
+          </div>
+          {looksOvernight && (
+            <div className="rota-settings-night">
+              {Ic.clock}<span>{t.shiftOvernightHint}</span>
+            </div>
+          )}
+          <div className="admin-form-inline" style={{marginTop:16}}>
+            <span className="ci-preview">
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:13}}>
+                {start}&ndash;{end}{looksOvernight ? t.rotaPlusOne : ''}
+              </span>
+            </span>
+            <button type="submit" className="btn btn-primary" disabled={saving || !name.trim()}>
+              {Ic.plus} {saving ? '.' : t.shiftAdd}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="table-card">
+        {shifts.length === 0
+          ? (
+            <div className="empty-state">
+              {Ic.clock}
+              <p className="rota-empty-head">{t.shiftNoneYet}</p>
+              <p className="rota-empty-sub">{t.shiftNoneYetBody}</p>
+            </div>
+          )
+          : (
+            <table>
+              <thead>
+                <tr>
+                  <th>{t.shiftName}</th>
+                  <th>{t.shiftTimes}</th>
+                  <th>{t.shiftInUse}</th>
+                  <th style={{width:120}}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {shifts.map(s => (
+                  <tr key={s.id}>
+                    {editingId === s.id
+                      ? (
+                        <td>
+                          <input className="form-control" autoFocus maxLength={50}
+                            aria-label={t.shiftEdit + ' - ' + s.name}
+                            value={draft.name}
+                            onChange={e => setDraft({ ...draft, name: e.target.value })}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') saveEdit(s.id, s.version);
+                              if (e.key === 'Escape') { setEditingId(null); setDraft(null); }
+                            }}/>
+                        </td>
+                      )
+                      : (
+                        <td>
+                          <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+                            <span style={{fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                              {s.name}
+                            </span>
+                            {s.active === false && <span className="rota-legend-retired">{t.rotaRetired}</span>}
+                          </div>
+                        </td>
+                      )}
+                    <td>
+                      {editingId === s.id
+                        ? (
+                          <div className="rota-settings-times">
+                            <input className="form-control" type="time" step={60}
+                              aria-label={t.shiftStart + ' - ' + s.name}
+                              value={draft.start_time}
+                              onChange={e => setDraft({ ...draft, start_time: e.target.value })}/>
+                            <span className="rota-settings-dash">&ndash;</span>
+                            <input className="form-control" type="time" step={60}
+                              aria-label={t.shiftEnd + ' - ' + s.name}
+                              value={draft.end_time}
+                              onChange={e => setDraft({ ...draft, end_time: e.target.value })}/>
+                          </div>
+                        )
+                        : (
+                          /* The night marker rides on the hours rather than the
+                             name, because that is where the reading happens. */
+                          <span className={'rota-cell-name' + (s.overnight ? ' is-night' : '')}
+                            style={{fontFamily:"'DM Mono',monospace",fontSize:12.5,
+                                    borderLeft:s.overnight ? '3px solid var(--orange)' : undefined,
+                                    paddingLeft:s.overnight ? 6 : undefined,
+                                    display:'inline-block'}}>
+                            {s.start_time}&ndash;{s.end_time}{s.overnight ? t.rotaPlusOne : ''}
+                          </span>
+                        )}
+                    </td>
+                    <td style={{fontSize:12,color:'var(--gray-400)'}}>
+                      {s.assignment_count > 0
+                        ? (s.assignment_count === 1
+                          ? t.shiftInUseOne
+                          : t.shiftInUseMany.replace('{count}', s.assignment_count))
+                        : ''}
+                    </td>
+                    <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                      {editingId === s.id
+                        ? (
+                          <>
+                            <button className="btn btn-primary" style={{padding:'4px 12px',fontSize:12}}
+                              onClick={() => saveEdit(s.id, s.version)}
+                              disabled={saving || !draft.name.trim()}>
+                              {saving ? '.' : t.shiftSaveChanges}
+                            </button>
+                            <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
+                              onClick={() => { setEditingId(null); setDraft(null); }}
+                              disabled={saving}>
+                              {t.shiftCancelEdit}
+                            </button>
+                          </>
+                        )
+                        : (
+                          <>
+                            <button className="icon-btn" title={t.shiftEdit} onClick={() => beginEdit(s)}>
+                              {Ic.edit}
+                            </button>
+                            {/* Retiring rather than deleting is the ordinary act here:
+                                a shift is removed once nothing is on it, and deleting
+                                one that is still in use empties those days silently. */}
+                            <button className="icon-btn"
+                              title={s.active === false ? t.shiftReinstate : t.shiftRetire}
+                              onClick={() => setActive(s, s.active === false)}>
+                              {s.active === false ? Ic.refresh : Ic.eyeoff}
+                            </button>
+                            <button className="icon-btn" title={t.removeType}
+                              onClick={() => setConfirmDelete(s)}>
+                              {Ic.trash}
+                            </button>
+                          </>
+                        )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        {/* Stated rather than implied: deleting a shift empties the days that
+            were on it, and the count is the only way a manager finds that out
+            before pressing the button. */}
+        {confirmDelete && (
+          <div className="rota-savebar">
+            {Ic.info}
+            <span>
+              {confirmDelete.assignment_count === 1
+                ? t.shiftDeleteConfirmOne.replace('{count}', confirmDelete.assignment_count)
+                : t.shiftDeleteConfirmMany.replace('{count}', confirmDelete.assignment_count)}
+            </span>
+            <span className="rota-savebar-spacer" />
+            <button type="button" className="btn btn-ghost" onClick={() => setConfirmDelete(null)}>
+              {t.cancel}
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => doDelete(confirmDelete)}>
+              {Ic.trash} {saving ? '.' : t.shiftDeleteConfirmYes}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* Throwing away unsaved edits.
+
+   Every other confirmation in this app is destructive and uses btn-danger; this
+   one is too -- it discards work -- so it says so in the same colour as the delete
+   button, and Cancel takes the initial focus, because a reflexive Enter after
+   mis-clicking Cancel must not throw the edits away. useDialog is what gives it
+   Escape and the Tab trap; a hand-rolled role=dialog has neither, whatever its
+   aria-modal attribute says. */
+function DiscardDialog({ t, count, onCancel, onDiscard }) {
+  const panelRef = useDialog({ onClose: onCancel, initialFocus: '#rota-discard-cancel' });
+  const body = count === 1
+    ? t.rotaDiscardBody
+    : t.rotaDiscardBodyMany.replace('{count}', count);
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onCancel()}>
+      <div className="modal confirm-modal" ref={panelRef} role="dialog" aria-modal="true"
+        aria-labelledby="rota-discard-title">
+        <div className="modal-header">
+          <h2 id="rota-discard-title">{t.rotaDiscardTitle}</h2>
+          <button type="button" className="icon-btn" onClick={onCancel}>{Ic.x}</button>
+        </div>
+        <div className="modal-body confirm-body">
+          <span className="confirm-icon">{Ic.info}</span>
+          <div className="confirm-text">{body}</div>
+        </div>
+        <div className="modal-footer">
+          <button type="button" id="rota-discard-cancel" className="btn btn-ghost"
+            onClick={onCancel} autoFocus>
+            {t.rotaCancel}
+          </button>
+          <button type="button" className="btn btn-danger" onClick={onDiscard}>
+            {t.yesDiscard}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* The rota page.
+
+   PUBLIC. /v1/schedule takes no token, and apiFetch omits the Authorization header
+   when there is none -- which is exactly the anonymous case the server answers
+   with can_edit:false. So `token` is undefined here for a visitor who has not
+   signed in, and that is not an error path; it is the common one.
+
+   Two modes, and the boundary between them is the load-bearing decision on this
+   page. The write is a PUT carrying all seven days and it CLEARS anything
+   omitted, so an always-editable grid would build a seven-element payload out of
+   current state on every cell interaction, and a bug in that construction does not
+   show as a wrong cell -- it shows as somebody who silently lost four shifts, and
+   a standing rota has no per-date diff for that to be noticed in. Building the
+   payload once, from a frozen draft, on the way out of edit mode is where that
+   class of bug stops existing. */
+function SchedulePage({ token, setToast, onGoToSettings }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+
+  const [weekISO, setWeekISO] = useState(() => mondayISO(new Date()));
+  const [data, setData]     = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]   = useState('');
+  const [mode, setMode]     = useState('view');
+  const [draft, setDraft]   = useState(null);
+  const [busy, setBusy]     = useState(false);
+  const [announce, setAnnounce] = useState('');
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  const onThisWeek = weekISO === mondayISO(new Date());
+  const canEdit = !!(data && data.canEdit);
+  const editing = mode === 'edit' && canEdit;
+
+  const load = useCallback(wk => {
+    setLoading(true);
+    return apiFetch('/schedule?week=' + wk, {token})
+      .then(res => {
+        setData({
+          week:    res.week,
+          members: res.members || [],
+          shifts:  res.shifts  || [],
+          canEdit: !!res.can_edit,
+        });
+        setError('');
+      })
+      .catch(ex => setError((ex && ex.message) || 'Request failed'))
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  useEffect(() => { load(weekISO); }, [weekISO, load]);
+
+  /* The legend is built from what the cells actually reference, not from the
+     catalog alone. A shift that has been retired but is still on somebody's week
+     comes back inside that day's own object and nowhere else, so a legend built
+     from /v1/shifts alone would print a name into the grid that the reader then
+     cannot look up. Sorted earliest start first: a rota reads forward in time. */
+  const legend = useMemo(() => {
+    const seen = new Map();
+    for (const x of (data ? data.shifts : [])) seen.set(x.id, x);
+    for (const m of (data ? data.members : []))
+      for (const d of (m.days || [])) if (d && d.id != null && !seen.has(d.id)) seen.set(d.id, d);
+    return [...seen.values()].sort((a, b) =>
+      String(a.start_time).localeCompare(String(b.start_time)) || a.name.localeCompare(b.name));
+  }, [data]);
+
+  /* Dirty is the set of MEMBERS whose days differ, not the set of cells. One PUT
+     goes out per person, so a count of cells would overstate the work and a count
+     of changes would understate it. */
+  const dirtyIds = useMemo(() => {
+    if (!editing || !draft || !data) return [];
+    const was = new Map(data.members.map(m => [m.user_id, m]));
+    return draft
+      .filter(m => {
+        const before = was.get(m.user_id);
+        if (!before) return false;
+        return (m.days || []).some((d, i) => {
+          const now = (d || {}).id != null ? d.id : null;
+          const wasId = ((before.days || [])[i] || {}).id != null ? before.days[i].id : null;
+          return now !== wasId;
+        });
+      })
+      .map(m => m.user_id);
+  }, [editing, draft, data]);
+
+  function enterEdit() {
+    // A fresh days array per member and whole-day replacement on every write, so
+    // nothing in the draft can reach back into data.members.
+    setDraft((data.members || []).map(m => ({ ...m, days: (m.days || []).slice() })));
+    setMode('edit');
+  }
+  function leaveEdit() { setMode('view'); setDraft(null); }
+  function cancelEdit() {
+    if (dirtyIds.length > 0) { setConfirmDiscard(true); return; }
+    leaveEdit();
+  }
+
+  function setCell(userID, index, shift) {
+    setDraft(prev => prev.map(m => {
+      if (m.user_id !== userID) return m;
+      const days = (m.days || []).slice();
+      days[index] = shift;
+      return { ...m, days };
+    }));
+  }
+
+  async function save() {
+    setBusy(true);
+    try {
+      // Sequential, not Promise.all: a burst of seven PUTs that half-succeeds
+      // leaves a rota nobody can reason about, and this keeps one failure to one
+      // member with the rows before it already saved and honest.
+      for (const userID of dirtyIds) {
+        const m = draft.find(x => x.user_id === userID);
+        const res = await apiFetch('/schedule/' + userID, {
+          method: 'PUT',
+          token,
+          // ALL seven, always. Omitted days are cleared server-side, so a payload
+          // built from only the touched cells would wipe the rest of the week.
+          // This is the single most important line on the page.
+          body: { days: (m.days || []).map((d, i) => ({ weekday: i + 1, shift_id: d ? d.id : null })) },
+        });
+        // Replaced wholesale from the echoed member, so the row on screen is
+        // exactly what a fresh load would show -- including a server-normalised
+        // overnight flag this client did not predict.
+        setData(d => ({
+          ...d,
+          members: d.members.map(x => (x.user_id === userID ? res.member : x)),
+        }));
+      }
+      leaveEdit();
+      setToast(t.rotaSaved);
+      setAnnounce(t.rotaSaved);
+    } catch (ex) {
+      setToast('Error: ' + ((ex && ex.message) || 'Request failed'));
+      // Out of edit mode and back to the server's truth. A draft that cannot be
+      // written is not something to leave on screen looking editable.
+      leaveEdit();
+      load(weekISO);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /* Announced once per mode change. The 30ms gap is load-bearing: a live region
+     whose text is set to the identical string is not a change, so leaving edit
+     mode and coming straight back would announce nothing at all. */
+  useEffect(() => {
+    if (!editing) { setAnnounce(''); return; }
+    setAnnounce('');
+    const id = setTimeout(() => setAnnounce(t.rotaEnteredEdit), 30);
+    return () => clearTimeout(id);
+  }, [editing, t]);
+
+  // Stepping the week while editing reloads, which would throw the draft away
+  // without a word -- so it asks first, exactly as Cancel does.
+  function stepWeek(n) {
+    if (editing && dirtyIds.length > 0) { setConfirmDiscard(true); return; }
+    setWeekISO(w => shiftISO(w, n));
+  }
+  function goThisWeek() {
+    if (editing && dirtyIds.length > 0) { setConfirmDiscard(true); return; }
+    setWeekISO(mondayISO(new Date()));
+  }
+
+  if (error) {
+    return (
+      <div style={{maxWidth:1160}}>
+        <div className="table-card">
+          <div className="empty-state">
+            {Ic.info}
+            <p className="rota-empty-head">{t.rotaLoadFailed}</p>
+            <p className="rota-empty-sub">{error}</p>
+            <button type="button" className="btn btn-ghost" onClick={() => load(weekISO)}>
+              {Ic.refresh} {t.tryAgain}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div style={{maxWidth:1160}}>
+        <div className="table-card">
+          <div className="empty-state">{Ic.calendar}<p>{t.analyticsLoading}</p></div>
+        </div>
+      </div>
+    );
+  }
+
+  const range = data.week.start + ' \u2013 ' + data.week.end;
+
+  return (
+    <div style={{maxWidth:1160}}>
+      {/* One polite live region for the whole page. It carries the two things a
+          change of mode or a save has to say, and it stays mounted whether or not
+          there is anything to say -- an empty region is not announced, so there
+          is nothing to mount and unmount around it. */}
+      <div className="sr-only" role="status" aria-live="polite">{announce}</div>
+
+      <div className="table-card">
+        <div className="table-header">
+          <div>
+            <div className="table-title">{t.rotaTitle}</div>
+            <div style={{fontSize:12,color:'var(--gray-400)',marginTop:2}}>
+              {t.rotaSubtitle
+                .replace('{members}', (data.members || []).length)
+                .replace('{shifts}', legend.length)}
+            </div>
+          </div>
+
+          <div className="table-actions">
+            {/* Week navigation. Two arrows and a range: nothing that looks like a
+                place you can go and stay, because a standing rota does not have
+                weeks to go to. */}
+            <div className="rota-week" role="group" aria-label={t.rotaWeekNav}>
+              <button type="button" className="rota-week-btn rota-week-prev"
+                onClick={() => stepWeek(-7)} disabled={loading || busy}
+                title={t.rotaPrevWeek} aria-label={t.rotaPrevWeek}>
+                {Ic.chevron}
+              </button>
+              <span className="rota-week-range">{range}</span>
+              <button type="button" className="rota-week-btn"
+                onClick={() => stepWeek(7)} disabled={loading || busy}
+                title={t.rotaNextWeek} aria-label={t.rotaNextWeek}>
+                {Ic.chevron}
+              </button>
+              {/* Already here: a fact, not a control. Somewhere else: the same
+                  slot becomes the way back. */}
+              {onThisWeek
+                ? <span className="rota-week-pill">{t.rotaThisWeek}</span>
+                : <button type="button" className="rota-week-pill" onClick={goThisWeek}>
+                    {t.rotaThisWeek}
+                  </button>}
+            </div>
+
+            {/* A segmented radiogroup, not a toggle whose label morphs to "Done":
+                "Done" is ambiguous the moment there are unsaved changes, and a
+                morphing label takes the focused element off the screen. */}
+            {canEdit ? (
+              <>
+                <div className="rota-modeswitch" role="radiogroup" aria-label={t.rotaModeSwitch}>
+                  <button type="button" role="radio" className="rota-mode-btn"
+                    aria-checked={mode === 'view'} onClick={leaveEdit}
+                    aria-label={t.rotaView}>
+                    {Ic.eye}<span>{t.rotaView}</span>
+                  </button>
+                  <button type="button" role="radio" className="rota-mode-btn"
+                    aria-checked={editing} onClick={enterEdit} disabled={loading}
+                    aria-label={t.rotaEdit}>
+                    {Ic.edit}<span>{t.rotaEdit}</span>
+                  </button>
+                </div>
+                {editing && dirtyIds.length > 0 && (
+                  <span className="rota-dirty">
+                    {t.rotaUnsaved.replace('{count}', dirtyIds.length)}
+                  </span>
+                )}
+              </>
+            ) : (
+              /* One neutral chip, and nothing else changes: same grid, same
+                 legend, same week navigation, no disabled controls and no lock.
+                 Its only job is to answer "is this page broken?" before anyone
+                 has to ask -- an anonymous visitor lands on a public endpoint,
+                 finds no Edit button, and without this the absence is
+                 indistinguishable from a failed load. */
+              <span className="rota-readonly">{Ic.eye}<span>{t.rotaReadOnly}</span></span>
+            )}
+          </div>
+        </div>
+
+        {/* The premise, before the grid. Not a hint: it is the one fact that makes
+            every cell in the table mean what a reader assumes it means. */}
+        <div className="rota-note">
+          {Ic.info}
+          <span>{onThisWeek ? t.rotaStanding : t.rotaOtherWeek}</span>
+        </div>
+
+        {legend.length > 0 && (data.members || []).length > 0 && (
+          <div className="rota-legend">
+            {legend.map(x => (
+              <span key={x.id} className={'rota-legend-item' + (x.overnight ? ' is-night' : '')}>
+                <span className="rota-legend-name">{x.name}</span>
+                <span className="rota-legend-hours">
+                  {x.start_time}&ndash;{x.end_time}{x.overnight ? t.rotaPlusOne : ''}
+                </span>
+                {/* Counted from the grid, not read off assignment_count: one
+                    person on Night five times is one person. */}
+                <span className="rota-legend-count">
+                  {t.rotaPeopleOn.replace('{count}',
+                    (data.members || []).filter(m => (m.days || []).some(d => d && d.id === x.id)).length)}
+                </span>
+                {x.active === false && <span className="rota-legend-retired">{t.rotaRetired}</span>}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* No shifts at all: every cell would be a dash, and a page of dashes is
+            indistinguishable from "everybody is off all week" -- a materially
+            different statement, and the more alarming one to get wrong. So the
+            grid does not render. */}
+        {legend.length === 0 ? (
+          <div className="empty-state">
+            {Ic.calendar}
+            <p className="rota-empty-head">{t.rotaNoShiftsHead}</p>
+            <p className="rota-empty-sub">{t.rotaNoShiftsBody}</p>
+            {canEdit && onGoToSettings && (
+              <button type="button" className="btn btn-primary rota-empty-cta"
+                onClick={() => onGoToSettings('cat-shifts')}>
+                {Ic.plus} {t.rotaDefineShifts}
+              </button>
+            )}
+          </div>
+        ) : (data.members || []).length === 0 ? (
+          <div className="empty-state">
+            {Ic.users}
+            <p className="rota-empty-head">{t.rotaNoMembersHead}</p>
+            <p className="rota-empty-sub">{t.rotaNoMembersBody}</p>
+          </div>
+        ) : (
+          <RotaTable
+            t={t}
+            week={data.week}
+            members={data.members || []}
+            shifts={legend}
+            editing={editing}
+            draft={draft}
+            setCell={setCell}
+          />
+        )}
+
+        {/* Save and Cancel, after the grid. .table-footer is already this file's
+            home for "a button about the list as a whole rather than an action on
+            one row", which is what Save is -- and being after the grid in the DOM
+            means Tab out of the last cell lands on Cancel and then Save, with no
+            key handling at all. */}
+        {editing && (
+          <div className="rota-savebar">
+            {Ic.info}
+            <span>{dirtyIds.length > 0 ? t.rotaEditHint : t.rotaEditHintClean}</span>
+            <span className="rota-savebar-spacer" />
+            <button type="button" className="btn btn-ghost" onClick={cancelEdit} disabled={busy}>
+              {t.rotaCancel}
+            </button>
+            <button type="button" className="btn btn-primary" onClick={save}
+              disabled={busy || dirtyIds.length === 0}>
+              {Ic.check} {busy ? '.' : t.rotaSave}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* The discard prompt. Only reachable with unsaved edits, and reached from
+          three places -- Cancel, the week arrows, and "This week" -- because all
+          three would otherwise throw the draft away silently. */}
+      {confirmDiscard && <DiscardDialog
+        t={t}
+        count={dirtyIds.length}
+        onCancel={() => setConfirmDiscard(false)}
+        onDiscard={() => { setConfirmDiscard(false); leaveEdit(); }}
+      />}
+    </div>
+  );
+}
+
 /* The settings page. Named for what it is called in the nav rather than for what
    it grew out of: it holds the catalogs the rest of the app is configured from --
    issue types, departments, Connecta agents, consumable items -- plus the settings
@@ -9726,7 +11302,7 @@ function previewRoomRun(text) {
   return { from, to, count: to - from + 1 };
 }
 
-function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartmentsUpdate, connectaAgents, onConnectaAgentsUpdate, consumableItems, onConsumableItemsUpdate, settings, onSettingsUpdate, setToast }) {
+function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTypesUpdate, departments, onDepartmentsUpdate, connectaAgents, onConnectaAgentsUpdate, consumableItems, onConsumableItemsUpdate, settings, onSettingsUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [name, setName] = useState('');
@@ -9782,6 +11358,27 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
       .catch(() => {});
   }, [token]);
   useEffect(() => { loadRooms(); }, [loadRooms]);
+
+  // A group named from elsewhere -- the rota's empty state sends a manager here
+  // to define their first shift. Set once and cleared, so a later re-render (or a
+  // visit that did not ask for anything) cannot reopen a group the user shut.
+  useEffect(() => {
+    if (!focusGroup) return;
+    const g = document.getElementById(focusGroup);
+    if (!g) return;
+    // Open every group on the way down to the one asked for, or a group that
+    // starts collapsed would leave the target's own body clipped.
+    let node = g;
+    while (node && node !== document.body) {
+      if (node.classList && node.classList.contains('set-group') && !node.classList.contains('open')) {
+        const head = node.querySelector('.set-group-head');
+        if (head) head.click();
+      }
+      node = node.parentElement;
+    }
+    g.scrollIntoView({block:'start'});
+    onFocusGroupHandled && onFocusGroupHandled();
+  }, [focusGroup]);
 
   const roomPreview = previewRoomRun(roomRun);
 
@@ -10435,6 +12032,16 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
           </div>
         </SetGroup>
 
+        {/* The shift templates. In Settings rather than on the rota page because
+            they are configuration -- edited rarely, by somebody who knows the
+            hotel's hours -- while the rota itself is edited often, by whoever is
+            putting people on shifts. Two audiences, two pages.
+            No count badge: the row is not a catalog of people, and a badge reading
+            "3" against "Shifts" would be read as three shifts. */}
+        <SetGroup id="cat-shifts" level={1} title={t.adminShifts} sub={t.adminShiftsSub}>
+          <ShiftSettingsCard token={token} setToast={setToast}/>
+        </SetGroup>
+
       </SetGroup>
     </div>
   );
@@ -10524,6 +12131,10 @@ function App() {
   );
   const [stats,   setStats]   = useState(null);
   const [page,    setPage]    = useState('dashboard');
+  // A Settings group to open on arrival, set by another page. Cleared once
+  // SettingsPage has used it, so coming back to Settings later does not
+  // reopen a group the user had closed on purpose.
+  const [focusGroup, setFocusGroup] = useState(null);
   // Collapsed by default: the sidebar looks unchanged until it is opened.
   const [miscOpen, setMiscOpen] = useState(false);
   // Non-null while this user owes an LCU result for today, which is also the
@@ -10824,12 +12435,53 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     }
   }
 
-  if (!session) return (
-    <LangCtx.Provider value={lang}>
-      <AuthScreen onLogin={login} lang={lang} onLangChange={setLang} theme={theme} onThemeChange={setTheme}
-        notice={signedOutIdle ? t.signedOutIdle : null}/>
-    </LangCtx.Provider>
-  );
+    /* The rota is the one page a visitor can read without a session, which is the
+       whole point of it: who is on tonight belongs on a noticeboard, not behind a
+       login. Everything else here needs a session -- it fetches with the token, it
+       shows whose account it is, and every one of its nav entries is gated -- so
+       the exception is deliberately narrow: on /schedule with no session, this page
+       and a way to sign in, and no sidebar and no other destination.
+
+       Which page the app is on is read from the path rather than kept in state,
+       because the shell never mounts for an anonymous visitor so there is no state
+       to set. The trailing slashes are stripped and the query string ignored, so a
+       crafted URL cannot smuggle the app onto another page. */
+    const appPath = (typeof location !== 'undefined' ? location.pathname : '').replace(/\/+$/, '');
+    const publicPath = appPath === '/schedule';
+
+    if (!session && !publicPath) return (
+      <LangCtx.Provider value={lang}>
+        <AuthScreen onLogin={login} lang={lang} onLangChange={setLang} theme={theme} onThemeChange={setTheme}
+          notice={signedOutIdle ? t.signedOutIdle : null}/>
+      </LangCtx.Provider>
+    );
+
+    /* An anonymous visitor on a public page. Deliberately not the shell: a sidebar
+       full of links that 403 on click is a worse first impression than no sidebar,
+       and this header carries the two things such a reader needs -- what the page
+       is, and how to sign in if they intend to change anything. */
+    if (!session) return (
+      <LangCtx.Provider value={lang}>
+        <div className="app">
+          <div className="topbar">
+            <div className="topbar-title">{t.rotaTitle}</div>
+            <div className="topbar-actions">
+              {/* A full navigation rather than login(null, null): that call sets the
+                  session to a truthy {user:null, token:null}, which would satisfy the
+                  guard above and then fail every fetch. Going to the root is also what
+                  a reader expects a sign-in link to do. */}
+              <a className="btn btn-ghost" href="/">{t.signIn}</a>
+            </div>
+          </div>
+          <div className="content">
+            {/* token is undefined here, which is the case the rota API answers with
+                can_edit:false. Passing anything else would be inventing an identity
+                this visitor does not have. */}
+            <SchedulePage token={undefined} setToast={() => {}}/>
+          </div>
+        </div>
+      </LangCtx.Provider>
+    );
 
   const nav = [
     {id:'dashboard', label:t.dashboard,  icon:Ic.grid },
@@ -10841,6 +12493,9 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     // not a record to read back.
     {id:'maintenance', label:t.maintenance, icon:Ic.tool },
     {id:'analytics', label:t.analytics,  icon:Ic.trending},
+    // The rota is public -- anyone can read it, which is why it sits above
+    // the manager-only System and Settings entries rather than beside them.
+    {id:'schedule',  label:t.rotaTitle,  icon:Ic.calendar},
     {id:'consumables', label:t.consumables, icon:Ic.box},
     {id:'support',    label:t.supportPage,  icon:Ic.tool},
     {id:'team',      label:t.team,       icon:Ic.users},
@@ -10994,9 +12649,20 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
               windowDays={settings?.lcu_window_days}
               refreshKey={lcuEpoch}
               onLcuRequired={ex=>setLcuPrompt({units:ex.lcuUnits, today:ex.lcuToday})}/>}
+            {/* Public, and deliberately not role-gated. A visitor with no token
+                reaches this page with token undefined, which is the case the API
+                answers with can_edit:false -- the same thing it answers for a
+                technician. */}
+            {page==='schedule' && <SchedulePage
+              token={token}
+              setToast={setToast}
+              onGoToSettings={id => { setFocusGroup(id); setPage('settings'); }}
+            />}
             {page==='system' && me.role==='manager' && <SystemStatusPage token={token}/>}
             {page==='settings' && me.role==='manager' && <SettingsPage
               token={token}
+              focusGroup={focusGroup}
+              onFocusGroupHandled={() => setFocusGroup(null)}
               issueTypes={issueTypes}
               onTypesUpdate={setIssueTypes}
               departments={departments}
