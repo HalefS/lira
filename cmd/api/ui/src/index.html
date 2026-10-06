@@ -882,7 +882,7 @@ html.dark .set-group-head:hover { background: var(--gray-200); }
 }
 /* Rotates rather than flips, so the chevron keeps pointing the way it travels:
    sideways when open and shut alike, down when the group is closed. */
-.set-group.open > .set-group-head .set-group-chev { transform: rotate(90deg); }
+.set-group.open > :is(h2, h3) .set-group-chev { transform: rotate(90deg); }
 
 .set-group-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s ease; }
 .set-group.open > .set-group-body { grid-template-rows: 1fr; }
@@ -909,11 +909,7 @@ html.dark .set-group-head:hover { background: var(--gray-200); }
    light and --gray-50 in dark, and --gray-100 is distinguishable from both --
    lighter than white there, darker than the dark card there. One token, both
    themes, and neither of them ends up with an invisible box. */
-.set-form { background: var(--gray-100); border: 1px solid var(--gray-200); border-radius: var(--radius-md); padding: 14px; }
-.set-form-cap {
-  font-size: 11px; font-weight: 600; letter-spacing: .4pt; text-transform: uppercase;
-  color: var(--gray-400); margin-bottom: 12px;
-}
+.set-form { background: var(--gray-100); border: 1px solid var(--gray-200); border-radius: var(--radius-md); padding: 16px; }
 @media (max-width: 860px) {
   .set-body { grid-template-columns: 1fr; }
 }
@@ -10119,7 +10115,6 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
           count={issueTypes.length}>
           <div className="set-body">
             <div className="set-form">
-              <div className="set-form-cap">{t.addIssueType}</div>
               {err && <div className="auth-error" style={{marginBottom:14}}>{err}</div>}
               <form onSubmit={addType} className="admin-form">
                 <div className="form-group">
@@ -10175,7 +10170,6 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
           count={departments.length}>
           <div className="set-body">
             <div className="set-form">
-              <div className="set-form-cap">{t.addDepartment}</div>
               {deptErr && <div className="auth-error" style={{marginBottom:14}}>{deptErr}</div>}
               <form onSubmit={addDept} className="admin-form">
                 <div className="form-group">
@@ -10248,7 +10242,6 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
           count={connectaAgents.length}>
           <div className="set-body">
             <div className="set-form">
-              <div className="set-form-cap">{t.addAgent}</div>
               {agentErr && <div className="auth-error" style={{marginBottom:14}}>{agentErr}</div>}
               <form onSubmit={addAgent} className="admin-form">
                 <div className="form-group">
@@ -10291,7 +10284,6 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
           count={consumableItems.length}>
           <div className="set-body">
             <div className="set-form">
-              <div className="set-form-cap">{t.addConsumable}</div>
               {ciErr && <div className="auth-error" style={{marginBottom:14}}>{ciErr}</div>}
               <form onSubmit={addConsumableItem}>
                 <div className="form-group">
@@ -10367,7 +10359,6 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
           count={roomTotal}>
           <div className="set-body">
             <div className="set-form">
-              <div className="set-form-cap">{t.adminRoomsAdd}</div>
               {roomErr && <div className="auth-error" style={{marginBottom:14}}>{roomErr}</div>}
               <form onSubmit={addRooms} className="admin-form">
                 <div className="form-group">
