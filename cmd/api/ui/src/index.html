@@ -439,6 +439,12 @@ tbody tr.row-clickable { cursor: pointer; }
 .badge-pending { background: var(--amber-light); color: var(--amber); }
 .badge-internet { background: var(--teal-light); color: var(--teal); border: 1px solid var(--teal-mid); }
 .badge-type { background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200); }
+/* "Retired" on a maintenance card. Without a rule of its own it fell through to
+   the bare .badge -- transparent background, body ink -- so it read as loose text
+   with invisible padding beside two real tinted pills. A neutral of the same
+   weight as the others, which says "not one of the states" rather than raising an
+   alarm the way amber does. */
+.badge-slate { background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200); }
 
 /* ── Icon btn ── */
 .icon-btn {
@@ -752,7 +758,7 @@ tbody tr.row-clickable { cursor: pointer; }
   display: flex; align-items: center; gap: 8px;
   padding: 11px 12px; cursor: pointer; text-align: left;
   border: 1px solid var(--gray-200); border-radius: var(--radius-md);
-  background: #fff; font-size: 13.5px; color: var(--gray-700);
+  background: #fff; font-size: 13.5px; color: var(--gray-600);
   font-family: inherit; transition: border-color 0.12s, background 0.12s, color 0.12s;
 }
 .maint-choice:hover { border-color: var(--blue-mid); }
@@ -1038,6 +1044,13 @@ select.form-control { cursor: pointer; }
 }
 .room-option:hover, .room-option.active { background: var(--blue-light); }
 .room-option-chosen { color: var(--blue); font-weight: 600; }
+/* The tick on the chosen option. It needs its own size: like every icon in this
+   app the SVG carries a viewBox and no width or height, and in a flex row with
+   nothing to size it, it resolved to 0x0 and drew nothing -- the same trap the
+   API error banner walked into, documented above .page-banner. At the option's
+   own 13px. */
+.room-option-tick { display: inline-flex; align-items: center; }
+.room-option-tick svg { width: 13px; height: 13px; flex-shrink: 0; }
 .room-picker-foot {
   padding: 6px 10px 4px; font-size: 11.5px; color: var(--gray-400);
   border-top: 1px solid var(--gray-100); margin-top: 4px;
@@ -1164,6 +1177,16 @@ select.form-control { cursor: pointer; }
   border: 1.5px solid var(--gray-200); border-radius: var(--radius-md); background: var(--gray-50);
 }
 .tp-row-main { min-width: 0; flex: 1; }
+/* Both of these were used in the JSX with no rule anywhere, and both were broken
+   in the same way the room picker's tick was: tp-row-icon wrapped an unsized SVG
+   that collapsed to 0x0 in a flex row, so the TV swap rows had no icon at all;
+   tp-row-sub inherited the body's 14px body-ink, so a note sat at exactly the
+   size and weight of the room numbers above it and the two lines read as one.
+   Sizing the icon and demoting the note restores the pair that .tp-row-company
+   and .tp-row-detail already form on the support side of this panel. */
+.tp-row-icon { display: inline-flex; align-items: center; color: var(--gray-600); }
+.tp-row-icon svg { width: 15px; height: 15px; flex-shrink: 0; }
+.tp-row-sub { font-size: 12.5px; color: var(--gray-600); margin-top: 2px; }
 .tp-row-company { font-size: 13.5px; font-weight: 700; color: var(--gray-900); display: flex; align-items: center; gap: 7px; }
 .tp-row-detail { font-size: 12.5px; color: var(--gray-500); margin-top: 2px; }
 .tp-row-detail strong { color: var(--gray-600); }
@@ -1483,7 +1506,8 @@ html.dark .search-wrap input { color: var(--gray-900) !important; }
 
 html.dark .modal-overlay { background: rgba(0,0,0,0.65) !important; }
 html.dark .bar-track { background: var(--gray-200) !important; }
-html.dark .badge-type { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
+html.dark .badge-type,
+html.dark .badge-slate { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
 html.dark .demo-box { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
 html.dark .auth-screen { background: var(--gray-50) !important; }
 html.dark .auth-right  { background: var(--gray-50) !important; }
@@ -1770,6 +1794,12 @@ const PAGE_SIZE = 20;
    rows is null until the first answer lands, which is how a page tells "still
    loading" from "loaded, and there is genuinely nothing".
 
+   error is the failure message, or null. It exists because rows:null is the
+   same value a failed request leaves behind, so a page gating on !rows cannot
+   tell the two apart and renders its loading state forever. A page that wants
+   to say something about a failure reads error; onError is only for the
+   endpoints whose failure the page has to react to rather than just display.
+
    options:
      rowsKey   which key in the response holds the rows. Every endpoint names its
                own -- issues, units, swaps -- so this cannot be guessed at.
@@ -1782,7 +1812,7 @@ const PAGE_SIZE = 20;
 function usePagedList(buildPath, token, options = {}) {
   const {rowsKey = 'rows', map = null, filterKey = '', onError = null} = options;
   const [limit, setLimit] = useState(PAGE_SIZE);
-  const [state, setState] = useState({rows: null, total: 0, capped: false, loading: true, res: null});
+  const [state, setState] = useState({rows: null, total: 0, capped: false, loading: true, res: null, error: null});
 
   // Reset during render rather than in an effect: an effect would build the path
   // once with the new filters and the old limit, fetch it, and then fetch again
@@ -1821,11 +1851,18 @@ function usePagedList(buildPath, token, options = {}) {
           capped: !!res.limit_capped,
           loading: false,
           res,
+          error: null,
         });
       })
       .catch(ex => {
         if (cancelled) return;
-        setState({rows: null, total: 0, capped: false, loading: false, res: null});
+        // `error` is what separates "no answer yet" from "the answer was a
+        // failure", which rows:null alone cannot: a caller gating on !rows drew
+        // its loading state for a request that had already come back broken, and
+        // a page that renders one forever is a page that looks like it is working.
+        // It is a string rather than the exception so a caller can print it
+        // directly, which is what the existing error banners do.
+        setState({rows: null, total: 0, capped: false, loading: false, res: null, error: ex.message || 'Request failed'});
         if (onErrorRef.current) onErrorRef.current(ex);
       });
     return () => { cancelled = true; };
@@ -4641,7 +4678,13 @@ function RoomPicker({ value, onChange, token, t, id }) {
                 : t.aptRoomMatches.replace('{count}', matches.length)}
             </div>
           )}
-          {unmatched && (
+          {/* Only once there is something to pick. `unmatched` on its own is true
+              for the whole of every fresh query -- the search is debounced by 180ms
+              and then in flight, and matches is empty throughout -- so asking the
+              reader to pick from the list above printed "pick one of the rooms
+              above" over an empty panel. Same reasoning as the two lines above it:
+              nothing has been answered yet, so nothing should be claimed. */}
+          {unmatched && matches.length > 0 && (
             <div className="room-picker-foot warn">{t.aptRoomMustPick}</div>
           )}
         </div>
@@ -5087,6 +5130,10 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
   // from the catch-all chip.
   const [filter, setFilter] = useState(null);
   const [search, setSearch] = useState('');
+  // Bumped by the retry button under a failed request. Separate from the `epoch`
+  // prop -- that one is the page telling this table the world moved on, and is not
+  // something a button here should be advancing on the app's behalf.
+  const [retry, setRetry] = useState(0);
 
   /* The search box talks to the server rather than filtering the rows in hand.
      It used to narrow an array that held every issue ever logged, which is why
@@ -5110,7 +5157,7 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
     if (query) qs.set('search', query);
     if (date) qs.set('date', date);
     return `/issues?${qs}`;
-  }, token, {rowsKey:'issues', map:mapIssue, filterKey: `${tableMode}|${filter}|${query}|${date}|${epoch}`});
+  }, token, {rowsKey:'issues', map:mapIssue, filterKey: `${tableMode}|${filter}|${query}|${date}|${epoch}|${retry}`});
 
   const issues = list.rows || [];
   // The chips come from the type catalog rather than from the rows on screen: with
@@ -5143,11 +5190,27 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
           </div>
         </div>
       </div>
-      {!list.rows ? (
+      {/* The request failed. Checked before rows, because a failed request also
+          leaves rows null -- asking for rows alone meant a dead endpoint rendered
+          "Loading analytics…" here for as long as the page was open. */}
+      {list.error ? (
+        <div style={{background:'var(--red-light)',color:'var(--red)',borderRadius:'var(--radius-md)',padding:'10px 16px',fontSize:13,marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
+          <span style={{flex:1}}>{list.error}</span>
+          <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
+            onClick={()=>setRetry(n => n + 1)}>{t.tryAgain}</button>
+        </div>
+      ) : !list.rows ? (
         <div className="empty-state">{Ic.list}<p>{t.analyticsLoading}</p></div>
       ) : issues.length===0 ? (
         <div className="empty-state">{Ic.list}<p>{t.noMatch}</p></div>
       ) : (
+        /* Scrolls sideways rather than being clipped by the card. Eight columns
+           will not fit a laptop window, and .table-card is overflow:hidden to clip
+           its own corners -- so without this the last column and the row's edit and
+           delete buttons sit past the card's right edge with no way to reach them,
+           and a technician on a narrow screen cannot edit or delete an issue at all.
+           Same wrapper the team list and the maintenance activity table use. */
+        <div style={{overflowX:'auto'}}>
         <table>
           <thead>
             <tr>
@@ -5195,6 +5258,7 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
             ))}
           </tbody>
         </table>
+        </div>
       )}
       <LoadMore list={list} t={t}/>
     </div>
@@ -5342,6 +5406,32 @@ function AlertsPage({ currentUser, token, onCountsUpdate, setToast }) {
       refresh();
     } catch(ex) { setToast('Error: ' + ex.message); }
     finally { setSaving(false); }
+  }
+
+  /* A dead /alerts is not an empty list of alerts. Everything below is drawn from
+     `data`, and with no data those counts are zeros -- so a failed request left the
+     chips reading "Pending (0) | Solved (0)", contradicting the sidebar badge that
+     still held the real figure, and both sections showing "Loading analytics…"
+     forever. There is nothing honest to draw without the answer, so the page says
+     what happened once and offers to ask again.
+
+     An early return rather than a branch inside the markup: the two sections below
+     are long, and a ternary wrapped around them would either reindent all of it or
+     leave the section headings -- which are outside the `!data` branches -- still
+     announcing "0 of". */
+  if (paged.error) {
+    return (
+      <div>
+        <div className="table-card" style={{marginBottom:16,padding:'14px 20px'}}>
+          <p style={{fontSize:13,color:'var(--gray-400)',margin:0}}>{t.alertsSubtitle}</p>
+        </div>
+        <div style={{background:'var(--red-light)',color:'var(--red)',borderRadius:'var(--radius-md)',padding:'10px 16px',fontSize:13,marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
+          <span style={{flex:1}}>{paged.error}</span>
+          <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
+            onClick={refresh}>{t.tryAgain}</button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -6900,7 +6990,12 @@ function TeamPage({ token, users, userIssueStats, currentUser, onUsersUpdate, se
   // reject anyway.
   useEffect(() => { if (!canManage) setView('members'); }, [canManage]);
 
-  const list = usePagedList(limit => `/users?limit=${limit}`, token, {rowsKey:'users'});
+  /* Nothing on this page narrows the roster -- the tabs are drawn from the rows
+     themselves -- so this list has no filter key of its own and the retry counter
+     below is the only thing that can put the request back in front of the effect. */
+  const [retry, setRetry] = useState(0);
+
+  const list = usePagedList(limit => `/users?limit=${limit}`, token, {rowsKey:'users', filterKey: `${retry}`});
 
   // Per-member totals, aggregated by the server. These used to be counted in the
   // browser out of every issue App had loaded, which only worked while App held
@@ -6953,6 +7048,16 @@ function TeamPage({ token, users, userIssueStats, currentUser, onUsersUpdate, se
   // now, so `users` is the whole roster App loaded at start-up and may be a
   // different thing entirely from what is on screen.
   const shown = list.rows || [];
+
+  if (list.error) {
+    return (
+      <div style={{background:'var(--red-light)',color:'var(--red)',borderRadius:'var(--radius-md)',padding:'10px 16px',fontSize:13,display:'flex',alignItems:'center',gap:10}}>
+        <span style={{flex:1}}>{list.error}</span>
+        <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
+          onClick={()=>setRetry(n => n + 1)}>{t.tryAgain}</button>
+      </div>
+    );
+  }
 
   if (!list.rows) {
     return (
@@ -7389,7 +7494,10 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
 
       {err && <div className="auth-error" style={{marginBottom:16}}>{err}</div>}
 
-      {!paged.rows && <div className="table-card"><div className="empty-state"><p>{t.analyticsLoading}</p></div></div>}
+      {/* Gated on the error as well as the rows: a failed fetch also leaves rows
+          null, so asking only for rows printed "Loading analytics…" underneath the
+          red line above, which says the request already failed. */}
+      {!paged.rows && !paged.error && <div className="table-card"><div className="empty-state"><p>{t.analyticsLoading}</p></div></div>}
 
       {paged.rows && units.length === 0 && (
         <div className="table-card">
@@ -7737,7 +7845,23 @@ function MaintenancePage({ token, currentUser, departments, setToast, onCountsUp
   }
 
   if (err) {
-    return <div className="table-card"><div className="empty-state">{Ic.tool}<p>{err}</p></div></div>;
+    /* The server's own message, but as an error rather than as an empty state.
+       An .empty-state is the app's way of saying "there is genuinely nothing
+       here", in grey, with nothing to click -- so a failed request used to print
+       "network down" in exactly that shape and look like an answer. It also left
+       onCountsUpdate uncalled, because due_count arrives on the success path, so
+       the sidebar badge kept whatever it last knew instead of being told the
+       count could not be read. refresh() puts the request back in front of the
+       effect; nothing else has to change for it to actually re-run. */
+    return (
+      <div>
+        <div style={{background:'var(--red-light)',color:'var(--red)',borderRadius:'var(--radius-md)',padding:'10px 16px',fontSize:13,display:'flex',alignItems:'center',gap:10}}>
+          <span style={{flex:1}}>{err}</span>
+          <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
+            onClick={refresh}>{t.tryAgain}</button>
+        </div>
+      </div>
+    );
   }
 
   const all        = data?.schedules || [];
@@ -8323,6 +8447,13 @@ function ReportsPage({ token, slaMinutes }) {
   const [date,    setDate]    = useState(localISODate(new Date()));
   const [error,   setError]   = useState('');
   const [downloading, setDownloading] = useState(false);
+  // Re-asks for the same date. setDate(d => d) cannot do this: it sets the state
+  // to the identical value, React bails out of the re-render, filterKey never
+  // changes and the fetch effect never runs -- which left this button, and the
+  // retry below it, doing nothing at all. A counter in the filter key is how
+  // AlertsPage refreshes, and the point of it is that the path comes back
+  // byte-identical, so the key is the only thing that can carry the request.
+  const [epoch,   setEpoch]   = useState(0);
 
   /* The two issue tables page; everything else on this page does not.
      The summary tiles, the by-type and by-technician charts are aggregates over
@@ -8333,12 +8464,15 @@ function ReportsPage({ token, slaMinutes }) {
     // object and the two tables inside it are what page. An object is not an
     // array, so it arrives as-is rather than being coerced.
     rowsKey: 'report',
-    filterKey: date,
+    filterKey: `${date}|${epoch}`,
     onError: ex => setError(ex.message),
   });
   const report = paged.res && paged.res.report;
   const loading = paged.loading && !report;
-  const reload = () => setDate(d => d);
+  // Clears the banner as well as re-asking: the point of pressing it after a
+  // failure is to find out whether the failure is over, so a request that
+  // succeeds must be allowed to take the error down with it.
+  const reload = () => { setError(''); setEpoch(n => n + 1); };
 
   // The printable report is rendered server-side: the Go backend builds an
   // HTML+CSS document styled with this app's own palette and prints it with a
