@@ -304,7 +304,19 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
   border-radius: 999px; display: flex; align-items: center; justify-content: center;
 }
 .sidebar-footer { margin-top: auto; padding: 10px 10px 12px; border-top: 1px solid var(--gray-200); }
-.sidebar-user { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 2px; }
+/* A <button>, not a div with an onClick: this is the only route to Profile from
+   the footer, and as a div it was unreachable by keyboard and announced as plain
+   text. The resets below are what a bare <button> brings that a <div> did not --
+   UA font, border, background and centring -- so the row looks exactly as it did
+   while finally being operable. */
+.sidebar-user {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 2px;
+  width: 100%; border: none; background: none; border-radius: var(--radius-md);
+  color: inherit; font-family: 'DM Sans', sans-serif; text-align: left;
+  cursor: pointer; transition: all 0.12s;
+}
+.sidebar-user:hover { background: var(--gray-100); }
+.sidebar-user:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .sidebar-user-name { font-size: 13px; font-weight: 500; }
 .sidebar-user-role { font-size: 11px; color: var(--gray-400); text-transform: capitalize; }
 .logout-btn {
@@ -1008,6 +1020,7 @@ html.dark .week-nav button { background: var(--gray-50); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .form-group { display: flex; flex-direction: column; gap: 5px; }
 .form-group label { font-size: 11px; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.07em; }
+.form-group .form-group-h { font-size: 11px; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.07em; }
 .form-control {
   padding: 8px 11px; border: 1px solid var(--gray-200); border-radius: var(--radius-md);
   font-size: 13.5px; color: var(--gray-900); background: #fff;
@@ -2016,6 +2029,10 @@ const T = {
     historyNoIssues: 'No issues logged on this date.',
     team: 'Team',
     signOut: 'Sign out',
+    // The two sidebar destinations that were the only English literals left in the
+    // nav array, so they stayed English in a Portuguese session.
+    navReports: 'Reports',
+    navProfile: 'Profile',
     // The inactivity timeout, said out loud. "30 minutes" is repeated in the
     // sign-in notice because someone reading it there has no memory of the
     // banner that preceded it, or of the app at all.
@@ -2619,6 +2636,8 @@ const T = {
     historyNoIssues: 'Nenhuma avaria registada nesta data.',
     team: 'Equipa',
     signOut: 'Sair',
+    navReports: 'Relatórios',
+    navProfile: 'Perfil',
     idleWarning: 'Sem atividade há 25 minutos. A sessão será terminada dentro de 5 minutos, a não ser que continue a usar o LIRA.',
     signedOutIdle: 'A sua sessão foi terminada após 30 minutos sem atividade. Inicie sessão novamente para continuar.',
     deptIssueBtn: 'Avaria Dept.',
@@ -3407,12 +3426,12 @@ function ThemeToggle({ theme, onChange }) {
    every render, so React sees a different element type each time, throws the
    old one away and mounts a fresh one. The input is therefore recreated on
    every keystroke and loses focus after the first character. Keep it here. */
-function PwField({ label, value, onChange, placeholder, showPw, onToggleShow }) {
+function PwField({ label, id, value, onChange, placeholder, showPw, onToggleShow }) {
   return (
     <div className="form-group">
-      <label>{label}</label>
+      <label htmlFor={id}>{label}</label>
       <div className="pw-wrap">
-        <input className="form-control" type={showPw?'text':'password'}
+        <input id={id} className="form-control" type={showPw?'text':'password'}
           placeholder={placeholder} value={value}
           onChange={e=>onChange(e.target.value)} required/>
         <button type="button" className="pw-toggle" onClick={onToggleShow}
@@ -3587,27 +3606,27 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange, notice 
         )}
         <form onSubmit={doReset}>
           <div className="form-group">
-            <label>{t.email}</label>
+            <label htmlFor="auth-reset-email">{t.email}</label>
             {/* Arriving from a blocked sign-in, the address is already filled in,
                 so the cursor belongs on the code instead. Coming in cold from the
                 link, it belongs on the address. Exactly one of the two takes
                 autoFocus — both cannot. */}
-            <input className="form-control" type="email" placeholder={t.emailPlaceholder}
+            <input id="auth-reset-email" className="form-control" type="email" placeholder={t.emailPlaceholder}
               value={email} onChange={e=>setEmail(e.target.value)} autoFocus={!locked} required/>
           </div>
           <div className="form-group">
-            <label>{t.resetCodeLabel}</label>
+            <label htmlFor="auth-reset-code">{t.resetCodeLabel}</label>
             {/* inputMode numeric and a letter-spaced monospace field: the code is
                 six digits and someone is copying it off the back of a manager's
                 hand, often one-handed. */}
-            <input className="form-control reset-code-input" inputMode="numeric"
+            <input id="auth-reset-code" className="form-control reset-code-input" inputMode="numeric"
               placeholder="000000" maxLength={6} value={code} autoFocus={locked}
               onChange={e=>setCode(e.target.value.replace(/\D/g,''))}/>
             <div style={{fontSize:12,color:'var(--gray-500)',marginTop:5}}>
               {t.codeFromManager}
             </div>
           </div>
-          <PwField label={t.newPassword} value={newPw} onChange={setNewPw}
+          <PwField id="auth-reset-pw" label={t.newPassword} value={newPw} onChange={setNewPw}
             placeholder="••••••••" {...pwProps}/>
           {newPw && newPw.length < 6 && (
             <div style={{fontSize:12,color:'var(--amber)',marginTop:4}}>{t.passwordTooShort}</div>
@@ -3673,15 +3692,15 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange, notice 
 
             {mode==='register' && (
               <div className="form-group">
-                <label>{t.fullName}</label>
-                <input className="form-control" placeholder={t.fullNamePlaceholder} value={name} onChange={e=>setName(e.target.value)} required />
+                <label htmlFor="auth-name">{t.fullName}</label>
+                <input id="auth-name" className="form-control" placeholder={t.fullNamePlaceholder} value={name} onChange={e=>setName(e.target.value)} required />
               </div>
             )}
             <div className="form-group">
-              <label>{t.email}</label>
-              <input className="form-control" type="email" placeholder={t.emailPlaceholder} value={email} onChange={e=>setEmail(e.target.value)} required />
+              <label htmlFor="auth-email">{t.email}</label>
+              <input id="auth-email" className="form-control" type="email" placeholder={t.emailPlaceholder} value={email} onChange={e=>setEmail(e.target.value)} required />
             </div>
-            <PwField label={t.password} value={pw} onChange={setPw}
+            <PwField id="auth-pw" label={t.password} value={pw} onChange={setPw}
               placeholder={mode==='register'?t.passwordPlaceholder:'••••••••'} {...pwProps}/>
 
             <button type="submit" className="btn btn-primary btn-full" style={{marginTop:4}} disabled={loading}>
@@ -3873,9 +3892,9 @@ function ConsumableIcon({ name, size=36 }) {
 }
 
 /* The grid of icons a manager picks from when creating / editing a consumable. */
-function ConsumableIconGrid({ value, onChange }) {
+function ConsumableIconGrid({ value, onChange, labelledBy }) {
   return (
-    <div className="icon-grid">
+    <div className="icon-grid" role="group" aria-labelledby={labelledBy}>
       {CONSUMABLE_ICON_KEYS.map(k=>(
         <button type="button" key={k} title={k.replace(/-/g,' ')} aria-pressed={value===k}
           className={`icon-opt ${value===k?'selected':''}`} onClick={()=>onChange(k)}>
@@ -3942,6 +3961,127 @@ function SupportRequestStrip({ requests, t }) {
   );
 }
 
+/* ── what a dialog owes the keyboard ──
+   Eleven overlays in this app share one shape: a panel, a header, a close
+   button. Ten of them declared aria-modal="true" and not one of them acted on
+   it. Focus stayed on whatever opened the dialog, Tab walked straight out into
+   the page behind, and Escape did nothing at all.
+
+   That combination is worse than either half on its own. aria-modal tells
+   assistive technology the rest of the page is gone; if Tab then puts the focus
+   ring out there anyway, the reader has been told something the keyboard is
+   contradicting. Withdrawing aria-modal was the other option and it is the
+   weaker one -- it leaves screen-reader users free to browse a page that is
+   visually covered. So the claim is kept and made true here, once, for all of
+   them rather than in each.
+
+   Three things that are load-bearing and not obvious:
+
+   Only the topmost dialog reacts, checked by DOM order. The consumable picker,
+   the TV-swap modal and the third-party modal all open from inside the issue
+   form and live in the same document, so without this an Escape inside the
+   picker would close the picker and the form behind it in the same keystroke.
+   The `claimed` flag covers the case DOM order alone gets wrong: React commits
+   the child's effect before the parent's, so the picker installs its listener
+   first and handles Escape before the form's listener has run at all.
+
+   An element that already holds focus is left there. `autoFocus` and
+   `initialFocus` both run before this effect does, and several of these panels
+   deliberately start somewhere other than the first control -- the Cancel in a
+   destructive confirmation, the room field in the issue form -- so taking focus
+   unconditionally would undo choices that were made on purpose.
+
+   Focus is handed back on unmount. A dialog opened from the keyboard has to
+   return the user to where they were, or closing one silently teleports them to
+   the top of the document and they have to tab all the way down again. */
+const DIALOG_FOCUSABLE = [
+  'a[href]', 'button:not([disabled])', 'input:not([disabled])',
+  'select:not([disabled])', 'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+function useDialog({ onClose, initialFocus, preventClose = false }) {
+  const panelRef = useRef(null);
+  // The handler is held in a ref rather than listed as a dependency, because
+  // every caller passes an inline arrow -- a fresh function each render -- and
+  // depending on it would tear the listener down and rebuild it constantly.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const restoreTo = document.activeElement;
+
+    if (!panel.contains(document.activeElement)) {
+      // The body before the whole panel. Every panel here opens with a close
+      // button in its header, so focusing the first focusable outright would put
+      // a dialog that has nothing to fill in -- the pickers -- on the X, which is
+      // both a control nobody came here to use and a poor place to start reading
+      // a list from. A caller that wants a specific field passes initialFocus.
+      const body = panel.querySelector('.modal-body') || panel;
+      const first = (initialFocus && panel.querySelector(initialFocus))
+                 || body.querySelector(DIALOG_FOCUSABLE)
+                 || panel.querySelector(DIALOG_FOCUSABLE);
+      if (first) first.focus();
+    }
+
+    const onKeyDown = e => {
+      if (e.claimedByDialog) return;
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      // Last in the DOM is the one drawn on top, and the only one entitled to
+      // answer the keyboard.
+      //
+      // dialogs[length - 1], not dialogs[0][length - 1]: the second indexes the
+      // first element's children by an integer, which an Element does not have, so
+      // it is always undefined, never equals panel, and this returned early on
+      // every key -- leaving all eleven dialogs unable to close on Escape or trap
+      // Tab while appearing to.
+      if (dialogs.length === 0 || dialogs[dialogs.length - 1] !== panel) return;
+      e.claimedByDialog = true;
+
+      if (e.key === 'Escape') {
+        if (!preventClose && closeRef.current) closeRef.current();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      // Tab and Shift+Tab wrap, so the focus cannot leave through the page
+      // behind. Only rendered controls count -- a chip that is not on screen is
+      // not somewhere the keyboard can be sent. getClientRects rather than
+      // offsetParent, which is null for anything position:fixed and would drop
+      // real stops inside a panel that happens to be one.
+      const stops = [...panel.querySelectorAll(DIALOG_FOCUSABLE)]
+        .filter(el => el.getClientRects().length > 0);
+      if (stops.length === 0) { e.preventDefault(); return; }
+      const first = stops[0], last = stops[stops.length - 1];
+      const at = document.activeElement;
+      if (e.shiftKey ? (at === first || !panel.contains(at)) : (at === last || !panel.contains(at))) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      // Only take focus back if it belongs to this dialog. Two cases count: it is
+      // still inside the panel, or it has fallen to <body> because the element
+      // that held it was just removed -- which is what a browser does with focus
+      // on a node it deletes, and which otherwise drops a keyboard user at the
+      // top of the document. If focus has already moved somewhere real -- to the
+      // field a sibling dialog put it in, say -- leave it alone; yanking it back
+      // would be the bug rather than the fix.
+      const at = document.activeElement;
+      const ours = panel.contains(at) || at === document.body || at === null;
+      if (restoreTo && restoreTo !== document.body && ours && restoreTo.isConnected) {
+        restoreTo.focus();
+      }
+    };
+    // initialFocus is a constant selector per caller; onClose is in a ref.
+  }, [initialFocus, preventClose]);
+
+  return panelRef;
+}
+
 /* The dialog opened by "Add consumables". Works on a draft copy of the selection;
    nothing changes on the issue until the user presses Done. */
 function ConsumablePicker({ items, value, onCancel, onDone }) {
@@ -3950,11 +4090,7 @@ function ConsumablePicker({ items, value, onCancel, onDone }) {
   const [draft, setDraft] = useState(value);   // [{itemId, quantity}]
   const [query, setQuery] = useState('');
 
-  useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape') onCancel(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel]);
+  const panelRef = useDialog({onClose: onCancel});
 
   const byId = useMemo(()=>Object.fromEntries(draft.map(d=>[d.itemId,d])), [draft]);
   const q = query.trim().toLowerCase();
@@ -3974,7 +4110,7 @@ function ConsumablePicker({ items, value, onCancel, onDone }) {
 
   return (
     <div className="modal-overlay picker-overlay" onClick={e=>e.target===e.currentTarget&&onCancel()}>
-      <div className="modal picker-modal" role="dialog" aria-modal="true" aria-label={t.consumablePickerTitle}>
+      <div className="modal picker-modal" ref={panelRef} role="dialog" aria-modal="true" aria-label={t.consumablePickerTitle}>
         <div className="modal-header">
           <div>
             <h2>{t.consumablePickerTitle}</h2>
@@ -3986,7 +4122,11 @@ function ConsumablePicker({ items, value, onCancel, onDone }) {
           {items.length > 8 && (
             <div className="search-wrap" style={{width:'100%'}}>
               {Ic.search}
-              <input placeholder={t.consumableSearch} value={query} onChange={e=>setQuery(e.target.value)} autoFocus/>
+              {/* The placeholder is what a sighted reader sees, and a placeholder is not an
+                accessible name -- it disappears on first keystroke and is not
+                reliably announced at all. Same wording, now as a real name. */}
+              <input aria-label={t.consumableSearch} placeholder={t.consumableSearch}
+                value={query} onChange={e=>setQuery(e.target.value)} autoFocus/>
             </div>
           )}
           {items.length === 0 ? (
@@ -4093,11 +4233,9 @@ function TVSwapModal({ swaps, currentRoom, onCancel, onDone }) {
     cancelEdit();
   }
 
-  useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape') { draft ? cancelEdit() : onCancel(); } };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [draft, onCancel]);
+  // Escape means "back out of what I am in", not "close": from the editor it
+  // returns to the list, and only from the list does it close the dialog.
+  const panelRef = useDialog({onClose: () => draft ? cancelEdit() : onCancel()});
 
   function renderList() {
     return (
@@ -4139,22 +4277,22 @@ function TVSwapModal({ swaps, currentRoom, onCancel, onDone }) {
     return (
       <div className="modal-body">
         <div className="form-group">
-          <label>{t.tvSwapFrom}</label>
-          <input className="form-control" value={draft.fromRoom} maxLength={100} autoFocus
+          <label htmlFor="tvswap-from">{t.tvSwapFrom}</label>
+          <input id="tvswap-from" className="form-control" value={draft.fromRoom} maxLength={100} autoFocus
             placeholder={t.tvSwapFromPlaceholder}
             onChange={e=>patch('fromRoom', e.target.value)}
             onKeyDown={e=>{ if (e.key==='Enter') save(); }}/>
         </div>
         <div className="form-group">
-          <label>{t.tvSwapTo}</label>
-          <input className="form-control" value={draft.toRoom} maxLength={100}
+          <label htmlFor="tvswap-to">{t.tvSwapTo}</label>
+          <input id="tvswap-to" className="form-control" value={draft.toRoom} maxLength={100}
             placeholder={currentRoom || t.tvSwapToPlaceholder}
             onChange={e=>patch('toRoom', e.target.value)}
             onKeyDown={e=>{ if (e.key==='Enter') save(); }}/>
         </div>
         <div className="form-group">
-          <label>{t.tvSwapNotes}</label>
-          <input className="form-control" value={draft.notes} maxLength={500}
+          <label htmlFor="tvswap-notes">{t.tvSwapNotes}</label>
+          <input id="tvswap-notes" className="form-control" value={draft.notes} maxLength={500}
             placeholder={t.tvSwapNotesPlaceholder}
             onChange={e=>patch('notes', e.target.value)}
             onKeyDown={e=>{ if (e.key==='Enter') save(); }}/>
@@ -4171,7 +4309,7 @@ function TVSwapModal({ swaps, currentRoom, onCancel, onDone }) {
 
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && onCancel()}>
-      <div className="modal picker-modal" role="dialog" aria-modal="true" aria-label={t.addTvSwap}>
+      <div className="modal picker-modal" ref={panelRef} role="dialog" aria-modal="true" aria-label={t.addTvSwap}>
         <div className="modal-header">
           <div>
             <h2>{draft ? t.editTvSwap : t.addTvSwap}</h2>
@@ -4210,6 +4348,10 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
   const [items, setItems] = useState(requests);
   const [draft, setDraft] = useState(null);   // null = list view, otherwise the handover being added/edited
   const [err, setErr] = useState('');
+
+  // Escape from the handover being edited goes back to the list, which is what
+  // the overlay click and the close button do from the same place.
+  const panelRef = useDialog({onClose: () => draft ? cancelEdit() : onCancel()});
 
   // A "YYYY-MM-DDTHH:MM" value in the browser's own timezone, matching the
   // format the datetime-local inputs and the API use.
@@ -4309,7 +4451,7 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
 
   return (
     <div className="modal-overlay picker-overlay" onClick={e=>e.target===e.currentTarget&&(draft?cancelEdit():onCancel())}>
-      <div className="modal picker-modal" role="dialog" aria-modal="true" aria-label={t.thirdPartyTitle}>
+      <div className="modal picker-modal" ref={panelRef} role="dialog" aria-modal="true" aria-label={t.thirdPartyTitle}>
         <div className="modal-header">
           <div>
             <h2>{t.thirdPartyTitle}</h2>
@@ -4321,8 +4463,12 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
           {draft ? (
             <>
               <div className="form-group">
-                <label>{t.company}</label>
-                <div className="tp-company">
+                {/* A heading, not a label: this caption names a pair of buttons and neither of
+                    them is the control for it, so a <label for> would point at
+                    something that does not exist. The group role is what carries
+                    the relationship to assistive technology instead. */}
+                <div className="form-group-h" id="tp-company-h">{t.company}</div>
+                <div className="tp-company" role="group" aria-labelledby="tp-company-h">
                   <button type="button" className={`tp-company-opt ${draft.company==='telnet'?'active':''}`}
                     aria-pressed={draft.company==='telnet'} onClick={()=>setCompany('telnet')}>
                     <span className="tp-company-dot telnet"/>{t.companyTelnet}
@@ -4337,27 +4483,27 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
               {draft.company==='telnet' ? (
                 <div className="form-row">
                   <div className="form-group">
-                    <label>{t.telnetTechnician}</label>
-                    <input className="form-control" placeholder={t.telnetTechPlaceholder} value={draft.technician}
+                    <label htmlFor="tp-technician">{t.telnetTechnician}</label>
+                    <input id="tp-technician" className="form-control" placeholder={t.telnetTechPlaceholder} value={draft.technician}
                       onChange={e=>patch('technician', e.target.value)}/>
                   </div>
                   <div className="form-group">
-                    <label>{t.telnetConfirmedBy}</label>
-                    <input className="form-control" placeholder={t.telnetConfirmPlaceholder} value={draft.confirmedBy}
+                    <label htmlFor="tp-confirmed-by">{t.telnetConfirmedBy}</label>
+                    <input id="tp-confirmed-by" className="form-control" placeholder={t.telnetConfirmPlaceholder} value={draft.confirmedBy}
                       onChange={e=>patch('confirmedBy', e.target.value)}/>
                   </div>
                 </div>
               ) : (
                 <div className="form-group">
-                  <label>{t.telefonicaTicket}</label>
-                  <input className="form-control" placeholder={t.ticketIdPlaceholder} value={draft.ticketId}
+                  <label htmlFor="tp-ticket">{t.telefonicaTicket}</label>
+                  <input id="tp-ticket" className="form-control" placeholder={t.ticketIdPlaceholder} value={draft.ticketId}
                     onChange={e=>patch('ticketId', e.target.value)}/>
                 </div>
               )}
 
               <div className="form-group">
-                <label>{t.supportStatus}</label>
-                <select className="form-control" value={draft.status} onChange={e=>patch('status', e.target.value)}>
+                <label htmlFor="tp-status">{t.supportStatus}</label>
+                <select id="tp-status" className="form-control" value={draft.status} onChange={e=>patch('status', e.target.value)}>
                   <option value="pending">{t.supportPending}</option>
                   <option value="solved">{t.supportSolved}</option>
                 </select>
@@ -4368,13 +4514,13 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
                   days rather than a shift length. */}
               <div className="form-row">
                 <div className="form-group">
-                  <label>{t.supportReportedAt}</label>
-                  <input type="datetime-local" className="form-control" value={draft.startedAt}
+                  <label htmlFor="tp-reported-at">{t.supportReportedAt}</label>
+                  <input id="tp-reported-at" type="datetime-local" className="form-control" value={draft.startedAt}
                     onChange={e=>patch('startedAt', e.target.value)}/>
                 </div>
                 <div className="form-group">
-                  <label>{t.supportResolvedAt}</label>
-                  <input type="datetime-local" className="form-control" value={draft.resolvedAt}
+                  <label htmlFor="tp-resolved-at">{t.supportResolvedAt}</label>
+                  <input id="tp-resolved-at" type="datetime-local" className="form-control" value={draft.resolvedAt}
                     onChange={e=>patch('resolvedAt', e.target.value)}/>
                 </div>
               </div>
@@ -4388,8 +4534,8 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
               )}
 
               <div className="form-group">
-                <label>{t.supportNotes}</label>
-                <input className="form-control" placeholder={t.supportNotesPlaceholder} value={draft.notes}
+                <label htmlFor="tp-notes">{t.supportNotes}</label>
+                <input id="tp-notes" className="form-control" placeholder={t.supportNotesPlaceholder} value={draft.notes}
                   onChange={e=>patch('notes', e.target.value)}/>
               </div>
 
@@ -4458,15 +4604,13 @@ function ConfirmDeleteIssue({ issue, onCancel, onConfirm, deleting }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
 
-  useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape' && !deleting) onCancel(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel, deleting]);
+  // Escape does nothing mid-delete: the request is already out and abandoning the
+  // dialog would leave it with nowhere to report to.
+  const panelRef = useDialog({onClose: deleting ? null : onCancel});
 
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && !deleting && onCancel()}>
-      <div className="modal confirm-modal" role="dialog" aria-modal="true" aria-label={t.deleteIssueTitle}>
+      <div className="modal confirm-modal" ref={panelRef} role="dialog" aria-modal="true" aria-label={t.deleteIssueTitle}>
         <div className="modal-header">
           <h2>{t.deleteIssueTitle}</h2>
           <button type="button" className="icon-btn" onClick={onCancel} disabled={deleting}>{Ic.x}</button>
@@ -4589,12 +4733,22 @@ function RoomPicker({ value, onChange, token, t, id }) {
   useEffect(() => {
     if (!open) return;
     const away = e => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
-    const esc   = e => { if (e.key === 'Escape') setOpen(false); };
+    // Capture phase, and it claims the event. This panel is inside a dialog, and
+    // that dialog closes on Escape too: Escape should dismiss the dropdown and
+    // leave the form it belongs to open. Registration order cannot be relied on
+    // for this -- the panel is mounted with the form but its listener is attached
+    // whenever `open` flips, which may be before or after the dialog's -- whereas
+    // capture reliably runs ahead of a bubble-phase listener on document.
+    const esc = e => {
+      if (e.key !== 'Escape') return;
+      e.claimedByDialog = true;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', away);
-    document.addEventListener('keydown', esc);
+    document.addEventListener('keydown', esc, true);
     return () => {
       document.removeEventListener('mousedown', away);
-      document.removeEventListener('keydown', esc);
+      document.removeEventListener('keydown', esc, true);
     };
   }, [open]);
 
@@ -4621,6 +4775,14 @@ function RoomPicker({ value, onChange, token, t, id }) {
 
   const typed   = query.trim();
   const chosen  = value || '';
+  // Where the arrow keys currently are, as an id the combobox can point at. The
+  // `.active` class already moves with the cursor, so a sighted reader knows;
+  // a screen reader has only the DOM, and with nothing here it says nothing at
+  // all while arrowing. Derived from the room rather than from the cursor index,
+  // so the id belongs to that option for as long as it is on screen and the
+  // attribute is not rewritten as the list re-renders under it.
+  const optionId = room => `${listId}-${room}`;
+  const activeId = (open && matches[cursor] !== undefined) ? optionId(matches[cursor]) : undefined;
   // Red only once there is text that is not the chosen room. Empty is neutral --
   // an empty required field is not an error until it has been filled in wrongly.
   const unmatched = typed !== '' && typed !== chosen;
@@ -4629,6 +4791,7 @@ function RoomPicker({ value, onChange, token, t, id }) {
     <div className={`room-picker${unmatched ? ' unmatched' : ''}`} ref={wrapRef}>
       <input id={id} className="form-control" autoComplete="off" role="combobox"
         aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
+        aria-activedescendant={activeId}
         placeholder={t.aptRoomPlaceholder}
         value={query}
         onChange={e => {
@@ -4661,7 +4824,7 @@ function RoomPicker({ value, onChange, token, t, id }) {
             </div>
           )}
           {matches.map((room, i) => (
-            <button type="button" key={room} role="option"
+            <button type="button" key={room} role="option" id={optionId(room)}
               aria-selected={String(room) === chosen}
               className={`room-option${i === cursor ? ' active' : ''}${String(room) === chosen ? ' room-option-chosen' : ''}`}
               onMouseEnter={() => setCursor(i)}
@@ -4770,6 +4933,14 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
   const duration = useMemo(()=>computeDurationMinutes(form.startTime, form.endTime), [form.startTime, form.endTime]);
   const timeRangeInvalid = form.startTime && form.endTime && duration === null;
 
+  // Focus lands on the first field, which is the one that decides what this form
+  // is for: the room, or the department. Not the close button, which is what the
+  // first tab stop would otherwise be.
+  const panelRef = useDialog({
+    onClose,
+    initialFocus: issueMode==='apt' ? '#apt-room' : '#issue-dept',
+  });
+
   // A Pending issue has not been fixed yet, so the two fields that say the work
   // is done are taken away: the resolution is not the technician's to write, and
   // there is no end time for a job that has not ended. Switching back to Ok
@@ -4811,16 +4982,18 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
   return (
     <>
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="modal">
+      {/* aria-labelledby rather than aria-label because the title is already in
+          the DOM and reads better with its own wording than a copy of it. */}
+      <div className="modal" ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="issue-modal-title">
         <div className="modal-header">
-          <h2>{isEdit ? t.editIssue : (issueMode==='apt' ? t.logAptIssue : t.logDeptIssue)}</h2>
+          <h2 id="issue-modal-title">{isEdit ? t.editIssue : (issueMode==='apt' ? t.logAptIssue : t.logDeptIssue)}</h2>
           <button className="icon-btn" onClick={onClose}>{Ic.x}</button>
         </div>
         <div className="modal-body">
           <div className="form-row">
             {issueMode==='apt' ? (
               <div className="form-group">
-                <label>{t.aptNum}</label>
+                <label htmlFor="apt-room">{t.aptNum}</label>
                 {/* A room must be picked from the inventory, not typed. RoomPicker
                     only calls set('apt', ...) with a room the server confirmed
                     exists, so form.apt is never a string nobody chose. */}
@@ -4829,16 +5002,16 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
               </div>
             ) : (
               <div className="form-group">
-                <label>{t.department}</label>
-                <select className="form-control" value={form.dept} onChange={e=>set('dept',e.target.value)}>
+                <label htmlFor="issue-dept">{t.department}</label>
+                <select id="issue-dept" className="form-control" value={form.dept} onChange={e=>set('dept',e.target.value)}>
                   <option value="">{t.selectDept}</option>
                   {deptNames.map(d=><option key={d}>{d}</option>)}
                 </select>
               </div>
             )}
             <div className="form-group">
-              <label>{t.issueType}</label>
-              <select className="form-control" value={form.type} onChange={e=>set('type',e.target.value)}>
+              <label htmlFor="issue-type">{t.issueType}</label>
+              <select id="issue-type" className="form-control" value={form.type} onChange={e=>set('type',e.target.value)}>
                 {typeNames.length === 0 && <option value="">{t.selectDept}</option>}
                 {typeNames.map(t2=><option key={t2}>{t2}</option>)}
               </select>
@@ -4854,35 +5027,35 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
             </div>
           )}
           <div className="form-group">
-            <label>{t.problemDesc}</label>
-            <input className="form-control" placeholder={t.descPlaceholder} value={form.problem} onChange={e=>set('problem',e.target.value)} />
+            <label htmlFor="issue-problem">{t.problemDesc}</label>
+            <input id="issue-problem" className="form-control" placeholder={t.descPlaceholder} value={form.problem} onChange={e=>set('problem',e.target.value)} />
           </div>
           <div className="form-group">
-            <label>{t.resolutionLabel}</label>
-            <input className="form-control" placeholder={t.resolutionPlaceholder}
+            <label htmlFor="issue-resolution">{t.resolutionLabel}</label>
+            <input id="issue-resolution" className="form-control" placeholder={t.resolutionPlaceholder}
               disabled={isPending} title={isPending ? t.stillWaiting : undefined}
               value={resolution} onChange={e=>set('resolution',e.target.value)} />
           </div>
           <div className="form-row">
             <div className="form-group">
-              <label>{t.startTime}</label>
-              <input className="form-control" type="time" lang="sv-SE" value={form.startTime} onChange={e=>set('startTime',e.target.value)} />
+              <label htmlFor="issue-start">{t.startTime}</label>
+              <input id="issue-start" className="form-control" type="time" lang="sv-SE" value={form.startTime} onChange={e=>set('startTime',e.target.value)} />
             </div>
             <div className="form-group">
-              <label>{t.endTime}</label>
-              <input className="form-control" type="time" lang="sv-SE" disabled={isPending}
+              <label htmlFor="issue-end">{t.endTime}</label>
+              <input id="issue-end" className="form-control" type="time" lang="sv-SE" disabled={isPending}
                 value={form.endTime} onChange={e=>set('endTime',e.target.value)} />
             </div>
           </div>
           <div className="form-group">
-            <label>{t.statusLabel}</label>
-            <select className="form-control" value={form.status} onChange={e=>setStatus(e.target.value)}>
+            <label htmlFor="issue-status">{t.statusLabel}</label>
+            <select id="issue-status" className="form-control" value={form.status} onChange={e=>setStatus(e.target.value)}>
               <option value="Ok">{t.statusOk}</option>
               <option value="Pending">{t.statusPending}</option>
             </select>
           </div>
           <label className={`fp-check ${form.falsePositive ? 'checked' : ''}`}>
-            <input type="checkbox" checked={form.falsePositive} onChange={e=>set('falsePositive', e.target.checked)}/>
+            <input id="issue-false-positive" type="checkbox" checked={form.falsePositive} onChange={e=>set('falsePositive', e.target.checked)}/>
             <span className="fp-box">{Ic.check}</span>
             <span>
               <span className="fp-title">{t.falsePositiveLabel}</span>
@@ -4890,8 +5063,12 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
             </span>
           </label>
           <div className="form-group">
-            <label>{t.consumablesLabel}</label>
-            <div className={`consumable-box ${selectedConsumables.length ? 'has-items' : ''}`}>
+            {/* A caption, not a label. What is below is a row of chips and one button,
+                so there is no single control for a <label for> to name -- the
+                group role carries the relationship instead. */}
+            <div className="form-group-h" id="issue-consumables-h">{t.consumablesLabel}</div>
+            <div className={`consumable-box ${selectedConsumables.length ? 'has-items' : ''}`}
+                 role="group" aria-labelledby="issue-consumables-h">
               {selectedConsumables.map(c=>(
                 <span className="consumable-chip" key={c.itemId}>
                   <ConsumableIcon name={c.icon} size={22}/>
@@ -4908,15 +5085,15 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
           </div>
           <div className="form-row">
             <div className="form-group">
-              <label>{t.reportedByAgent}</label>
-              <select className="form-control" value={form.reportedByAgent} onChange={e=>set('reportedByAgent',e.target.value)}>
+              <label htmlFor="issue-agent-reported">{t.reportedByAgent}</label>
+              <select id="issue-agent-reported" className="form-control" value={form.reportedByAgent} onChange={e=>set('reportedByAgent',e.target.value)}>
                 <option value="">{t.noAgentSelected}</option>
                 {agentNames.map(a=><option key={a}>{a}</option>)}
               </select>
             </div>
             <div className="form-group">
-              <label>{t.confirmedByAgent}</label>
-              <select className="form-control" value={form.confirmedByAgent} onChange={e=>set('confirmedByAgent',e.target.value)}>
+              <label htmlFor="issue-agent-confirmed">{t.confirmedByAgent}</label>
+              <select id="issue-agent-confirmed" className="form-control" value={form.confirmedByAgent} onChange={e=>set('confirmedByAgent',e.target.value)}>
                 <option value="">{t.noAgentSelected}</option>
                 {agentNames.map(a=><option key={a}>{a}</option>)}
               </select>
@@ -4927,8 +5104,9 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
               have to take a TV from another room?" gets asked at all. */}
           {showSwapBox && (
             <div className="form-group">
-              <label>{t.tvSwapLabel}</label>
-              <div className={`tp-box ${form.tvSwaps.length ? 'has-items' : ''}`}>
+              <div className="form-group-h" id="issue-swaps-h">{t.tvSwapLabel}</div>
+              <div className={`tp-box ${form.tvSwaps.length ? 'has-items' : ''}`}
+                   role="group" aria-labelledby="issue-swaps-h">
                 {form.tvSwaps.map(s=>(
                   <span className="tp-chip tp-chip-swap" key={s.key}>
                     <span style={{display:'flex',alignItems:'center'}}>{Ic.tv}</span>
@@ -4953,8 +5131,9 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
             </div>
           )}
           <div className="form-group">
-            <label>{t.thirdPartyLabel}</label>
-            <div className={`tp-box ${form.supportRequests.length ? 'has-items' : ''}`}>
+            <div className="form-group-h" id="issue-thirdparty-h">{t.thirdPartyLabel}</div>
+            <div className={`tp-box ${form.supportRequests.length ? 'has-items' : ''}`}
+                 role="group" aria-labelledby="issue-thirdparty-h">
               {form.supportRequests.map(s=>(
                 <span className={`tp-chip tp-chip-${s.company}`} key={s.key}>
                   <span className="tp-chip-company">{s.company==='telnet' ? t.companyTelnet : t.companyTelefonica}</span>
@@ -5120,7 +5299,17 @@ function IssueTime({ minutes, sla, t }) {
   );
 }
 
-function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUser, newIssueId, slaMinutes, onDelete, onEdit }) {
+/* `onFailure` / `peerError` / `isPrimary` exist only for the History page, which
+   stacks two of these. They share one endpoint, so a dead /issues fails both at
+   once and printed the same red banner twice. The parent collects both failures
+   through onFailure and passes each table the other's, so the first table to fail
+   draws the banner and the second stays quiet -- and a table that fails alone
+   still draws its own, rather than being silenced by a peer it is not failing
+   with. `isPrimary` is what breaks the tie when both have failed.
+
+   `retrySignal` is the matching half: the parent increments it so one Try again
+   re-asks for both tables rather than only the one it was clicked in. */
+function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUser, newIssueId, slaMinutes, onDelete, onEdit, onFailure, peerError, isPrimary, retrySignal=0, onRetryAll }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   // `null` means "no type filter", rather than the translated word for "All".
@@ -5157,9 +5346,17 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
     if (query) qs.set('search', query);
     if (date) qs.set('date', date);
     return `/issues?${qs}`;
-  }, token, {rowsKey:'issues', map:mapIssue, filterKey: `${tableMode}|${filter}|${query}|${date}|${epoch}|${retry}`});
+  }, token, {rowsKey:'issues', map:mapIssue, filterKey: `${tableMode}|${filter}|${query}|${date}|${epoch}|${retry}|${retrySignal}`});
 
   const issues = list.rows || [];
+
+  // Reported up to the History page. A ref-and-callback rather than a dependency
+  // so a parent passing an inline arrow does not restart the fetch.
+  const onFailureRef = useRef(onFailure);
+  onFailureRef.current = onFailure;
+  useEffect(() => {
+    if (onFailureRef.current) onFailureRef.current(tableMode, list.error || null);
+  }, [tableMode, list.error]);
   // The chips come from the type catalog rather than from the rows on screen: with
   // only the loaded page in hand, a type whose issues are all further down would
   // have no chip at all, and picking it was impossible.
@@ -5186,7 +5383,8 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
           </div>
           <div className="search-wrap">
             {Ic.search}
-            <input placeholder={tableMode==='apt' ? t.searchApt : t.searchDept} value={search} onChange={e=>setSearch(e.target.value)}/>
+            <input aria-label={tableMode==='apt' ? t.searchApt : t.searchDept}
+              placeholder={tableMode==='apt' ? t.searchApt : t.searchDept} value={search} onChange={e=>setSearch(e.target.value)}/>
           </div>
         </div>
       </div>
@@ -5194,10 +5392,14 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
           leaves rows null -- asking for rows alone meant a dead endpoint rendered
           "Loading analytics…" here for as long as the page was open. */}
       {list.error ? (
+        /* Kept quiet when this table's peer has failed too and it is not the one
+           that owns the banner -- same failure, same message, same retry, printed
+           twice on one screen. */
+        (peerError && !isPrimary) ? null :
         <div style={{background:'var(--red-light)',color:'var(--red)',borderRadius:'var(--radius-md)',padding:'10px 16px',fontSize:13,marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
           <span style={{flex:1}}>{list.error}</span>
           <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
-            onClick={()=>setRetry(n => n + 1)}>{t.tryAgain}</button>
+            onClick={() => { setRetry(n => n + 1); if (onRetryAll) onRetryAll(); }}>{t.tryAgain}</button>
         </div>
       ) : !list.rows ? (
         <div className="empty-state">{Ic.list}<p>{t.analyticsLoading}</p></div>
@@ -5271,13 +5473,25 @@ function HistoryPage({ token, issueTypes, epoch=0, currentUser, slaMinutes, onDe
   const t = T[lang];
   const todayStr = localISODate(new Date());
   const [date, setDate] = useState('');
+  /* Both tables below ask the same endpoint, so when /issues is unreachable they
+     both fail at once and each printed its own red banner with the same text.
+     Which of them failed is tracked here instead, and only one banner is drawn:
+     the apt table's, because it is the one that comes first on the page. The
+     retry counter is shared for the same reason -- one Try again re-asks both
+     questions, rather than fixing whichever table the button happened to be in
+     and leaving the other showing the stale failure. */
+  const [failures, setFailures] = useState({});
+  const [retrySignal, setRetrySignal] = useState(0);
+  const noteFailure = useCallback((mode, error) => {
+    setFailures(prev => prev[mode] === error ? prev : {...prev, [mode]: error});
+  }, []);
 
   return (
     <div>
       <div className="table-card" style={{marginBottom:16,padding:'14px 20px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
-        <label style={{fontSize:13,fontWeight:600,color:'var(--gray-600)'}}>{t.historyPickDate}</label>
+        <label htmlFor="history-date" style={{fontSize:13,fontWeight:600,color:'var(--gray-600)'}}>{t.historyPickDate}</label>
         <input
-          type="date" className="form-control" style={{width:'auto'}}
+          id="history-date" type="date" className="form-control" style={{width:'auto'}}
           value={date} max={todayStr}
           onChange={e=>setDate(e.target.value)}
         />
@@ -5299,8 +5513,10 @@ function HistoryPage({ token, issueTypes, epoch=0, currentUser, slaMinutes, onDe
           which is why this page needed every issue in memory to show one day of
           them. Each table now paginates on its own, so the two can be showing
           different amounts. */}
-      <IssuesTable token={token} issueTypes={issueTypes} tableMode="apt"  date={date} epoch={epoch} currentUser={currentUser} slaMinutes={slaMinutes} onDelete={onDelete} onEdit={onEdit}/>
-      <IssuesTable token={token} issueTypes={issueTypes} tableMode="dept" date={date} epoch={epoch} currentUser={currentUser} slaMinutes={slaMinutes} onDelete={onDelete} onEdit={onEdit}/>
+      <IssuesTable token={token} issueTypes={issueTypes} tableMode="apt"  date={date} epoch={epoch} currentUser={currentUser} slaMinutes={slaMinutes} onDelete={onDelete} onEdit={onEdit}
+        onFailure={noteFailure} peerError={failures.dept} isPrimary retrySignal={retrySignal} onRetryAll={()=>setRetrySignal(n => n + 1)}/>
+      <IssuesTable token={token} issueTypes={issueTypes} tableMode="dept" date={date} epoch={epoch} currentUser={currentUser} slaMinutes={slaMinutes} onDelete={onDelete} onEdit={onEdit}
+        onFailure={noteFailure} peerError={failures.apt} retrySignal={retrySignal} onRetryAll={()=>setRetrySignal(n => n + 1)}/>
     </div>
   );
 }
@@ -5525,8 +5741,8 @@ function AlertsPage({ currentUser, token, onCountsUpdate, setToast }) {
 
           {solvingTvId === alert.id && (
             <div style={{padding:'14px 20px',background:'var(--gray-50)',borderTop:'1px solid var(--gray-200)'}}>
-              <label style={{fontSize:11,fontWeight:600,color:'var(--gray-600)',textTransform:'uppercase',letterSpacing:'0.07em'}}>{t.tvSwapSolvedWhat}</label>
-              <textarea className="form-control" rows={2} style={{marginTop:6,marginBottom:10,resize:'vertical'}}
+              <label htmlFor="alert-tv-solution" style={{fontSize:11,fontWeight:600,color:'var(--gray-600)',textTransform:'uppercase',letterSpacing:'0.07em'}}>{t.tvSwapSolvedWhat}</label>
+              <textarea id="alert-tv-solution" className="form-control" rows={2} style={{marginTop:6,marginBottom:10,resize:'vertical'}}
                 value={solutionText} onChange={e=>setSolutionText(e.target.value)}
                 placeholder={t.tvSwapSolvedPlaceholder}/>
               <div style={{display:'flex',gap:8}}>
@@ -5599,8 +5815,8 @@ function AlertsPage({ currentUser, token, onCountsUpdate, setToast }) {
 
           {solvingId === alert.id && (
             <div style={{padding:'14px 20px',background:'var(--gray-50)',borderBottom:'1px solid var(--gray-200)'}}>
-              <label style={{fontSize:11,fontWeight:600,color:'var(--gray-600)',textTransform:'uppercase',letterSpacing:'0.07em'}}>{t.finalSolution}</label>
-              <textarea className="form-control" rows={2} style={{marginTop:6,marginBottom:10,resize:'vertical'}}
+              <label htmlFor="alert-solution" style={{fontSize:11,fontWeight:600,color:'var(--gray-600)',textTransform:'uppercase',letterSpacing:'0.07em'}}>{t.finalSolution}</label>
+              <textarea id="alert-solution" className="form-control" rows={2} style={{marginTop:6,marginBottom:10,resize:'vertical'}}
                 value={solutionText} onChange={e=>setSolutionText(e.target.value)}
                 placeholder={t.finalSolutionPlaceholder}/>
               <div style={{display:'flex',gap:8}}>
@@ -5889,6 +6105,9 @@ function TVSwapsPage({ token }) {
   const t = T[lang];
   const [range, setRange] = useState('all');
   const [query, setQuery] = useState('');
+  // Bumped by the retry button under a failed request, in the same way the issue
+  // tables do it. The range alone is not enough to re-run a fetch that failed.
+  const [retry, setRetry] = useState(0);
 
   /* The swap list pages from the server. The search box below still narrows what
      has been loaded rather than going to the server, which is a deliberate
@@ -5906,10 +6125,14 @@ function TVSwapsPage({ token }) {
       params.set('to', localISODate(new Date()));
     }
     return `/tv-swaps?${params}`;
-  }, token, {rowsKey:'swaps', filterKey: range});
+  }, token, {rowsKey:'swaps', filterKey: `${range}|${retry}`});
 
   const swaps = paged.rows || [];
-  const loading = paged.loading && !paged.rows;
+  // Gated on the error as well as the rows: a failed request also leaves rows
+  // null, so asking only for rows drew "no swaps recorded" for a request that
+  // had already come back broken -- a page reporting an absence it never asked
+  // about. Same reasoning as the LCU list and the issue table.
+  const loading = paged.loading && !paged.rows && !paged.error;
 
   const q = query.trim().toLowerCase();
   const shown = q
@@ -5982,12 +6205,20 @@ function TVSwapsPage({ token }) {
         <div className="table-card" style={{marginBottom:18}}>
           <div className="search-wrap" style={{padding:'14px 20px 0'}}>
             {Ic.search}
-            <input placeholder={t.tvSwapsSearch} value={query} onChange={e=>setQuery(e.target.value)}/>
+            <input aria-label={t.tvSwapsSearch} placeholder={t.tvSwapsSearch} value={query} onChange={e=>setQuery(e.target.value)}/>
           </div>
         </div>
       )}
 
-      {loading ? (
+      {paged.error ? (
+        <div className="table-card">
+          <div style={{background:'var(--red-light)',color:'var(--red)',borderRadius:'var(--radius-md)',padding:'10px 16px',fontSize:13,margin:'14px 20px',display:'flex',alignItems:'center',gap:10}}>
+            <span style={{flex:1}}>{paged.error}</span>
+            <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
+              onClick={()=>setRetry(n => n + 1)}>{t.tryAgain}</button>
+          </div>
+        </div>
+      ) : loading ? (
         <div className="empty-state"><p>{t.analyticsLoading}</p></div>
       ) : shown.length === 0 ? (
         <div className="empty-state">{Ic.tv}<p>{q ? t.tvSwapsNoMatch : t.tvSwapsEmpty}</p></div>
@@ -6254,6 +6485,9 @@ function StockAdjustDialog({ item, onCancel, onSave, saving, t }) {
   const [value, setValue] = useState('');
   const [note, setNote] = useState('');
 
+  // Escape closes, but not while a save is in flight: the dialog owns the
+  // message that will say whether it worked, so it cannot be dismissed first.
+  const panelRef = useDialog({onClose: saving ? null : onCancel});
   const n = Number(value);
   const valid = value !== '' && Number.isFinite(n) && (mode === 'set' ? n >= 0 : n > 0);
   const result = !valid ? null : mode === 'set' ? n : mode === 'add' ? item.stock + n : item.stock - n;
@@ -6271,7 +6505,7 @@ function StockAdjustDialog({ item, onCancel, onSave, saving, t }) {
 
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && !saving && onCancel()}>
-      <div className="modal" style={{maxWidth:420}} role="dialog" aria-modal="true" aria-label={t.adjustStock}>
+      <div className="modal" style={{maxWidth:420}} ref={panelRef} role="dialog" aria-modal="true" aria-label={t.adjustStock}>
         <div className="modal-header">
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <ConsumableIcon name={item.icon} size={30}/>
@@ -6284,23 +6518,26 @@ function StockAdjustDialog({ item, onCancel, onSave, saving, t }) {
         </div>
         <div className="modal-body">
           <div className="form-group">
-            <label>{t.stockHow}</label>
-            <div className="filter-chips" style={{marginTop:2}}>
+            {/* A caption for the three mode buttons, not a label: there is no one control
+                behind it. The group role is what names it. */}
+            <div className="form-group-h" id="stock-mode-h">{t.stockHow}</div>
+            <div className="filter-chips" style={{marginTop:2}} role="group" aria-labelledby="stock-mode-h">
               {['add','remove','set'].map(m=>(
-                <button key={m} className={`chip ${mode===m?'active':''}`} onClick={()=>{setMode(m);setValue('');}}>
+                <button key={m} className={`chip ${mode===m?'active':''}`} aria-pressed={mode===m}
+                  onClick={()=>{setMode(m);setValue('');}}>
                   {t['stockMode_'+m]}
                 </button>
               ))}
             </div>
           </div>
           <div className="form-group">
-            <label>{mode === 'set' ? t.stockCountedAs : t.stockHowMany}</label>
-            <input className="form-control" type="number" inputMode="numeric" value={value} autoFocus
+            <label htmlFor="stock-qty">{mode === 'set' ? t.stockCountedAs : t.stockHowMany}</label>
+            <input id="stock-qty" className="form-control" type="number" inputMode="numeric" value={value} autoFocus
               onChange={e=>setValue(e.target.value)} onKeyDown={e=>e.key==='Enter' && submit()}/>
           </div>
           <div className="form-group">
-            <label>{t.stockNote}</label>
-            <input className="form-control" placeholder={t.stockNotePlaceholder} value={note} maxLength={200}
+            <label htmlFor="stock-note">{t.stockNote}</label>
+            <input id="stock-note" className="form-control" placeholder={t.stockNotePlaceholder} value={note} maxLength={200}
               onChange={e=>setNote(e.target.value)} onKeyDown={e=>e.key==='Enter' && submit()}/>
           </div>
           {error && <div style={{fontSize:12.5,color:'var(--amber)'}}>{error}</div>}
@@ -6390,6 +6627,9 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
   const t = T[lang];
   const todayStr = localISODate(new Date());
   const [view, setView] = useState('log');
+  // Bumped by the retry button under a failed usage request, as on the issue
+  // tables. The date alone cannot re-run a fetch that already failed.
+  const [retry, setRetry] = useState(0);
 
   // ── Log view ──
   const [date, setDate] = useState('');
@@ -6401,11 +6641,14 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
     const qs = new URLSearchParams({limit: String(limit)});
     if (date) qs.set('date', date);
     return `/consumables?${qs}`;
-  }, token, {rowsKey:'consumables', filterKey: `${date}|${view === 'log' ? 'log' : 'other'}`});
+  }, token, {rowsKey:'consumables', filterKey: `${date}|${view === 'log' ? 'log' : 'other'}|${retry}`});
 
   const items   = usage.rows || [];
   const summary = (usage.res && usage.res.summary) || [];
-  const loading = usage.loading && !usage.rows;
+  // Gated on the error too. rows is null after a failure as well as while a
+  // request is in flight, so the loading branch alone claimed an empty log for
+  // an endpoint that had just answered with an error.
+  const loading = usage.loading && !usage.rows && !usage.error;
   // Inventory state. The catalog is fetched here as well as from the issue
   // form, because this page is where stock is corrected and explained.
   const [catalog, setCatalog] = useState([]);
@@ -6656,6 +6899,7 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
                     <td>
                       {canManage ? (
                         <input className="form-control" type="number" min="0" defaultValue={ci.reorder_level}
+                          aria-label={`${ci.name} — ${t.reorderLevel}`}
                           style={{width:80,padding:'5px 8px'}}
                           // Saved when the field is left, and on Enter so the
                           // value is not silently lost by someone who types it
@@ -6730,6 +6974,7 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
           <div className="table-card" style={{marginBottom:16,padding:'14px 20px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
             <p style={{fontSize:13,color:'var(--gray-400)',margin:0,flex:1,minWidth:200}}>{t.consumablesSubtitle}</p>
             <input type="date" className="form-control" style={{width:'auto'}} value={date} max={todayStr}
+              aria-label={t.historyPickDate}
               onChange={e=>setDate(e.target.value)} />
             <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate(todayStr)}>{t.historyToday}</button>
             <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate('')}>{t.historyAllDates}</button>
@@ -6749,7 +6994,15 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
             </div>
           )}
 
-          {loading ? (
+          {usage.error ? (
+            <div className="table-card">
+              <div style={{background:'var(--red-light)',color:'var(--red)',borderRadius:'var(--radius-md)',padding:'10px 16px',fontSize:13,margin:'14px 20px',display:'flex',alignItems:'center',gap:10}}>
+                <span style={{flex:1}}>{usage.error}</span>
+                <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
+                  onClick={()=>setRetry(n => n + 1)}>{t.tryAgain}</button>
+              </div>
+            </div>
+          ) : loading ? (
             <div className="empty-state"><p>{t.analyticsLoading}</p></div>
           ) : items.length === 0 ? (
             <div className="empty-state">{Ic.box}<p>{date ? t.consumablesEmpty : t.consumablesEmptyAll}</p></div>
@@ -6943,9 +7196,11 @@ function ResetCodeDialog({ code, userName, expiresIn, onDone, t }) {
 
   const minutes = Math.max(1, Math.round((expiresIn || 3600) / 60));
 
+  const panelRef = useDialog({onClose: onDone});
+
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && onDone()}>
-      <div className="modal" style={{maxWidth:430}} role="dialog" aria-modal="true"
+      <div className="modal" style={{maxWidth:430}} ref={panelRef} role="dialog" aria-modal="true"
         aria-label={t.resetCodeTitle.replace('{name}', userName)}>
         <div className="modal-header">
           <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -7472,13 +7727,13 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
       {adding && (
         <form onSubmit={add} className="admin-form" style={{marginBottom:20}}>
           <div className="form-group">
-            <label>{t.lcuSerial}</label>
-            <input className="form-control" value={serial} maxLength={64} required autoFocus
+            <label htmlFor="lcu-serial">{t.lcuSerial}</label>
+            <input id="lcu-serial" className="form-control" value={serial} maxLength={64} required autoFocus
               placeholder={t.lcuSerialPlaceholder} onChange={e=>setSerial(e.target.value)}/>
           </div>
           <div className="form-group">
-            <label>{t.lcuNote}</label>
-            <input className="form-control" value={note} maxLength={200}
+            <label htmlFor="lcu-note">{t.lcuNote}</label>
+            <input id="lcu-note" className="form-control" value={note} maxLength={200}
               placeholder={t.lcuNotePlaceholder} onChange={e=>setNote(e.target.value)}/>
           </div>
           <div style={{display:'flex',gap:8}}>
@@ -7530,6 +7785,13 @@ function LCUPrompt({ units, token, onDone, onLogout }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
+  // No Escape here, unlike every other dialog: this one has no close button on
+  // purpose, because the only ways out are answering or signing out and a
+  // keyboard user should not get a third. Focus is still moved in and still
+  // trapped, which is the part that is about the page behind rather than about
+  // dismissing this.
+  const panelRef = useDialog({preventClose: true});
+
   const complete = units.every(u => answers[u.id]);
 
   async function submit() {
@@ -7547,7 +7809,7 @@ function LCUPrompt({ units, token, onDone, onLogout }) {
 
   return (
     <div className="modal-overlay" style={{zIndex:200}}>
-      <div className="modal" style={{maxWidth:480}} role="dialog" aria-modal="true" aria-label={t.lcuGateTitle}>
+      <div className="modal" style={{maxWidth:480}} ref={panelRef} role="dialog" aria-modal="true" aria-label={t.lcuGateTitle}>
         <div className="modal-header">
           <h2>{t.lcuGateTitle}</h2>
         </div>
@@ -8113,6 +8375,10 @@ function MaintenanceCheckDialog({ schedule, t, today, onCancel, onSave }) {
   const [raiseIssue, setRaiseIssue] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // Escape is left live while saving: there is nothing to lose here, the note
+  // and the outcome are re-entered from the card rather than recovered.
+  const panelRef = useDialog({onClose});
+
   async function save() {
     if (saving) return;
     setSaving(true);
@@ -8125,7 +8391,7 @@ function MaintenanceCheckDialog({ schedule, t, today, onCancel, onSave }) {
 
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && onCancel()}>
-      <div className="modal" style={{maxWidth:460}} role="dialog" aria-modal="true"
+      <div className="modal" style={{maxWidth:460}} ref={panelRef} role="dialog" aria-modal="true"
         aria-label={t.maintenanceCompleteTitle}>
         <div className="modal-header">
           <div>
@@ -8138,27 +8404,30 @@ function MaintenanceCheckDialog({ schedule, t, today, onCancel, onSave }) {
         </div>
         <div className="modal-body" style={{display:'grid',gap:14}}>
           <div>
-            <label style={{fontSize:12.5,fontWeight:600,color:'var(--gray-600)'}}>{t.maintenanceOutcome}</label>
-            <div style={{display:'flex',gap:8,marginTop:6}}>
-              <button className={`chip ${outcome==='ok' ? 'active' : ''}`} onClick={()=>setOutcome('ok')}>
+            {/* A caption for the two outcome buttons. */}
+            <div className="form-group-h" id="maint-outcome-h" style={{fontSize:12.5}}>{t.maintenanceOutcome}</div>
+            <div style={{display:'flex',gap:8,marginTop:6}} role="group" aria-labelledby="maint-outcome-h">
+              <button className={`chip ${outcome==='ok' ? 'active' : ''}`} aria-pressed={outcome==='ok'}
+                onClick={()=>setOutcome('ok')}>
                 {Ic.check} {t.maintenanceOutcomeOk}
               </button>
-              <button className={`chip ${outcome==='fault' ? 'active' : ''}`} onClick={()=>setOutcome('fault')}>
+              <button className={`chip ${outcome==='fault' ? 'active' : ''}`} aria-pressed={outcome==='fault'}
+                onClick={()=>setOutcome('fault')}>
                 {Ic.bell} {t.maintenanceOutcomeFault}
               </button>
             </div>
           </div>
 
           <div>
-            <label style={{fontSize:12.5,fontWeight:600,color:'var(--gray-600)'}}>{t.maintenanceNote}</label>
-            <textarea className="form-control" style={{marginTop:6,minHeight:70}} maxLength={500}
+            <label htmlFor="maint-note" style={{fontSize:12.5,fontWeight:600,color:'var(--gray-600)'}}>{t.maintenanceNote}</label>
+            <textarea id="maint-note" className="form-control" style={{marginTop:6,minHeight:70}} maxLength={500}
               value={note} onChange={e=>setNote(e.target.value)}
               placeholder={outcome === 'fault' ? t.maintenanceNoteFaultHint : t.maintenanceNoteOkHint}/>
           </div>
 
           {outcome === 'fault' && (
             <label style={{display:'flex',gap:9,alignItems:'flex-start',fontSize:13,cursor:'pointer'}}>
-              <input type="checkbox" checked={raiseIssue} onChange={e=>setRaiseIssue(e.target.checked)}
+              <input id="maint-raise-issue" type="checkbox" checked={raiseIssue} onChange={e=>setRaiseIssue(e.target.checked)}
                 style={{marginTop:2}}/>
               <span>
                 <strong style={{fontWeight:500}}>{t.maintenanceAlsoLogIssue}</strong>
@@ -8168,8 +8437,8 @@ function MaintenanceCheckDialog({ schedule, t, today, onCancel, onSave }) {
           )}
 
           <div>
-            <label style={{fontSize:12.5,fontWeight:600,color:'var(--gray-600)'}}>{t.maintenanceDoneOn}</label>
-            <input type="date" className="form-control" style={{marginTop:6,width:'auto'}} max={today}
+            <label htmlFor="maint-done-on" style={{fontSize:12.5,fontWeight:600,color:'var(--gray-600)'}}>{t.maintenanceDoneOn}</label>
+            <input id="maint-done-on" type="date" className="form-control" style={{marginTop:6,width:'auto'}} max={today}
               value={doneOn} onChange={e=>setDoneOn(e.target.value)}/>
             <div style={{fontSize:12,color:'var(--gray-400)',marginTop:3}}>{t.maintenanceDoneOnHint}</div>
           </div>
@@ -8205,6 +8474,8 @@ function MaintenanceScheduleDialog({ schedule, departments, staff, t, token, set
   const [assignee, setAssignee] = useState(schedule && schedule.assignee_id ? String(schedule.assignee_id) : '');
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const panelRef = useDialog({onClose: saving ? null : onDone});
 
   async function save() {
     if (saving) return;
@@ -8266,7 +8537,7 @@ function MaintenanceScheduleDialog({ schedule, departments, staff, t, token, set
 
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && onDone()}>
-      <div className="modal" style={{maxWidth:460}} role="dialog" aria-modal="true"
+      <div className="modal" style={{maxWidth:460}} ref={panelRef} role="dialog" aria-modal="true"
         aria-label={isNew ? t.maintenanceAddDevice : t.maintenanceEditDevice}>
         <div className="modal-header">
           <div style={{fontSize:15,fontWeight:600}}>
@@ -8276,15 +8547,15 @@ function MaintenanceScheduleDialog({ schedule, departments, staff, t, token, set
         </div>
         <div className="modal-body" style={{gap:16}}>
           <div className="form-group">
-            <label>{t.maintenanceDeviceName}</label>
-            <input className="form-control" maxLength={80} autoFocus
+            <label htmlFor="maint-name">{t.maintenanceDeviceName}</label>
+            <input id="maint-name" className="form-control" maxLength={80} autoFocus
               value={name} onChange={e=>setName(e.target.value)} placeholder={t.maintenanceDeviceNameHint}/>
             <div className="maint-hint">{t.maintenanceDeviceNameHint}</div>
           </div>
 
           <div className="form-group">
-            <label>{t.maintenanceEquipment}</label>
-            <div className="maint-choices">
+            <div className="form-group-h" id="maint-equipment-h">{t.maintenanceEquipment}</div>
+            <div className="maint-choices" role="group" aria-labelledby="maint-equipment-h">
               <button type="button" className={`maint-choice ${type==='printer' ? 'on' : ''}`}
                 aria-pressed={type==='printer'}
                 onClick={()=>pickType('printer')}>
@@ -8299,8 +8570,8 @@ function MaintenanceScheduleDialog({ schedule, departments, staff, t, token, set
           </div>
 
           <div className="form-group">
-            <label>{t.maintenanceDepartment}</label>
-            <select className="form-control" value={deptId}
+            <label htmlFor="maint-dept">{t.maintenanceDepartment}</label>
+            <select id="maint-dept" className="form-control" value={deptId}
               onChange={e=>setDeptId(e.target.value)}>
               {(departments || []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
@@ -8311,8 +8582,8 @@ function MaintenanceScheduleDialog({ schedule, departments, staff, t, token, set
               select -- so the same control twice reads as deliberate rather than
               as a fallback for the one field that happened to run out of room. */}
           <div className="form-group">
-            <label>{t.maintenanceInterval}</label>
-            <select className="form-control" value={custom ? 'custom' : String(interval)}
+            <label htmlFor="maint-interval">{t.maintenanceInterval}</label>
+            <select id="maint-interval" className="form-control" value={custom ? 'custom' : String(interval)}
               onChange={e=>{
                 if (e.target.value === 'custom') { setCustom(true); setDays(interval); }
                 else { setCustom(false); setInterval(Number(e.target.value)); }
@@ -8326,7 +8597,11 @@ function MaintenanceScheduleDialog({ schedule, departments, staff, t, token, set
             </select>
             {custom && (
               <>
-                <input type="number" className="form-control" min={7} max={730}
+                {/* Its own name, not the interval label above: that label belongs to the
+                    select, and one label cannot cover two controls. Same wording
+                    as the option that revealed this field. */}
+                <input id="maint-interval-days" type="number" className="form-control" min={7} max={730}
+                  aria-label={t.maintenanceIntervalCustom}
                   value={days} onChange={e=>setDays(e.target.value)}/>
                 <div className="maint-hint">
                   {t.maintenanceIntervalDays.replace('{days}', days || '—')}
@@ -8336,8 +8611,8 @@ function MaintenanceScheduleDialog({ schedule, departments, staff, t, token, set
           </div>
 
           <div className="form-group">
-            <label>{t.maintenanceAssignTo}</label>
-            <select className="form-control" value={assignee} onChange={e=>setAssignee(e.target.value)}>
+            <label htmlFor="maint-assignee">{t.maintenanceAssignTo}</label>
+            <select id="maint-assignee" className="form-control" value={assignee} onChange={e=>setAssignee(e.target.value)}>
               <option value="">{t.maintenanceAllTechnicians}</option>
               {(staff || []).map(u => (
                 <option key={u.id} value={u.id}>{u.name}</option>
@@ -8349,7 +8624,7 @@ function MaintenanceScheduleDialog({ schedule, departments, staff, t, token, set
           {!isNew && (
             <label style={{display:'flex',gap:9,alignItems:'flex-start',fontSize:13,cursor:'pointer',
               borderTop:'1px solid var(--gray-200)',paddingTop:16}}>
-              <input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)}
+              <input id="maint-active" type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)}
                 style={{marginTop:2}}/>
               <span>
                 <strong style={{fontWeight:500}}>{t.maintenanceInQueue}</strong>
@@ -8393,9 +8668,11 @@ function MaintenanceHistoryDialog({ schedule, token, t, onClose }) {
 
   const typeLabel = schedule.equipment_type === 'phone' ? t.maintenancePhone : t.maintenancePrinter;
 
+  const panelRef = useDialog({onClose});
+
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget && onClose()}>
-      <div className="modal" style={{maxWidth:520}} role="dialog" aria-modal="true"
+      <div className="modal" style={{maxWidth:520}} ref={panelRef} role="dialog" aria-modal="true"
         aria-label={t.maintenanceHistory}>
         <div className="modal-header">
           <div>
@@ -8541,6 +8818,7 @@ function ReportsPage({ token, slaMinutes }) {
           {Ic.calendar}
           <input
             type="date" value={date} onChange={e=>setDate(e.target.value)}
+            aria-label={t.historyPickDate}
             style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}
           />
         </div>
@@ -8844,12 +9122,12 @@ function ProfilePage({ currentUser, token, onSessionUpdate, setToast, lang, onLa
           <div style={{display:'flex',flexDirection:'column',gap:14}}>
             <div className="form-row">
               <div className="form-group">
-                <label>Full name</label>
-                <input className="form-control" value={name} onChange={e=>setName(e.target.value)}/>
+                <label htmlFor="profile-name">Full name</label>
+                <input id="profile-name" className="form-control" value={name} onChange={e=>setName(e.target.value)}/>
               </div>
               <div className="form-group">
-                <label>Email address</label>
-                <input className="form-control" type="email" value={email} onChange={e=>setEmail(e.target.value)}/>
+                <label htmlFor="profile-email">Email address</label>
+                <input id="profile-email" className="form-control" type="email" value={email} onChange={e=>setEmail(e.target.value)}/>
               </div>
             </div>
             <div style={{borderTop:'1px solid var(--gray-200)',paddingTop:14}}>
@@ -8857,12 +9135,12 @@ function ProfilePage({ currentUser, token, onSessionUpdate, setToast, lang, onLa
               {pwErr && <div style={{color:'var(--red)',fontSize:12,marginBottom:8}}>{pwErr}</div>}
               <div className="form-row">
                 <div className="form-group">
-                  <label>New password</label>
-                  <input className="form-control" type="password" placeholder="Min. 6 characters" value={pw} onChange={e=>{setPw(e.target.value);setPwErr('');}}/>
+                  <label htmlFor="profile-pw">New password</label>
+                  <input id="profile-pw" className="form-control" type="password" placeholder="Min. 6 characters" value={pw} onChange={e=>{setPw(e.target.value);setPwErr('');}}/>
                 </div>
                 <div className="form-group">
-                  <label>Confirm password</label>
-                  <input className="form-control" type="password" placeholder="Repeat new password" value={pwConf} onChange={e=>{setPwConf(e.target.value);setPwErr('');}}/>
+                  <label htmlFor="profile-pw-confirm">Confirm password</label>
+                  <input id="profile-pw-confirm" className="form-control" type="password" placeholder="Repeat new password" value={pwConf} onChange={e=>{setPwConf(e.target.value);setPwErr('');}}/>
                 </div>
               </div>
             </div>
@@ -9529,8 +9807,8 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
           <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminAlertsSub}</p>
           <form onSubmit={saveAlertWindow} className="admin-form">
             <div className="form-group" style={{maxWidth:180}}>
-              <label>{t.duplicateWindowLabel}</label>
-              <input className="form-control" type="number" min="1" max="720" value={windowHours}
+              <label htmlFor="set-dupe-window">{t.duplicateWindowLabel}</label>
+              <input id="set-dupe-window" className="form-control" type="number" min="1" max="720" value={windowHours}
                 onChange={e=>setWindowHours(e.target.value)} />
             </div>
             <button type="submit" className="btn btn-primary"
@@ -9545,8 +9823,8 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
           <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.lcuWindowHint}</p>
           <form onSubmit={saveLcuWindow} className="admin-form">
             <div className="form-group" style={{maxWidth:180}}>
-              <label>{t.lcuWindowLabel}</label>
-              <input className="form-control" type="number" min="1" max="60" value={lcuDays}
+              <label htmlFor="set-lcu-window">{t.lcuWindowLabel}</label>
+              <input id="set-lcu-window" className="form-control" type="number" min="1" max="60" value={lcuDays}
                 onChange={e=>setLcuDays(e.target.value)} />
             </div>
             <button type="submit" className="btn btn-primary"
@@ -9561,12 +9839,12 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
           <p style={{fontSize:13,color:'var(--gray-400)',margin:'0 0 16px'}}>{t.adminSlaSub}</p>
           <form onSubmit={saveSla} className="admin-form">
             <div className="form-group" style={{maxWidth:180}}>
-              <label>{t.slaMinutesLabel}</label>
+              <label htmlFor="set-sla">{t.slaMinutesLabel}</label>
               {/* No placeholder number on purpose: a greyed-out 30 would be read as
                   a real threshold by anyone who skimmed it, and the difference
                   between "30 minutes" and "no SLA" is exactly what this field has
                   to make obvious. */}
-              <input className="form-control" type="number" min="1" max="14400"
+              <input id="set-sla" className="form-control" type="number" min="1" max="14400"
                 value={slaMinutes} placeholder={t.slaUnsetPlaceholder}
                 onChange={e=>setSlaMinutes(e.target.value)} />
             </div>
@@ -9586,8 +9864,8 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
             {err && <div className="auth-error" style={{marginBottom:14}}>{err}</div>}
             <form onSubmit={addType} className="admin-form">
               <div className="form-group">
-                <label>{t.issueType}</label>
-                <input className="form-control" placeholder={t.issueTypePlaceholder} value={name}
+                <label htmlFor="set-type-name">{t.issueType}</label>
+                <input id="set-type-name" className="form-control" placeholder={t.issueTypePlaceholder} value={name}
                   onChange={e=>setName(e.target.value)} maxLength={50}/>
               </div>
               <button type="submit" className="btn btn-primary" disabled={saving || !name.trim()}>
@@ -9623,6 +9901,7 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
                         </td>
                         <td style={{textAlign:'right'}}>
                           <input type="color" className="color-swatch-input" title={t.changeColor}
+                            aria-label={`${t.changeColor} — ${it.name}`}
                             value={it.color} onChange={e=>updateTypeColor(it.id, e.target.value)}/>
                           <button className="icon-btn" title={t.removeType} onClick={()=>removeType(it.id)}>{Ic.trash}</button>
                         </td>
@@ -9643,8 +9922,8 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
             {deptErr && <div className="auth-error" style={{marginBottom:14}}>{deptErr}</div>}
             <form onSubmit={addDept} className="admin-form">
               <div className="form-group">
-                <label>{t.department}</label>
-                <input className="form-control" placeholder={t.departmentPlaceholder} value={deptName}
+                <label htmlFor="set-dept-name">{t.department}</label>
+                <input id="set-dept-name" className="form-control" placeholder={t.departmentPlaceholder} value={deptName}
                   onChange={e=>setDeptName(e.target.value)} maxLength={50}/>
               </div>
               <button type="submit" className="btn btn-primary" disabled={savingDept || !deptName.trim()}>
@@ -9670,6 +9949,7 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
                         {editingDeptId === d.id ? (
                           <td>
                             <input className="form-control" autoFocus maxLength={50}
+                              aria-label={`${t.renameDepartment} — ${d.name}`}
                               value={deptDraft}
                               onChange={e=>setDeptDraft(e.target.value)}
                               onKeyDown={e=>{
@@ -9717,8 +9997,8 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
             {agentErr && <div className="auth-error" style={{marginBottom:14}}>{agentErr}</div>}
             <form onSubmit={addAgent} className="admin-form">
               <div className="form-group">
-                <label>{t.connectaAgent}</label>
-                <input className="form-control" placeholder={t.agentPlaceholder} value={agentName}
+                <label htmlFor="set-agent-name">{t.connectaAgent}</label>
+                <input id="set-agent-name" className="form-control" placeholder={t.agentPlaceholder} value={agentName}
                   onChange={e=>setAgentName(e.target.value)} maxLength={100}/>
               </div>
               <button type="submit" className="btn btn-primary" disabled={savingAgent || !agentName.trim()}>
@@ -9762,13 +10042,14 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
             {ciErr && <div className="auth-error" style={{marginBottom:14}}>{ciErr}</div>}
             <form onSubmit={addConsumableItem}>
               <div className="form-group">
-                <label>{t.consumableName}</label>
-                <input className="form-control" placeholder={t.consumableNamePlaceholder} value={ciName}
+                <label htmlFor="set-consumable-name">{t.consumableName}</label>
+                <input id="set-consumable-name" className="form-control" placeholder={t.consumableNamePlaceholder} value={ciName}
                   onChange={e=>setCiName(e.target.value)} maxLength={50}/>
               </div>
               <div className="form-group" style={{marginTop:14}}>
-                <label>{t.consumableIconLabel}</label>
-                <ConsumableIconGrid value={ciIcon} onChange={setCiIcon}/>
+                {/* A caption over a grid of choices, not a label for one of them. */}
+                <div className="form-group-h" id="set-consumable-icon-h">{t.consumableIconLabel}</div>
+                <ConsumableIconGrid labelledBy="set-consumable-icon-h" value={ciIcon} onChange={setCiIcon}/>
               </div>
               <div className="admin-form-inline" style={{marginTop:16}}>
                 <div className="ci-preview">
@@ -9838,8 +10119,8 @@ function SettingsPage({ token, issueTypes, onTypesUpdate, departments, onDepartm
             {roomErr && <div className="auth-error" style={{marginBottom:14}}>{roomErr}</div>}
             <form onSubmit={addRooms} className="admin-form">
               <div className="form-group">
-                <label>{t.adminRoomsAdd}</label>
-                <input className="form-control" placeholder={t.adminRoomsPlaceholder}
+                <label htmlFor="set-rooms-add">{t.adminRoomsAdd}</label>
+                <input id="set-rooms-add" className="form-control" placeholder={t.adminRoomsPlaceholder}
                   value={roomRun} maxLength={40}
                   onChange={e=>{ setRoomRun(e.target.value); setRoomErr(''); }}/>
               </div>
@@ -10037,6 +10318,13 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
   }, [page, me]);
 
   useEffect(()=>{ saveLS('lira_lang', lang); }, [lang]);
+  // The document language, which is what a screen reader reads the whole page
+  // with. It was pinned to lang="en" in the markup and never moved, so a
+  // Portuguese session was pronounced with an English voice from the title down
+  // -- the one attribute every other string in the app depends on. Set here,
+  // beside the localStorage write, because this effect is the one that already
+  // runs on every language change, sign-in screen included.
+  useEffect(()=>{ document.documentElement.lang = lang; }, [lang]);
   useEffect(()=>{
     saveLS('lira_theme', theme);
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -10318,7 +10606,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     {id:'consumables', label:t.consumables, icon:Ic.box},
     {id:'support',    label:t.supportPage,  icon:Ic.tool},
     {id:'team',      label:t.team,       icon:Ic.users},
-    {id:'reports',   label:'Reports',    icon:Ic.report},
+    {id:'reports',   label:t.navReports, icon:Ic.report},
     ...(me.role === 'manager' ? [{id:'system', label:t.systemStatus, icon:Ic.server}] : []),
     ...(me.role === 'manager' ? [{id:'settings', label:t.settings, icon:Ic.gear}] : []),
     // A collapsible group rather than a destination: it only reveals its
@@ -10327,7 +10615,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
       {id:'lcu',     label:t.lcuTesting,   icon:Ic.server},
       {id:'tvswaps', label:t.tvSwapsNav,   icon:Ic.tv},
     ]},
-    {id:'profile',   label:'Profile',    icon:Ic.person},
+    {id:'profile',   label:t.navProfile, icon:Ic.person},
   ];
 
   // A group's children are not in the top-level list, so the topbar title has to
@@ -10393,13 +10681,13 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             ))}
           </div>
           <div className="sidebar-footer">
-            <div className="sidebar-user" style={{cursor:'pointer'}} onClick={()=>setPage('profile')}>
+            <button className="sidebar-user" onClick={()=>setPage('profile')}>
               <Avatar name={me.name} idx={me.avatar_idx} src={me.avatar_data}/>
               <div>
                 <div className="sidebar-user-name">{me.name}</div>
                 <div className="sidebar-user-role">{me.role==='manager' ? t.managerRole : t.techRole}</div>
               </div>
-            </div>
+            </button>
             <button className="logout-btn" onClick={()=>logout()}>{Ic.logout} {t.signOut}</button>
           </div>
         </aside>
