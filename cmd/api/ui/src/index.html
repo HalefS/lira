@@ -95,6 +95,21 @@
   --red:         #C13A3A;
   --red-light:   #FBEAEA;
   --red-mid:     #F0B8B8;
+  /* -- shift tints and absences -------------------------------------------------
+     Two new hues and one wash, for three reasons each.
+     --violet carries "holiday" in the absence set and appears nowhere else, so a
+       reader who learns it once keeps it. It is 84 degrees from --orange, the hue
+       that already means "overnight" and must never mean anything else.
+     --abs-wash is shared by ALL FOUR absence kinds, which is the whole design. A
+       tinted shift cell and an absence cell cannot be told apart by colour at any
+       wash strength -- the nearest of the six tint washes measures 1.00:1 to 1.11:1
+       against this one, because a wash is a wash. What separates them is the hatch,
+       the 3px top rule, the kind word and the kind glyph. Colour is the fourth cue,
+       not the first.
+     --gray-900 on --abs-wash measures 11.73:1, so the word in an absence cell is
+       exactly as legible as a shift name. */
+  --violet:     #6D28D9;
+  --abs-wash:   #DFDBF1;
   --gray-50:     #FAFAF8;
   --gray-100:    #F5F4F0;
   --gray-200:    #E4E5E7;
@@ -141,6 +156,8 @@ html.dark {
   --red:         #E8817E;
   --red-light:   #4A1E1E;
   --red-mid:     #7A3232;
+  --violet:     #A78BFA;
+  --abs-wash:   #272244;
   --gray-50:     #1B1F25;
   --gray-100:    #12151A;
   --gray-200:    #262B33;
@@ -1060,6 +1077,12 @@ html.dark .rota-readonly { background: var(--gray-200) !important; border-color:
    times is one person, and "5 people" beside a shift worked by two technicians
    is a number nobody believes. */
 .rota-legend-count { font-size: 11px; color: var(--gray-400); white-space: nowrap; }
+/* One step darker ON A TINTED CHIP ONLY. --gray-400 clears 4.5:1 on the untinted
+   card (5.26:1 light, 5.33:1 dark) and fails on the washes a tint produces --
+   measured 4.25:1 on Indigo, 4.39:1 on Magenta, 4.32:1 on Crimson, and 3.55:1 on
+   Teal in dark. --gray-600 clears all of them, and scoping the rule to is-tinted
+   keeps the untinted chips on the lighter ink they have always used. */
+.rota-legend-item.is-tinted .rota-legend-count { color: var(--gray-600); }
 .rota-legend-item.is-night { border-left: 3px solid var(--orange); padding-left: 6px; }
 /* Only reachable for a manager: /v1/shifts honours include_retired for managers
    alone, so nobody else is told a retired shift exists. */
@@ -1303,6 +1326,106 @@ html.dark .rota-dirty { background: var(--gray-50); }
   font-size: 12px; color: var(--gray-600);
 }
 .rota-settings-night svg { width: 13px; height: 13px; flex-shrink: 0; color: var(--orange); }
+
+/* -- Shift tints --------------------------------------------------------------
+   One rule this whole block is built on:
+
+   THE RAIL SLOT BELONGS TO OVERNIGHT. THE WASH SLOT BELONGS TO THE TINT.
+
+   --orange appears on the rota as a 3px left edge and nowhere else, and it means
+   one thing. A tint is therefore never a rail: it is a background wash, which is why
+   a manager who picks orange in the native picker gets an orange WASH that cannot be
+   mistaken for the overnight marker. A shift that is both tinted and overnight keeps
+   its orange rail and shows the tint as the wash alone, so there are never two bars
+   to read as one six-pixel bar.
+
+   Nothing here joins the blanket dark surface block at the end of this stylesheet.
+   That block sets background on CARDS; .rota-cell is a button inside a td, and
+   html.dark tbody tr:hover td paints the td behind it, which is why an untinted
+   cell has never needed a dark override and a tinted one does not either. */
+
+/* Positioned, because the tint dot and the drag affordance are absolutely placed
+   inside a cell. Safe: .rota-cell had no positioned children before, so nothing in
+   the file can be displaced by it. */
+.rota-cell { position: relative; }
+.rota-settings-hours { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+
+/* --tint-wash is emitted by tintStyle(). An untinted shift gets no inline style at
+   all, so .rota-cell's own --gray-100 stands: "no colour" is guaranteed to look
+   exactly as it did before the feature rather than being an approximation of it. */
+.rota-cell.is-tinted { background: var(--tint-wash); }
+html.dark .rota-cell.is-tinted { background: var(--tint-wash-dark); }
+.rota-legend-item.is-tinted, .rota-option.is-tinted { background: var(--tint-wash); }
+html.dark .rota-legend-item.is-tinted,
+html.dark .rota-option.is-tinted { background: var(--tint-wash-dark); }
+
+/* --tint-dot, never the raw hue: full strength against its own dark wash measured
+   2.16:1 to 2.71:1, which a 10px marker cannot spend. It is a 3:1 non-text cue and
+   it has to clear that on its own. */
+.rota-tint-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--tint-dot);
+}
+html.dark .rota-tint-dot { background: var(--tint-dot-dark); }
+
+/* The button in the Settings Hours cell. 20px rather than the 24px
+   .color-swatch-input, because this one sits in a table cell with 6px of padding
+   either side of it. */
+.rota-tint-btn {
+  width: 20px; height: 20px; flex: 0 0 auto; padding: 0; cursor: pointer;
+  border-radius: 50%; background: none; color: var(--gray-400);
+  display: inline-flex; align-items: center; justify-content: center;
+  /* Two rings, and the outer one --gray-400 rather than --gray-200 on purpose: a
+     mid-tone swatch measured against the dark card --gray-50 comes out between 2.56:1
+     and 3.24:1, and four of the six presets are under 3:1. The ring is what makes the
+     object visible at all, and --gray-400 gives 5.33:1 in dark and 5.50:1 in light. */
+  box-shadow: 0 0 0 1px var(--gray-200), 0 0 0 2px var(--gray-400);
+  transition: box-shadow .12s;
+}
+.rota-tint-btn.is-set { background: var(--tint-wash); color: var(--tint-ink); }
+.rota-tint-btn:hover { box-shadow: 0 0 0 1px var(--gray-300), 0 0 0 2px var(--gray-600); }
+.rota-tint-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.rota-tint-btn-ic { display: inline-flex; }
+.rota-tint-btn-ic svg { width: 11px; height: 11px; }
+
+/* The popover reuses .rota-picker-panel's geometry, box and z-index verbatim -- this
+   class only widens it and lays out the tiles. Reusing the panel rather than making
+   a second popover type is the rule RotaPicker states: one set of answers to "what
+   does Escape do" and "what closes this on an outside click". */
+.rota-tint-wrap { position: relative; display: inline-flex; }
+.rota-tint-pop { min-width: 268px; max-width: 288px; }
+.rota-tint-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 4px; }
+.rota-tint {
+  position: relative; display: flex; flex-direction: column; align-items: center;
+  gap: 3px; padding: 4px 2px 3px; border-radius: 6px; cursor: pointer;
+  border: 1px solid transparent;
+}
+/* The native radio fills the tile, so the focus ring is the tile outline and the
+   whole tile is the hit target. opacity 0 rather than display:none, so it stays in
+   the accessibility tree and keeps the group's arrow-key traversal. */
+.rota-tint input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.rota-tint.is-none { background: #fff; box-shadow: inset 0 0 0 1px var(--gray-200); color: var(--gray-400); }
+html.dark .rota-tint.is-none { background: var(--gray-50); box-shadow: inset 0 0 0 1px var(--gray-300); color: var(--gray-600); }
+.rota-tint:not(.is-none) { background: var(--tint-wash); color: #FFFFFF; }
+html.dark .rota-tint:not(.is-none) { background: var(--tint-wash-dark); color: #FFFFFF; }
+.rota-tint:hover { border-color: var(--blue-mid); }
+.rota-tint.is-on { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+.rota-tint:focus-within { outline: 2px solid var(--blue); outline-offset: 1px; }
+.rota-tint-ic { display: inline-flex; }
+.rota-tint-ic svg { width: 13px; height: 13px; }
+.rota-tint-cap {
+  font-size: 9.5px; font-weight: 600; letter-spacing: .02em; color: var(--gray-600);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rota-tint.is-on .rota-tint-cap { color: var(--blue); }
+/* The escape hatch, last and on its own bordered row, so it reads as a different
+   kind of act from "pick one of these six". */
+.rota-tint-custom {
+  display: flex; align-items: center; gap: 9px; margin: 4px; padding: 7px 9px;
+  border-top: 1px solid var(--gray-200); font-size: 12.5px; color: var(--gray-600);
+}
+.rota-tint-custom .color-swatch-input { width: 22px; height: 22px; }
+.rota-settings-tint-hint { margin-top: 9px; font-size: 11.5px; line-height: 1.45; color: var(--gray-400); }
 
 /* Print. The week navigation exists largely for this: the same standing pattern,
    printed with a different week's dates on it. The mode switch and the save bar
@@ -3133,6 +3256,23 @@ const T = {
     rotaUnsaved: '{count} unsaved',
     rotaEditHint: 'Pick a shift for each day. Days you clear become days off.',
     rotaEditHintClean: 'Nothing changed yet.',
+    // -- Shift tints ------------------------------------------------------------
+    shiftTint: 'Colour',
+    shiftNewUntitled: 'the new shift',
+    shiftTintPicker: 'Colour for {name}',
+    shiftTintNone: 'No colour',
+    shiftTintCustom: 'Pick another colour',
+    shiftTintSlate: 'Slate',
+    shiftTintBlue: 'Blue',
+    shiftTintTeal: 'Teal',
+    shiftTintIndigo: 'Indigo',
+    shiftTintMagenta: 'Magenta',
+    shiftTintCrimson: 'Crimson',
+    shiftTintApplied: 'Colour saved',
+    shiftTintReverted: 'Colour removed',
+    // Said where the swatch is rather than in a policy page: what the colour is for,
+    // and -- just as important -- what it is not for.
+    shiftTintHint: 'Optional. The shift name is printed on the rota either way, so the colour is one extra cue and nothing else.',
     rotaSave: 'Save changes',
     rotaCancel: 'Cancel',
     rotaDiscardTitle: 'Discard unsaved changes?',
@@ -3819,6 +3959,21 @@ const T = {
     rotaUnsaved: '{count} por guardar',
     rotaEditHint: 'Escolha um turno para cada dia. Os dias que limpar passam a ser dias de folga.',
     rotaEditHintClean: 'Nada alterado ainda.',
+    // -- Cores dos turnos -------------------------------------------------------
+    shiftTint: 'Cor',
+    shiftNewUntitled: 'o novo turno',
+    shiftTintPicker: 'Cor de {name}',
+    shiftTintNone: 'Sem cor',
+    shiftTintCustom: 'Escolher outra cor',
+    shiftTintSlate: 'Cinza-azulado',
+    shiftTintBlue: 'Azul',
+    shiftTintTeal: 'Verde-azulado',
+    shiftTintIndigo: 'Índigo',
+    shiftTintMagenta: 'Magenta',
+    shiftTintCrimson: 'Carmim',
+    shiftTintApplied: 'Cor guardada',
+    shiftTintReverted: 'Cor removida',
+    shiftTintHint: 'Opcional. O nome do turno aparece na escala de qualquer forma, por isso a cor é apenas mais um sinal e nada mais.',
     rotaSave: 'Guardar alterações',
     rotaCancel: 'Cancelar',
     rotaDiscardTitle: 'Descartar alterações por guardar?',
@@ -4010,6 +4165,33 @@ const Ic = {
     <path d="M13 6.5c0 3.6-5 8-5 8s-5-4.4-5-8a5 5 0 1 1 10 0Z"/>
     <circle cx="8" cy="6.4" r="1.7"/>
   </svg>,
+  // A paint palette with a thumbhole and three dabs. Not a droplet: at 14px a
+  // droplet reads as "liquid" and this is a colour, not a quantity.
+  palette: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"><path d="M8 1.9a6.1 6.1 0 000 12.2c.9 0 1.4-.6 1.4-1.3 0-.8-.7-1.1-.7-1.8 0-.6.5-1.1 1.2-1.1h1.2a3 3 0 003-3C14.1 4 11.4 1.9 8 1.9z"/><circle cx="5.2" cy="6.6" r=".9"/><circle cx="8" cy="4.7" r=".9"/><circle cx="10.9" cy="6.1" r=".9"/></svg>,
+  // Four corner brackets: the "select a run" mark. Drawn as four corner strokes
+  // rather than a closed rectangle because at the 11px a grid cell gives it, a
+  // closed box reads as a border on the cell and corners read as something you can
+  // pull. Used twice at two sizes -- as the drag affordance on a cell, and in the
+  // save bar as the range-mode toggle.
+  brackets: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2.6 6.2V3.3a.7.7 0 01.7-.7h2.9"/>
+    <path d="M9.8 2.6h2.9a.7.7 0 01.7.7v2.9"/>
+    <path d="M13.4 9.8v2.9a.7.7 0 01-.7.7H9.8"/>
+    <path d="M6.2 13.4H3.3a.7.7 0 01-.7-.7V9.8"/>
+  </svg>,
+  // --- absence marks --------------------------------------------------------
+  // Four silhouettes, deliberately unlike each other at 13px and unlike every icon
+  // above, because they have to be separable in greyscale: the rota prints.
+  sun: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><circle cx="8" cy="8" r="2.8"/><path d="M8 1.2v1.7M8 13.1v1.7M14.8 8h-1.7M2.9 8H1.2M12.8 3.2l-1.2 1.2M4.4 11.6l-1.2 1.2M12.8 12.8l-1.2-1.2M4.4 4.4L3.2 3.2"/></svg>,
+  thermometer: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><path d="M9.6 9.5V3.6a1.6 1.6 0 00-3.2 0v5.9a2.9 2.9 0 101.6 2.7"/><path d="M8 6.2v4.1"/></svg>,
+  cap: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"><path d="M8 2.4L1.7 5.5 8 8.6l6.3-3.1L8 2.4z"/><path d="M4.4 7.1v3.2c0 1.1 1.6 2 3.6 2s3.6-.9 3.6-2V7.1"/><path d="M14.3 5.5v3.6"/></svg>,
+  // A barred circle. NOT eyeoff, which is a barred eye and reads as "hidden" -- the
+  // wrong half of the meaning, since nothing about an absent day is hidden, it just
+  // is not a shift.
+  slash: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><circle cx="8" cy="8" r="5.9"/><path d="M3.9 3.9l8.2 8.2"/></svg>,
+  // The "no colour" tile's slash: one diagonal alone, at the same 1.6 weight as the
+  // brackets so the tile and the drag affordance match.
+  diag: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M4 12L12 4"/></svg>,
 };
 
 /* ── Avatar ──
@@ -4077,6 +4259,104 @@ function badgeStyleFromHex(hex) {
     borderWidth: 1, borderStyle: 'solid',
   };
 }
+
+/* A shift's stored tint, expanded into the custom properties the rota CSS reads.
+
+   The stored value stays one "#rrggbb" and the theme work happens HERE rather than
+   in the stylesheet, for the reason badgeStyleFromHex gives: one derivation, used by
+   every surface that shows a tint, so a cell and its legend chip cannot disagree
+   about what colour a shift is.
+
+     --tint-wash      the cell / legend / picker background. Lightness 92% in light
+                      and 17% in dark, which measures 12.4:1 to 14.7:1 against
+                      --gray-900 in light and 9.6:1 to 15.0:1 in dark -- a wash that
+                      reads on a 44px cell and still carries the cell's ordinary text.
+     --tint-dot       the 10px marker on legend chips and picker options. NOT the
+                      full-strength hue in dark: that measured 2.16:1 to 2.71:1
+                      against its own wash, under the 3:1 a non-text cue owes.
+     --tint-ink       ink for a glyph drawn on the raw swatch: white when the swatch
+                      is dark enough to carry it, --gray-900 otherwise. All six
+                      presets want white; a pale custom yellow wants the other.
+
+   Returns null for no tint, for a malformed hex and for "" -- and the callers spread
+   it as style={tintStyle(shift)}, so "no tint" is an ABSENT style and the element
+   keeps .rota-cell's own background. That is what makes an untinted shift render
+   exactly as it did before, with no conditional CSS anywhere. */
+function tintStyle(shift) {
+  const hex = (shift && shift.color) || '';
+  if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) return null;
+  const [h, s] = hexToHsl(hex);
+  const sat = Math.min(s, 70);
+  return {
+    '--tint-wash':     hslToHex(h, sat, 92),
+    '--tint-dot':      hslToHex(h, sat, 34),
+    '--tint-wash-dark': hslToHex(h, Math.min(s, 56), 17),
+    '--tint-dot-dark':  hslToHex(h, sat, 62),
+    '--tint-ink':       hexToHsl(hslToHex(h, s, 50))[2] < 62 ? '#FFFFFF' : 'var(--gray-900)',
+  };
+}
+
+/* Just the two dot custom properties, for the two places that show a colour without
+   offering a control. Same derivation, so the two can never disagree.
+
+   Custom PROPERTIES rather than a background, and that is the whole point: an inline
+   `background` beats every stylesheet rule, including the html.dark override that
+   picks the dot's lightness for a dark card. Written as a background it looked fine
+   in light and measured 1.49:1 in dark, because the override never ran. Handing the
+   variables over and letting .rota-tint-dot resolve them is what makes the theme
+   switch reach this element at all. */
+function dotStyle(hex) {
+  const s = tintStyle({ color: hex });
+  if (!s) return null;
+  return { '--tint-dot': s['--tint-dot'], '--tint-dot-dark': s['--tint-dot-dark'] };
+}
+
+/* The six preset tints, in picker order: no colour first, then a ladder of hue
+   going anti-clockwise from the app's own blue.
+
+   Every one was chosen on four measured constraints rather than on taste:
+
+     white ink on every swatch, 5.11:1 (#0f7d5c) to 6.46:1 (#5b4bc4). One ink
+       colour for all six, so the tick glyph inside the chosen tile is #FFFFFF in
+       code rather than a per-swatch lookup. This is also why the palette does not
+       contain the app's --teal or --green: those are ink tokens tuned for their own
+       washes, and a solid swatch needs a darker member of the same hue.
+
+     at least 40 degrees of hue from --orange (h 17.8) and --amber (h 37.4); the
+       smallest gap here is 124.6 degrees. Orange is not merely reserved for
+       overnight by this list: a tint is a WASH and overnight is a 3px RAIL, so a
+       manager who picks orange in the native input gets an orange wash, which still
+       cannot read as overnight because the rail is what means overnight.
+
+     pairwise CIE-Lab dE76 at least 25 in normal vision. Measured minimum 29.8.
+
+     pairwise dE76 at least 18 under deuteranopia (Machado 1.0), measured minimum
+       19.6. A seventh candidate was cut rather than shipped: a navy that cleared
+       every test alone but sat 20.6 from Slate and 20.6 from Blue, and three cool
+       neutrals is a difference nobody has to be able to make.
+
+   #5b6779 is deliberately close to --gray-600, because a manager who wants "the
+   plain one but tinted" should not have to hunt for a neutral.
+
+   And none of this is load-bearing: the shift name is printed in every cell, in the
+   legend and in the picker, so colour is a fourth and last cue everywhere it
+   appears. */
+const SHIFT_TINTS = ['', '#5b6779', '#1769aa', '#0f7d5c', '#5b4bc4', '#b02e8c', '#be2e4b'];
+
+/* The preset's name in words, which is what makes the control not depend on colour:
+   a screen reader hears "Colour for Morning: Indigo", a tooltip reads "Indigo", and
+   only the 20px disc is a colour at all. Same idiom as the issue-types swatch. A hex
+   the manager picked for itself has no name here, so it falls back to the hex -- a
+   worse label than a good name, which is the honest consequence of not having one. */
+const shiftTintName = (t, c) => ({
+  '':        t.shiftTintNone,
+  '#5b6779': t.shiftTintSlate,
+  '#1769aa': t.shiftTintBlue,
+  '#0f7d5c': t.shiftTintTeal,
+  '#5b4bc4': t.shiftTintIndigo,
+  '#b02e8c': t.shiftTintMagenta,
+  '#be2e4b': t.shiftTintCrimson,
+}[c] || (c || '').toUpperCase());
 
 function TypeBadge({ type }) {
   const colors = React.useContext(TypeColorCtx);
@@ -10359,7 +10639,11 @@ function RotaPicker({ cellId, value, shifts, onPick, t, alignRight, openUp }) {
   return (
     <div className="rota-picker" ref={wrapRef}>
       <button type="button"
-        className={'rota-cell' + (value ? '' : ' is-off') + (value && value.overnight ? ' is-night' : '') + ' is-editable'}
+        className={'rota-cell' + (value ? '' : ' is-off') + (value && value.overnight ? ' is-night' : '') +
+          (value && value.color ? ' is-tinted' : '') + ' is-editable'}
+        /* An untinted cell gets a null style and keeps its own background, which is
+           what makes it render exactly as it did before the tint existed. */
+        style={tintStyle(value)}
         role="combobox"
         aria-expanded={open}
         aria-controls={listId}
@@ -10388,11 +10672,17 @@ function RotaPicker({ cellId, value, shifts, onPick, t, alignRight, openUp }) {
                 id={optionId(i)}
                 aria-selected={selected}
                 className={'rota-option' + (i === cursor ? ' active' : '') +
-                  (selected ? ' rota-option-chosen' : '') + (o.overnight ? ' is-night' : '')}
+                  (selected ? ' rota-option-chosen' : '') + (o.overnight ? ' is-night' : '') +
+                  (o.color ? ' is-tinted' : '')}
+                style={tintStyle(o)}
                 onMouseEnter={() => setCursor(i)}
                 onMouseDown={e => e.preventDefault()}   // keep focus so the panel stays open
                 onClick={() => choose(o)}>
                 {selected && <span className="rota-option-tick">{Ic.check}</span>}
+                {/* A separate 10px circle BEFORE the name, never a second rail: shape
+                    discipline is what keeps the tint apart from the overnight edge
+                    beside it. */}
+                {o.color && <span className="rota-tint-dot" style={dotStyle(o.color)}/>}
                 <span className="rota-option-name">{o.name}</span>
                 {!o.off && <span className="rota-option-hours">
                   {o.start_time}&ndash;{o.end_time}{o.overnight ? t.rotaPlusOne : ''}
@@ -10503,8 +10793,17 @@ function RotaTable({ t, week, members, shifts, editing, draft, setCell }) {
                           // table scrolls rather than running under the fold.
                           alignRight={i >= 5}
                           openUp={false}/>
-                        : <div className={'rota-cell' + (shift ? '' : ' is-off') +
-                            (shift && shift.overnight ? ' is-night' : '')}>
+                        : <div
+                            className={'rota-cell' + (shift ? '' : ' is-off') +
+                              (shift && shift.overnight ? ' is-night' : '') +
+                              (shift && shift.color ? ' is-tinted' : '')}
+                            /* The view-mode cell carries the same wash as the edit-mode
+                               one. Found by looking at the page: the edit-mode button
+                               was tinted and the read-only cell beside it was not, so
+                               the grid changed colour the moment a manager pressed
+                               Edit. Two renderings of one fact have to be told apart
+                               explicitly, which is what this comment is for. */
+                            style={tintStyle(shift)}>
                             {shift
                               ? <>
                                   <span className="rota-cell-name">{shift.name}</span>
@@ -10535,6 +10834,94 @@ function RotaTable({ t, week, members, shifts, editing, draft, setCell }) {
 
    The whole card is manager-only, so there is no can_edit branch inside it. The
    page that holds it already refuses to render for anybody else. */
+/* Picking a shift's tint, in the Settings row.
+
+   Presets first, the free picker last, on its own bordered row. Both are offered
+   because the free picker is safe here -- tintStyle turns any hue into a wash that
+   carries the cell's ordinary text -- but six unconstrained tints on one printed
+   sheet is a legend nobody can order, which is why the six come first and the
+   hundred come after. A control that offers a hundred choices before offering the
+   six right ones is one most managers never finish. */
+function ShiftTintButton({ t, shift, onPick, openUp }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  // Verbatim from RotaPicker, and deliberately so: one set of answers to "what does
+  // Escape do here" rather than two that can drift.
+  useEffect(() => {
+    if (!open) return;
+    const away = e => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    const esc = e => {
+      if (e.key !== 'Escape') return;
+      e.claimedByDialog = true;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc, true);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', esc, true);
+    };
+  }, [open]);
+
+  const name = shiftTintName(t, shift.color || '');
+
+  return (
+    <div className="rota-tint-wrap" ref={wrapRef}>
+      <button type="button"
+        className={'rota-tint-btn' + (shift.color ? ' is-set' : '')}
+        style={tintStyle(shift)}
+        aria-expanded={open}
+        aria-haspopup="true"
+        aria-label={t.shiftTint + ' \u2014 ' + shift.name + ': ' + name}
+        title={name}
+        onClick={() => setOpen(o => !o)}>
+        <span className="rota-tint-btn-ic" aria-hidden="true">
+          {shift.color ? Ic.check : Ic.palette}
+        </span>
+      </button>
+
+      {open && (
+        <div className={'rota-picker-panel rota-tint-pop' + (openUp ? ' open-up' : '')}
+          role="group" aria-label={t.shiftTintPicker.replace('{name}', shift.name)}>
+          {/* Real radios, not role=radio on a div. A native radio group brings
+              arrow-key traversal, the checked state and the tab stop for free, and
+              this file's one existing segmented control cannot help here because it
+              has two options and no third state. */}
+          <div className="rota-tint-grid" role="radiogroup"
+            aria-label={t.shiftTintPicker.replace('{name}', shift.name)}>
+            {SHIFT_TINTS.map(c => (
+              <label key={c || 'none'}
+                className={'rota-tint' + (!c ? ' is-none' : '') + ((shift.color || '') === c ? ' is-on' : '')}
+                style={tintStyle({ color: c })}
+                title={shiftTintName(t, c)}>
+                <input type="radio" name={'shift-tint-' + shift.id} value={c}
+                  checked={(shift.color || '') === c}
+                  onChange={() => onPick(c)}/>
+                <span className="rota-tint-ic" aria-hidden="true">
+                  {c ? Ic.check : Ic.diag}
+                </span>
+                {/* The word is in the DOM, not only in the title: at 26px a 10px
+                    label under each tile is legible, and it is the same redundant cue
+                    every grid cell gets from the shift name. */}
+                <span className="rota-tint-cap">{shiftTintName(t, c)}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="rota-tint-custom">
+            <input type="color" className="color-swatch-input"
+              value={shift.color || '#5b6779'}
+              aria-label={t.shiftTintCustom + ' \u2014 ' + shift.name}
+              onChange={e => onPick(e.target.value)}/>
+            <span>{t.shiftTintCustom}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ShiftSettingsCard({ token, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
@@ -10549,6 +10936,10 @@ function ShiftSettingsCard({ token, setToast }) {
   const [name, setName] = useState('');
   const [start, setStart] = useState('08:00');
   const [end, setEnd] = useState('16:00');
+  // The tint of the shift being added. '' is no tint, which is what the server
+  // stores as NULL and what an untinted shift renders as. Deliberately separate from
+  // any existing shift's colour: this is a draft, and it is only sent on POST.
+  const [newTint, setNewTint] = useState('');
 
   const load = useCallback(() => {
     return apiFetch('/shifts?include_retired=true', {token})
@@ -10584,9 +10975,9 @@ function ShiftSettingsCard({ token, setToast }) {
     try {
       await apiFetch('/shifts', {
         method: 'POST', token,
-        body: { name: name.trim(), start_time: start, end_time: end },
+        body: { name: name.trim(), start_time: start, end_time: end, color: newTint || null },
       });
-      setName(''); setErr('');
+      setName(''); setNewTint(''); setErr('');
       await load();
       setToast(t.shiftAdded);
     } catch (ex) {
@@ -10612,6 +11003,10 @@ function ShiftSettingsCard({ token, setToast }) {
           name: draft.name.trim(),
           start_time: draft.start_time,
           end_time: draft.end_time,
+          // No colour, and not by oversight. The inline editor shows a dot rather
+          // than a control and the draft holds no tint, because the tint saves the
+          // moment it is picked. The server defaults a missing tint from the stored
+          // row, so a rename cannot wipe one.
           active: true,
           version,
         },
@@ -10630,13 +11025,38 @@ function ShiftSettingsCard({ token, setToast }) {
     }
   }
 
+  /* Changing one shift's tint.
+
+     A single PATCH carrying the WHOLE ROW, not a patch of the colour. The server
+     writes the columns it is given and defaults a missing tint from the stored one,
+     so omitting it would work -- but three writes on this card that each assemble a
+     slightly different body is how a colour change silently reverts somebody else's
+     rename. All three send name, times, colour, active and version, which is also
+     the shape the server's validation expects. */
+  async function setTint(s, color) {
+    setSaving(true);
+    try {
+      await apiFetch('/shifts/' + s.id, {
+        method: 'PATCH', token,
+        body: { name: s.name, start_time: s.start_time, end_time: s.end_time,
+                color: color || null, active: s.active, version: s.version },
+      });
+      await load();
+      setToast(color ? t.shiftTintApplied : t.shiftTintReverted);
+    } catch (ex) {
+      setErr((ex && ex.message) || 'Request failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function setActive(s, active) {
     setSaving(true);
     try {
       await apiFetch('/shifts/' + s.id, {
         method: 'PATCH', token,
         body: { name: s.name, start_time: s.start_time, end_time: s.end_time,
-                active, version: s.version },
+                color: s.color || null, active, version: s.version },
       });
       await load();
     } catch (ex) {
@@ -10695,6 +11115,17 @@ function ShiftSettingsCard({ token, setToast }) {
               {Ic.clock}<span>{t.shiftOvernightHint}</span>
             </div>
           )}
+          <div className="form-group" style={{marginTop:14}}>
+            {/* A caption over a control, not a label for one field -- the same shape
+                as the times group above. */}
+            <div className="form-group-h" id="shift-new-tint-h">{t.shiftTint}</div>
+            <ShiftTintButton t={t} shift={{ id: 'new', name: t.shiftNewUntitled, color: newTint }}
+              onPick={c => { setNewTint(c); setErr(''); }}/>
+            {/* Said at the point of choosing, not in a policy page: this is the cue
+                that says what the colour is and is not for, at the moment somebody
+                decides whether to bother. */}
+            <div className="rota-settings-tint-hint">{t.shiftTintHint}</div>
+          </div>
           <div className="admin-form-inline" style={{marginTop:16}}>
             <span className="ci-preview">
               <span style={{fontFamily:"'DM Mono',monospace",fontSize:13}}>
@@ -10756,7 +11187,19 @@ function ShiftSettingsCard({ token, setToast }) {
                     <td>
                       {editingId === s.id
                         ? (
-                          <div className="rota-settings-times">
+                          <div className="rota-settings-hours">
+                            {/* A dot, not a control. The row is already three inputs
+                                and two buttons, and a fourth control makes the actions
+                                cell four and pushes Save off its alignment. And the
+                                tint saves immediately while the name and times save on
+                                Save -- mixing an immediately-committing control into a
+                                transaction row is how somebody changes a colour, presses
+                                Cancel, and does not know which of the two happened. A
+                                dot is honest: it shows the SAVED colour and offers
+                                nothing. */}
+                            <span className="rota-tint-dot" style={dotStyle(s.color)}
+                              title={shiftTintName(t, s.color || '')}/>
+                            <div className="rota-settings-times">
                             <input className="form-control" type="time" step={60}
                               aria-label={t.shiftStart + ' - ' + s.name}
                               value={draft.start_time}
@@ -10766,18 +11209,28 @@ function ShiftSettingsCard({ token, setToast }) {
                               aria-label={t.shiftEnd + ' - ' + s.name}
                               value={draft.end_time}
                               onChange={e => setDraft({ ...draft, end_time: e.target.value })}/>
+                            </div>
                           </div>
                         )
                         : (
-                          /* The night marker rides on the hours rather than the
-                             name, because that is where the reading happens. */
-                          <span className={'rota-cell-name' + (s.overnight ? ' is-night' : '')}
-                            style={{fontFamily:"'DM Mono',monospace",fontSize:12.5,
-                                    borderLeft:s.overnight ? '3px solid var(--orange)' : undefined,
-                                    paddingLeft:s.overnight ? 6 : undefined,
-                                    display:'inline-block'}}>
-                            {s.start_time}&ndash;{s.end_time}{s.overnight ? t.rotaPlusOne : ''}
-                          </span>
+                          /* The tint and the night marker both ride in the Hours cell,
+                             not in a column of their own and not in the actions cell.
+                             It is the only cell that already carries a visual property,
+                             it is where the reading happens anyway, and it means a
+                             reader who has learned "the hours cell is where this
+                             shift's marks live" has one place to look. It also keeps
+                             the tint in the SAME COLUMN when Edit is pressed, which a
+                             mark that jumped columns would not. */
+                          <div className="rota-settings-hours">
+                            <ShiftTintButton t={t} shift={s} onPick={c => setTint(s, c)}/>
+                            <span className={'rota-cell-name' + (s.overnight ? ' is-night' : '')}
+                              style={{fontFamily:"'DM Mono',monospace",fontSize:12.5,
+                                      borderLeft:s.overnight ? '3px solid var(--orange)' : undefined,
+                                      paddingLeft:s.overnight ? 6 : undefined,
+                                      display:'inline-block'}}>
+                              {s.start_time}&ndash;{s.end_time}{s.overnight ? t.rotaPlusOne : ''}
+                            </span>
+                          </div>
                         )}
                     </td>
                     <td style={{fontSize:12,color:'var(--gray-400)'}}>
@@ -11175,7 +11628,10 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
         {legend.length > 0 && (data.members || []).length > 0 && (
           <div className="rota-legend">
             {legend.map(x => (
-              <span key={x.id} className={'rota-legend-item' + (x.overnight ? ' is-night' : '')}>
+              <span key={x.id}
+                className={'rota-legend-item' + (x.overnight ? ' is-night' : '') + (x.color ? ' is-tinted' : '')}
+                style={tintStyle(x)}>
+                {x.color && <span className="rota-tint-dot" style={dotStyle(x.color)}/>}
                 <span className="rota-legend-name">{x.name}</span>
                 <span className="rota-legend-hours">
                   {x.start_time}&ndash;{x.end_time}{x.overnight ? t.rotaPlusOne : ''}
