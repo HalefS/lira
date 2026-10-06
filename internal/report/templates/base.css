@@ -46,7 +46,7 @@
   --gray-100: #F5F4F0;
   --gray-200: #E4E5E7;
   --gray-300: #D2D4D7;
-  --gray-400: #7A8490;
+  --gray-400: #5F6A78;
   --gray-600: #4B5563;
   --gray-900: #17202A;
 }
@@ -61,6 +61,15 @@ body {
   background: #fff;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
+}
+
+/* Force exact color rendering in print for all elements -- Chrome's default
+   behavior can desaturate or shift colors, especially on dark backgrounds. */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 /* ── Full-bleed bands, repeated on every page ─────────────────────────── */
@@ -133,11 +142,12 @@ body {
   font-size: 8pt; font-weight: 400; color: var(--gray-400);
 }
 
-/* ── Summary cards: a real grid, so every card lines up ───────────────── */
+/* ── Summary cards: flexbox wraps cleanly across pages ────────────────── */
 
-.cards { display: grid; gap: 3mm; break-inside: avoid; }
-.cards-3 { grid-template-columns: repeat(3, 1fr); }
-.cards-4 { grid-template-columns: repeat(4, 1fr); }
+.cards { display: flex; flex-wrap: wrap; gap: 3mm; }
+.cards > * { flex: 1 1 50mm; min-width: 50mm; max-width: 1fr; }
+.cards-3 > * { flex-basis: calc(33.333% - 2mm); }
+.cards-4 > * { flex-basis: calc(25% - 2.25mm); }
 
 .card {
   border: 0.25mm solid var(--gray-200);
@@ -156,14 +166,15 @@ body {
 }
 .card .sub { font-size: 7.5pt; color: var(--gray-400); }
 
-/* ── Breakdowns ───────────────────────────────────────────────────────── */
+/* ── Breakdowns: flexbox wraps cleanly across pages ────────────────────── */
 
 /*
-  Breakdown blocks share one grid, so their headings and first rows land on the
+  Breakdown blocks share one flex row, so their headings and first rows land on the
   same baselines regardless of how many rows each one has.
 */
-.breakdowns { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; align-items: start; }
-.breakdowns-3 { grid-template-columns: 1fr 1fr 1fr; gap: 5mm; }
+.breakdowns { display: flex; flex-wrap: wrap; gap: 6mm; }
+.breakdowns > * { flex: 1 1 45%; min-width: 200px; }
+.breakdowns-3 > * { flex: 1 1 30%; min-width: 180px; }
 
 .bar-row {
   display: grid;
@@ -216,6 +227,16 @@ td {
   border-bottom: 0.25mm solid var(--gray-200);
   vertical-align: top;
   overflow-wrap: break-word; word-break: break-word;
+  hyphens: auto;
+}
+
+/* Problem and resolution cells: truncate with ellipsis if too long,
+   but allow wrapping with hyphens first. Max width prevents horizontal overflow. */
+.cell-problem, .cell-resolution {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  hyphens: auto;
 }
 tbody tr:nth-child(even) td { background: var(--gray-50); }
 

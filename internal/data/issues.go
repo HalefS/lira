@@ -249,17 +249,25 @@ func (m IssueModel) GetAll(f IssueFilters, limit int) ([]*Issue, int, error) {
 		// again afterwards, so no row can sit in the future and the pending arm
 		// needs no upper bound of its own.
 		//
-		// The two arms are one parenthesised condition rather than two separate
-		// ones, so that a status filter still narrows the result rather than being
-		// silently widened by the carry-forward.
+		// We use a range predicate (>= start AND < next_day) instead of a
+		// created_at::date cast so the planner can use a btree index on created_at.
+		// The two arms are one parenthesised condition so a status filter still
+		// narrows the result rather than being silently widened by the carry-forward.
+		dt, err := time.Parse("2006-01-02", f.Date)
+		if err != nil {
+			return nil, 0, fmt.Errorf("invalid date format: %w", err)
+		}
+		nextDay := dt.AddDate(0, 0, 1).Format("2006-01-02")
+		dtStr := dt.Format("2006-01-02")
+
 		if carryPendingOntoToday(f.Date, Today()) {
 			conditions = append(conditions, fmt.Sprintf(
-				"(i.created_at::date = $%d OR i.status = 'Pending')", argIdx))
+				"(i.created_at >= $%d AND i.created_at < $%d OR i.status = 'Pending')", argIdx, argIdx+1))
 		} else {
-			conditions = append(conditions, fmt.Sprintf("i.created_at::date = $%d", argIdx))
+			conditions = append(conditions, fmt.Sprintf("i.created_at >= $%d AND i.created_at < $%d", argIdx, argIdx+1))
 		}
-		args = append(args, f.Date)
-		argIdx++
+		args = append(args, dtStr, nextDay)
+		argIdx += 2
 	}
 	if f.Search != "" {
 		conditions = append(conditions, fmt.Sprintf(
@@ -408,6 +416,13 @@ func (m IssueModel) GetStats(date string) (*Stats, error) {
 		ByTechnician: []TechStat{},
 	}
 
+	dt, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return nil, fmt.Errorf("invalid date format: %w", err)
+	}
+	nextDay := dt.AddDate(0, 0, 1).Format("2006-01-02")
+	dtStr := dt.Format("2006-01-02")
+
 	// Summary query
 	summaryQuery := `
 		SELECT
@@ -416,9 +431,9 @@ func (m IssueModel) GetStats(date string) (*Stats, error) {
 			COUNT(*) FILTER (WHERE status = 'Pending') AS pending,
 			COALESCE(AVG(time_minutes), 0) AS avg_minutes
 		FROM issues
-		WHERE created_at::date = $1`
+		WHERE created_at >= $1 AND created_at < $2`
 
-	err := m.DB.QueryRowContext(ctx, summaryQuery, date).Scan(
+	err = m.DB.QueryRowContext(ctx, summaryQuery, dtStr, nextDay).Scan(
 		&stats.TotalIssues, &stats.Resolved, &stats.Pending, &stats.AvgMinutes,
 	)
 	if err != nil {
@@ -428,10 +443,10 @@ func (m IssueModel) GetStats(date string) (*Stats, error) {
 	// By type
 	typeQuery := `
 		SELECT type, COUNT(*) FROM issues
-		WHERE created_at::date = $1
+		WHERE created_at >= $1 AND created_at < $2
 		GROUP BY type ORDER BY COUNT(*) DESC`
 
-	typeRows, err := m.DB.QueryContext(ctx, typeQuery, date)
+	typeRows, err := m.DB.QueryContext(ctx, typeQuery, dtStr, nextDay)
 	if err != nil {
 		return nil, err
 	}
@@ -454,12 +469,12 @@ func (m IssueModel) GetStats(date string) (*Stats, error) {
 	techQuery := `
 		SELECT u.id, u.name, u.avatar_idx, COUNT(i.id) AS cnt
 		FROM users u
-		LEFT JOIN issues i ON i.logged_by = u.id AND i.created_at::date = $1
+		LEFT JOIN issues i ON i.logged_by = u.id AND i.created_at >= $1 AND i.created_at < $2
 		GROUP BY u.id, u.name, u.avatar_idx, u.role
 		HAVING u.role = 'technician' OR COUNT(i.id) > 0
 		ORDER BY cnt DESC`
 
-	techRows, err := m.DB.QueryContext(ctx, techQuery, date)
+	techRows, err := m.DB.QueryContext(ctx, techQuery, dtStr, nextDay)
 	if err != nil {
 		return nil, err
 	}
@@ -653,6 +668,13 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*DailyReport, error)
 		date = time.Now().Format("2006-01-02")
 	}
 
+	dt, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return nil, fmt.Errorf("invalid date format: %w", err)
+	}
+	nextDay := dt.AddDate(0, 0, 1).Format("2006-01-02")
+	dtStr := dt.Format("2006-01-02")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -701,10 +723,10 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*DailyReport, error)
 			COALESCE(MAX(time_minutes), 0)                        AS slowest,
 			COUNT(*) FILTER (WHERE false_positive)                AS false_positives
 		FROM issues
-		WHERE created_at::date = $1`
+		WHERE created_at >= $1 AND created_at < $2`
 
 	var s ReportSummary
-	err = m.DB.QueryRowContext(ctx, summaryQ, date).Scan(
+	err = m.DB.QueryRowContext(ctx, summaryQ, dtStr, nextDay).Scan(
 		&s.TotalIssues, &s.AptIssues, &s.DeptIssues,
 		&s.Resolved, &s.Pending,
 		&s.AvgMinutes, &s.TotalMinutes, &s.FastestMinutes, &s.SlowestMinutes, &s.FalsePositives,
@@ -728,10 +750,10 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*DailyReport, error)
 	breakdownQ := `
 		SELECT mode, type, status, COUNT(*)
 		FROM issues
-		WHERE created_at::date = $1
+		WHERE created_at >= $1 AND created_at < $2
 		GROUP BY mode, type, status`
 
-	breakdownRows, err := m.DB.QueryContext(ctx, breakdownQ, date)
+	breakdownRows, err := m.DB.QueryContext(ctx, breakdownQ, dtStr, nextDay)
 	if err != nil {
 		return nil, err
 	}
@@ -764,14 +786,14 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*DailyReport, error)
 		       u.name, u.avatar_idx, i.version, i.false_positive
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
-		WHERE i.created_at::date = $1 AND i.mode = $2
+		WHERE i.created_at >= $1 AND i.created_at < $2 AND i.mode = $3
 		ORDER BY i.created_at DESC, i.id DESC`
 
 	// limit of zero or less means every row. That is what the printed report
 	// asks for: a PDF is an archive of the day, so quietly capping it would
 	// produce a document that looks complete and is not.
 	if limit > 0 {
-		issueQ += "\n\t\tLIMIT $3"
+		issueQ += "\n\t\tLIMIT $4"
 	}
 
 	reportIssues := []*Issue{}
@@ -783,9 +805,9 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*DailyReport, error)
 		var rows *sql.Rows
 		var err error
 		if limit > 0 {
-			rows, err = m.DB.QueryContext(ctx, issueQ, date, mode, limit)
+			rows, err = m.DB.QueryContext(ctx, issueQ, dtStr, nextDay, mode, limit)
 		} else {
-			rows, err = m.DB.QueryContext(ctx, issueQ, date, mode)
+			rows, err = m.DB.QueryContext(ctx, issueQ, dtStr, nextDay, mode)
 		}
 		if err != nil {
 			return nil, err
@@ -830,12 +852,12 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*DailyReport, error)
 		       COUNT(i.id) FILTER (WHERE i.status = 'Ok')        AS resolved,
 		       COALESCE(AVG(i.time_minutes), 0)                   AS avg_min
 		FROM users u
-		LEFT JOIN issues i ON i.logged_by = u.id AND i.created_at::date = $1
+		LEFT JOIN issues i ON i.logged_by = u.id AND i.created_at >= $1 AND i.created_at < $2
 		GROUP BY u.id, u.name, u.avatar_idx, u.role
 		HAVING u.role = 'technician' OR COUNT(i.id) > 0
 		ORDER BY total DESC`
 
-	techRows, err := m.DB.QueryContext(ctx, techQ, date)
+	techRows, err := m.DB.QueryContext(ctx, techQ, dtStr, nextDay)
 	if err != nil {
 		return nil, err
 	}

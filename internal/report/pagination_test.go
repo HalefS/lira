@@ -111,14 +111,17 @@ func TestPageCount(t *testing.T) {
 	}
 }
 
-// The shared stylesheet owns the band geometry, so the footer must not be
-// pushed below the content box. Asserted on the CSS text because that is where
-// the regression actually happened.
+// The shared stylesheet owns the band geometry, so the footer must NOT be
+// offset below the content box. A footer at bottom: 0 sits exactly at the
+// content box edge and does not extend the paginated area. A footer pushed
+// below (bottom: -16mm) extends the paginated area and produces an extra
+// blank page. This test asserts the correct geometry.
 func TestFooterBandIsNotOffsetBelowTheContentBox(t *testing.T) {
 	css := mustReadTemplate("templates/base.css")
 	if !strings.Contains(css, ".band-bottom") {
 		t.Fatal("base.css no longer styles the footer band")
 	}
+	found := false
 	for _, line := range strings.Split(css, "\n") {
 		if !strings.Contains(line, "bottom:") {
 			continue
@@ -126,9 +129,20 @@ func TestFooterBandIsNotOffsetBelowTheContentBox(t *testing.T) {
 		if !strings.Contains(line, "band") && !strings.Contains(strings.TrimSpace(line), "position:") {
 			continue
 		}
-		if strings.Contains(line, "bottom: -") {
-			t.Errorf("footer band is offset below the content box (%q), which adds a "+
-				"blank page to every short report", strings.TrimSpace(line))
+		if strings.Contains(line, "bottom: 0") {
+			found = true
+			break
 		}
+	}
+	if !found {
+		t.Errorf("footer band must use bottom: 0 to avoid extra blank page; got %q",
+			func() string {
+				for _, line := range strings.Split(css, "\n") {
+					if strings.Contains(line, "bottom:") && strings.Contains(line, "band") {
+						return strings.TrimSpace(line)
+					}
+				}
+				return "not found"
+			}())
 	}
 }

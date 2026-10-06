@@ -152,7 +152,7 @@ func (b *Browser) Render(ctx context.Context, html string) ([]byte, error) {
 	// Chrome reports success on stderr, so its output is captured for the error
 	// message and never treated as a failure on its own.
 	cmd := exec.CommandContext(ctx, b.bin,
-		"--headless",
+		"--headless=new",
 		"--disable-gpu",
 		// The document is generated locally from escaped template data and
 		// loads no scripts, so the sandbox protects nothing here — but it is
@@ -164,6 +164,9 @@ func (b *Browser) Render(ctx context.Context, html string) ([]byte, error) {
 		"--disable-extensions",
 		"--disable-background-networking",
 		"--disable-sync",
+		"--disable-background-timer-throttling",
+		"--disable-font-subpixel-positioning",
+		"--font-render-hinting=none",
 		// Page geometry comes from the template's @page rule; the browser's own
 		// header and footer would otherwise be printed on top of it.
 		"--no-pdf-header-footer",

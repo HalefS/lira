@@ -3,9 +3,6 @@
 <head>
 <meta charset="utf-8" />
 <title>LIRA Daily Report — {{.Date}}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
 {{BASE_CSS}}
 
@@ -89,13 +86,13 @@
   </div>
 
   {{if .AptIssues}}
-  <div class="section">
+  <div class="section" style="break-before: page;">
     <h2>Apartment issues <span class="count">({{len .AptIssues}})</span></h2>
     <table>
       <colgroup>
-        <col style="width:7%" /><col style="width:10%" /><col style="width:25%" />
-        <col style="width:22%" /><col style="width:8%" /><col style="width:9%" />
-        <col style="width:19%" />
+        <col style="width:15mm" /><col style="width:20mm" /><col style="width:45mm" />
+        <col style="width:40mm" /><col style="width:15mm" /><col style="width:15mm" />
+        <col style="width:35mm" />
       </colgroup>
       <thead>
         <tr>
@@ -108,11 +105,11 @@
         <tr{{if .FalsePositive}} class="fp"{{end}}>
           <td class="cell-loc">{{.Location}}</td>
           <td><span class="pill" style="background:{{.TypeColor}}1F;color:{{.TypeColor}}">{{.Type}}</span></td>
-          <td>
+          <td class="cell-problem">
             {{.Problem}}
             {{if .FalsePositive}}<div><span class="fp-badge">FALSE POSITIVE</span></div>{{end}}
           </td>
-          <td class="cell-muted">{{.Resolution}}</td>
+          <td class="cell-resolution cell-muted">{{.Resolution}}</td>
           <td class="cell-time">{{.Time}}</td>
           <td><span class="pill badge-{{.StatusClass}}">{{.Status}}</span></td>
           <td>
@@ -129,13 +126,13 @@
   {{end}}
 
   {{if .DeptIssues}}
-  <div class="section">
+  <div class="section" style="break-before: page;">
     <h2>Department issues <span class="count">({{len .DeptIssues}})</span></h2>
     <table>
       <colgroup>
-        <col style="width:11%" /><col style="width:10%" /><col style="width:24%" />
-        <col style="width:21%" /><col style="width:8%" /><col style="width:9%" />
-        <col style="width:17%" />
+        <col style="width:18mm" /><col style="width:20mm" /><col style="width:42mm" />
+        <col style="width:38mm" /><col style="width:15mm" /><col style="width:15mm" />
+        <col style="width:32mm" />
       </colgroup>
       <thead>
         <tr>
@@ -148,11 +145,11 @@
         <tr{{if .FalsePositive}} class="fp"{{end}}>
           <td class="cell-loc">{{.Location}}</td>
           <td><span class="pill" style="background:{{.TypeColor}}1F;color:{{.TypeColor}}">{{.Type}}</span></td>
-          <td>
+          <td class="cell-problem">
             {{.Problem}}
             {{if .FalsePositive}}<div><span class="fp-badge">FALSE POSITIVE</span></div>{{end}}
           </td>
-          <td class="cell-muted">{{.Resolution}}</td>
+          <td class="cell-resolution cell-muted">{{.Resolution}}</td>
           <td class="cell-time">{{.Time}}</td>
           <td><span class="pill badge-{{.StatusClass}}">{{.Status}}</span></td>
           <td>
