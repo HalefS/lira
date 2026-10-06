@@ -136,7 +136,18 @@ type Shift struct {
 	// the scanner and never stored, so a flag cannot disagree with the two times it
 	// is about.
 	Overnight bool `json:"overnight"`
-	Active    bool `json:"active"`
+
+	// Color is an optional #rrggbb tint: "" means unset, which is the normal
+	// state and renders exactly as this shift did before the column existed.
+	// A string rather than a pointer because there is no third state to tell
+	// apart -- NormaliseShiftColor makes "unset" and "empty" the same value, so a
+	// pointer would buy nothing and cost a sql.NullString in the scanner and a
+	// nil branch in every reader.
+	//
+	// Never omitempty: "color": "" is the wire contract that lets a client tell
+	// "no tint" from "a server too old to have heard of tints".
+	Color  string `json:"color"`
+	Active bool   `json:"active"`
 
 	// AssignmentCount is how many cells across the whole team use this shift. Read
 	// alongside the row so the delete prompt can say what deleting it would cost
@@ -205,6 +216,16 @@ func ValidateShift(v *validator.Validator, s *Shift) {
 	s.StartTime = strings.TrimSpace(s.StartTime)
 	s.EndTime = strings.TrimSpace(s.EndTime)
 
+	// Folded here rather than in the handler, so the stored value is canonical
+	// whichever of the three writers -- create, update, retire -- produced it, and
+	// so the Settings list cannot show two visually identical tints as different
+	// colours. Placed before the name check rather than after the time checks'
+	// early return: a bad tint and a bad name are independent complaints and
+	// neither should mask the other.
+	color, colorOK := NormaliseShiftColor(s.Color)
+	s.Color = color
+	v.Check(colorOK, "color", "must be a hex color in #RRGGBB format")
+
 	v.Check(s.Name != "", "name", "must be provided")
 	v.Check(len(s.Name) <= MaxShiftNameLength, "name",
 		fmt.Sprintf("must not be more than %d characters", MaxShiftNameLength))
@@ -228,13 +249,59 @@ func ValidateShift(v *validator.Validator, s *Shift) {
 	v.AddError("end_time", "must not be the same time as the start time")
 }
 
+// NormaliseShiftColor turns whatever a client sent into either the canonical
+// lower-case "#rrggbb" or "" for "no tint", and reports whether it was one of
+// those.
+//
+// Three rules, each for a reason. Surrounding whitespace goes because
+// ValidateShift trims every other field in place and a colour pasted out of a
+// stylesheet arrives with a trailing space often enough to be worth a trim
+// rather than a 422. The leading '#' is optional in and mandatory out, so a
+// reader never has to know whether it is there. Case folds to LOWER, which is
+// what <input type="color"> hands back, so the round trip stores the string the
+// browser already produced instead of reformatting it.
+//
+// "" means unset, not invalid. Clearing the tint in the editor sends "", and that
+// has to be a legal outcome distinct from a malformed value -- the same reason
+// DayAssignment.ShiftID is a pointer.
+//
+// Reuses hexColorPattern from issue_types.go rather than declaring a second
+// regexp for the same thing, which is also what makes the database CHECK in
+// migration 000030 and this function the same expression.
+func NormaliseShiftColor(raw string) (string, bool) {
+	c := strings.TrimSpace(raw)
+	if c == "" {
+		return "", true
+	}
+	if !strings.HasPrefix(c, "#") {
+		c = "#" + c
+	}
+	c = strings.ToLower(c)
+	if !hexColorPattern.MatchString(c) {
+		// Empty even on failure, so the field is always canonical-or-blank and no
+		// future caller can reach the INSERT having skipped the check.
+		return "", false
+	}
+	return c, true
+}
+
+// colorArg lifts a normalised tint to the value the column stores: nil for "no
+// tint", so an unset tint is absent rather than an empty string that the CHECK
+// would then also have to allow.
+func colorArg(c string) any {
+	if c == "" {
+		return nil
+	}
+	return c
+}
+
 // shiftColumns is every field of a shift in one string, so the scan order below
 // cannot drift from the select list. The assignment count is here for every read
 // rather than only for the list, because maintenance_schedules already reads its
 // check count on the single-row Get too, and at a dozen shifts over a few dozen
 // cells the correlated count costs nothing.
 const shiftColumns = `
-	s.id, s.created_at, s.updated_at, s.name, s.start_time, s.end_time,
+	s.id, s.created_at, s.updated_at, s.name, s.start_time, s.end_time, s.color,
 	s.active, s.created_by, s.updated_by, s.version,
 	(SELECT COUNT(*) FROM shift_assignments a WHERE a.shift_id = s.id)`
 
@@ -249,19 +316,20 @@ const shiftColumns = `
 // user_id and weekday that ScheduleModel.Week prepends to the select list. It is
 // variadic, and that is not tidiness: sql.Rows.Scan advances a cursor per call, so
 // reading the two leading columns and calling this separately would read the
-// shift's eleven columns from the *following row*. Every destination for one row
+// shift's twelve columns from the *following row*. Every destination for one row
 // has to go into one call.
 func scanShift(scan func(dest ...any) error, lead ...any) (*Shift, error) {
 	var (
 		s                    Shift
+		tint                 sql.NullString
 		createdBy, updatedBy sql.NullInt64
 		count                int64
 	)
-	dest := make([]any, 0, len(lead)+11)
+	dest := make([]any, 0, len(lead)+12)
 	dest = append(dest, lead...)
 	dest = append(dest,
 		&s.ID, &s.CreatedAt, &s.UpdatedAt, &s.Name, &s.StartTime,
-		&s.EndTime, &s.Active, &createdBy, &updatedBy, &s.Version, &count)
+		&s.EndTime, &tint, &s.Active, &createdBy, &updatedBy, &s.Version, &count)
 	if err := scan(dest...); err != nil {
 		return nil, err
 	}
@@ -270,6 +338,12 @@ func scanShift(scan func(dest ...any) error, lead ...any) (*Shift, error) {
 	}
 	if updatedBy.Valid {
 		s.UpdatedBy = &updatedBy.Int64
+	}
+	// A NULL tint leaves Color "", which is the "no tint" case every reader
+	// already handles, so an untinted shift is indistinguishable from one that
+	// predates migration 000030 -- which is exactly what it is.
+	if tint.Valid {
+		s.Color = tint.String
 	}
 	s.AssignmentCount = int(count)
 	// Derived here so the flag and the two times it is about can never be stored
@@ -355,15 +429,15 @@ func (m ShiftModel) Get(id int64) (*Shift, error) {
 // on insert -- the two columns only diverge once somebody else edits it.
 func (m ShiftModel) Create(s *Shift) error {
 	query := `
-		INSERT INTO shifts (name, start_time, end_time, active, created_by, updated_by)
-		VALUES ($1, $2, $3, $4, $5, $5)
+		INSERT INTO shifts (name, start_time, end_time, color, active, created_by, updated_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $6)
 		RETURNING id, created_at, updated_at, version`
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	err := m.DB.QueryRowContext(ctx, query,
-		s.Name, s.StartTime, s.EndTime, s.Active, s.CreatedBy).
+		s.Name, s.StartTime, s.EndTime, colorArg(s.Color), s.Active, s.CreatedBy).
 		Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt, &s.Version)
 	if err != nil {
 		if isDuplicateShift(err) {
@@ -384,16 +458,16 @@ func (m ShiftModel) Create(s *Shift) error {
 func (m ShiftModel) Update(s *Shift) error {
 	query := `
 		UPDATE shifts
-		SET name=$1, start_time=$2, end_time=$3, active=$4,
-		    updated_at=NOW(), updated_by=$5, version=version+1
-		WHERE id=$6 AND version=$7
+		SET name=$1, start_time=$2, end_time=$3, color=$4, active=$5,
+		    updated_at=NOW(), updated_by=$6, version=version+1
+		WHERE id=$7 AND version=$8
 		RETURNING updated_at, version`
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	err := m.DB.QueryRowContext(ctx, query,
-		s.Name, s.StartTime, s.EndTime, s.Active, s.UpdatedBy, s.ID, s.Version).
+		s.Name, s.StartTime, s.EndTime, colorArg(s.Color), s.Active, s.UpdatedBy, s.ID, s.Version).
 		Scan(&s.UpdatedAt, &s.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrEditConflict
@@ -459,10 +533,20 @@ type ScheduleMember struct {
 	Days [7]*Shift `json:"days"`
 }
 
-// ScheduleWeek is the rota as the grid consumes it.
+// ScheduleWeek is the rota as the grid consumes it, and the dated exceptions to it.
+//
+// Absences is a flat list of RANGES rather than something per member, for the
+// reason AbsenceRef gives: a per-member per-day array cannot say whether a run
+// ends inside the week on screen or carries on past it. A flat list also keeps
+// Days untouched, which matters because Days is the recurring pattern and
+// everything about how this feature reads it is built on that staying put.
+//
+// Only absences touching the week on screen appear, so a year of holidays is not
+// shipped to a noticeboard that shows seven days.
 type ScheduleWeek struct {
-	Week    *Week             `json:"week"`
-	Members []*ScheduleMember `json:"members"`
+	Week     *Week             `json:"week"`
+	Members  []*ScheduleMember `json:"members"`
+	Absences []*AbsenceRef     `json:"absences"`
 }
 
 // ScheduleModel is the recurring pattern itself: who is on what, on which weekday.
@@ -473,20 +557,28 @@ type ScheduleModel struct {
 
 // Week returns the rota for the week containing ref.
 //
-// TWO queries, both constant in the number of members, and that is the whole point.
+// THREE queries, all constant in the number of members, and that is the whole point.
 // Reading per member would be members × 7 queries, which is the N+1 shape this
 // codebase has already had to unpick twice (loadIssueChildren,
 // LCUModel.testsForUnits).
 //
 //  1. every user, with the five fields a row needs and nothing else;
-//  2. every assignment, joined to its shift.
+//  2. every assignment, joined to its shift;
+//  3. every absence touching the week on screen.
 //
-// The second query has no WHERE clause, and that is correct rather than an
-// oversight: the rota is the recurring pattern, so ALL of the assignments ARE what
-// the grid shows. There is no per-date slice to narrow to, and a filter here is
-// the "filter by week" mistake that makes the rota come back with seven cells for
-// one week and none for another. The whole table is bounded by members × 7 -- a
+// ONLY THE THIRD IS DATE-FILTERED, and the difference is the entire design of this
+// feature rather than an inconsistency. Query 2 has no WHERE clause, and must not
+// grow one: the rota is the recurring pattern, so ALL of the assignments ARE what
+// the grid shows. There is no per-date slice to narrow it to, and a filter there
+// is the "filter by week" mistake that makes the rota come back with seven cells
+// for one week and none for another. The whole table is bounded by members × 7 -- a
 // few dozen rows -- so it is a range scan on the left of the primary key.
+//
+// Query 3 is the first genuinely date-ranged read in this function, and it is
+// bounded by exactly the seven dates the grid prints. It filters the EXCEPTIONS to
+// the pattern; it does not narrow the pattern. If you are reading this and
+// wondering whether to add a week filter to query 2: that is the mistake, and the
+// symptom is an empty grid rather than an error.
 //
 // Deactivated members are included, ordered last. Accounts are deactivated rather
 // than deleted (deactivateUserHandler only flips active=false and revokes tokens),
@@ -504,8 +596,9 @@ func (m ScheduleModel) Week(ref time.Time) (*ScheduleWeek, error) {
 	defer cancel()
 
 	out := &ScheduleWeek{
-		Week:    WeekOf(ref),
-		Members: []*ScheduleMember{},
+		Week:     WeekOf(ref),
+		Members:  []*ScheduleMember{},
+		Absences: []*AbsenceRef{},
 	}
 
 	rows, err := m.DB.QueryContext(ctx, `
@@ -544,6 +637,11 @@ func (m ScheduleModel) Week(ref time.Time) (*ScheduleWeek, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Deferred as the safety net for the early returns inside the loop below, and
+	// closed explicitly after it as well -- an open sql.Rows holds its connection,
+	// so deferring alone would issue the absences query at the bottom while this
+	// cursor is still checked out. Invisible at the default 25 connections, and a
+	// deadlock at -db-max-open-conns=1.
 	defer shiftRows.Close()
 
 	for shiftRows.Next() {
@@ -551,7 +649,7 @@ func (m ScheduleModel) Week(ref time.Time) (*ScheduleWeek, error) {
 			userID  int64
 			weekday int
 		)
-		// One Scan for all thirteen columns -- see scanShift on why the two leading
+		// One Scan for all fifteen columns -- see scanShift on why the two leading
 		// ones cannot be read separately.
 		shift, err := scanShift(shiftRows.Scan, &userID, &weekday)
 		if err != nil {
@@ -572,8 +670,28 @@ func (m ScheduleModel) Week(ref time.Time) (*ScheduleWeek, error) {
 		member.Days[weekday-1] = shift
 	}
 	if err := shiftRows.Err(); err != nil {
+		shiftRows.Close()
 		return nil, err
 	}
+	if err := shiftRows.Close(); err != nil {
+		return nil, err
+	}
+
+	// The dated exceptions to everything above, in one read rather than one per
+	// member. Bounded by [week start, week end] BOTH inclusive, which are already
+	// computed as the grid's own first and last day -- so the absences and the seven
+	// columns can never be filtered by different weeks, which would show a holiday
+	// on the wrong day and is the kind of disagreement that is invisible until
+	// somebody is off sick on a day the board says they are working.
+	absences, err := AbsenceModel{DB: m.DB}.InWindow(ctx,
+		out.Week.Start.Time(), out.Week.End.Time())
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range absences {
+		out.Absences = append(out.Absences, a.Ref())
+	}
+
 	return out, nil
 }
 

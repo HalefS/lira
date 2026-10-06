@@ -99,11 +99,29 @@ func (app *application) listScheduleHandler(w http.ResponseWriter, r *http.Reque
 		shifts = []*data.Shift{}
 	}
 
+	// The one redaction on a public response in this feature. The note cannot be
+	// here at all -- data.AbsenceRef has no field for it -- but the KIND can, and
+	// "sick" beside a named colleague on a page with no login is publishing health
+	// information about them. data.PublicKind reduces it to "unavailable" for
+	// anyone who is not a manager, and it is a single function so this list and
+	// listAbsencesHandler cannot drift on who is told what.
+	//
+	// can_edit is computed once and used for both the flag and the redaction. If
+	// they were computed separately and one of them changed, the response could say
+	// can_edit:true and still have redacted the kind -- a client that trusted the
+	// flag would show "Unavailable" to a manager who had recorded "Sick leave".
+	canEdit := app.canEditSchedule(r)
+	for _, a := range week.Absences {
+		a.Kind = data.PublicKind(a.Kind, canEdit)
+	}
+
 	app.writeJSON(w, http.StatusOK, envelope{
 		"week":     week.Week,
 		"members":  week.Members,
 		"shifts":   shifts,
-		"can_edit": app.canEditSchedule(r),
+		"absences": week.Absences,
+		"kinds":    data.AbsenceKinds(),
+		"can_edit": canEdit,
 	}, nil)
 }
 
@@ -143,6 +161,10 @@ func (app *application) createShiftHandler(w http.ResponseWriter, r *http.Reques
 		Name      string `json:"name"`
 		StartTime string `json:"start_time"`
 		EndTime   string `json:"end_time"`
+		// A plain string, not a pointer: a tint that is absent and a tint that is
+		// empty are the same thing, so there is nothing for a pointer to
+		// distinguish. See data.NormaliseShiftColor.
+		Color string `json:"color"`
 	}
 	if err := app.readJSON(w, r, &input); err != nil {
 		app.badRequestResponse(w, r, err)
@@ -154,6 +176,7 @@ func (app *application) createShiftHandler(w http.ResponseWriter, r *http.Reques
 		Name:      input.Name,
 		StartTime: input.StartTime,
 		EndTime:   input.EndTime,
+		Color:     input.Color,
 		// Active defaults to true here rather than being read from the body, so a
 		// client cannot create a shift that is already retired and invisible to
 		// everybody else. Retiring is a separate, deliberate PATCH.
@@ -202,8 +225,15 @@ func (app *application) updateShiftHandler(w http.ResponseWriter, r *http.Reques
 		Name      string `json:"name"`
 		StartTime string `json:"start_time"`
 		EndTime   string `json:"end_time"`
-		Active    *bool  `json:"active"`
-		Version   int    `json:"version"`
+		// A POINTER, for the same reason active is one below, and the consequence is
+		// the whole reason. A plain string here would default to "" when the body
+		// omitted it, and "" means "no tint" -- so every rename from the Settings
+		// inline editor, and every retire, would silently wipe the colour somebody
+		// had chosen. That client sends the whole row every time, which is correct
+		// for a PUT-shaped endpoint and fatal for an omitted field here.
+		Color   *string `json:"color"`
+		Active  *bool   `json:"active"`
+		Version int     `json:"version"`
 	}
 	if err := app.readJSON(w, r, &input); err != nil {
 		app.badRequestResponse(w, r, err)
@@ -225,12 +255,18 @@ func (app *application) updateShiftHandler(w http.ResponseWriter, r *http.Reques
 		Name:      input.Name,
 		StartTime: input.StartTime,
 		EndTime:   input.EndTime,
-		Version:   input.Version,
+		// Defaulted from the stored row so an editor that never mentions a tint
+		// leaves it alone.
+		Color:   existing.Color,
+		Version: input.Version,
 		// active is a pointer so "leave it as it is" is expressible. Defaulting it
 		// to false would silently retire a shift whose editor never mentioned it,
 		// and a retired shift disappears from every picker in the app.
 		Active:    existing.Active,
 		UpdatedBy: &existing.ID,
+	}
+	if input.Color != nil {
+		shift.Color = *input.Color
 	}
 	if input.Active != nil {
 		shift.Active = *input.Active

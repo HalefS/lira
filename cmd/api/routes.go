@@ -178,6 +178,22 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPatch, "/v1/shifts/:id", app.requireAuth(app.requireManager(app.updateShiftHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/shifts/:id", app.requireAuth(app.requireManager(app.deleteShiftHandler)))
 
+	// Absences — the dated exceptions to the rota, so the access is the OPPOSITE of
+	// the rota's own: every one of these is manager-only, including the read.
+	//
+	// The rota grid is public because "who is on tonight" belongs on a noticeboard
+	// anybody can walk past. These records are why somebody is not on tonight, and
+	// the note attached to one is the field a manager types a diagnosis into. So the
+	// grid shows THAT somebody is away and, for anybody who is not a manager, only
+	// that -- while the reasons and the notes stay behind this gate.
+	//
+	// /v1/absences and /v1/absences/:id cannot collide, for the reason the comment
+	// above gives for /v1/schedule: there is no two-segment form of this path.
+	router.HandlerFunc(http.MethodGet, "/v1/absences", app.requireAuth(app.requireManager(app.listAbsencesHandler)))
+	router.HandlerFunc(http.MethodPost, "/v1/absences", app.requireAuth(app.requireManager(app.createAbsenceHandler)))
+	router.HandlerFunc(http.MethodPatch, "/v1/absences/:id", app.requireAuth(app.requireManager(app.updateAbsenceHandler)))
+	router.HandlerFunc(http.MethodDelete, "/v1/absences/:id", app.requireAuth(app.requireManager(app.deleteAbsenceHandler)))
+
 	// Melia Connecta Agents — list for all authenticated users; mutate for managers only
 	router.HandlerFunc(http.MethodGet, "/v1/connecta-agents", app.requireAuth(app.listConnectaAgentsHandler))
 	router.HandlerFunc(http.MethodPost, "/v1/connecta-agents", app.requireAuth(app.requireManager(app.createConnectaAgentHandler)))

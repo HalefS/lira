@@ -47,6 +47,12 @@ type Models struct {
 	Maintenance     MaintenanceModel
 	Shifts          ShiftModel
 	Schedule        ScheduleModel
+	// Absences are a separate model from Schedule, not a method on it: the
+	// rota is a recurring pattern with no dates in it, and a model holding both
+	// eventually grows a method that needs a week argument it has no other use
+	// for. ScheduleModel.Week reads absences itself, so both call sites get them
+	// without either having to remember.
+	Absences AbsenceModel
 }
 
 func NewModels(db *sql.DB) Models {
@@ -70,5 +76,6 @@ func NewModels(db *sql.DB) Models {
 		Maintenance:     MaintenanceModel{DB: db},
 		Shifts:          ShiftModel{DB: db},
 		Schedule:        ScheduleModel{DB: db},
+		Absences:        AbsenceModel{DB: db},
 	}
 }
