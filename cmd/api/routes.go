@@ -25,6 +25,12 @@ func (app *application) routes() http.Handler {
 		http.Redirect(w, r, "/dashboard", http.StatusMovedPermanently)
 	})
 	router.HandlerFunc(http.MethodGet, "/dashboard", app.uiHandler)
+	// The team rota's own page. Public for the same reason its API is: who is on
+	// tonight is a noticeboard, and a manager looking at the rota on a phone at the
+	// front desk should not have to sign in to read it. The page is the same shell
+	// as every other one -- uiHandler serves the single embedded document -- and it
+	// decides what it can show from can_edit, which the API reports per caller.
+	router.HandlerFunc(http.MethodGet, "/schedule", app.uiHandler)
 	// Frontend libraries, embedded in the binary. These paths are not API
 	// paths, so they have to be registered explicitly or the catch-all
 	// redirects them to /dashboard and hands HTML back to a <script> tag.
@@ -149,6 +155,28 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodGet, "/v1/rooms/search", app.requireAuth(app.searchRoomsHandler))
 	router.HandlerFunc(http.MethodPost, "/v1/rooms", app.requireAuth(app.requireManager(app.createRoomHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/rooms/:id", app.requireAuth(app.requireManager(app.deleteRoomHandler)))
+
+	// Weekly team shift rota.
+	//
+	// The two reads are PUBLIC, registered without requireAuth on purpose. A rota
+	// answers "who is on tonight", which belongs on a noticeboard outside the
+	// office and not behind a login; authenticate has already put
+	// data.AnonymousUser in the context by the time any handler runs, so omitting
+	// the wrapper is what makes them public. Each read reports can_edit in its body
+	// so the client can tell an anonymous viewer, a technician and a manager apart
+	// -- the browser holds a token, not a role.
+	//
+	// Everything that writes is manager-only, exactly like the other catalogs.
+	//
+	// /v1/schedule/:user_id is a two-segment path, so it cannot collide with
+	// /v1/schedule: httprouter keeps literal and wildcard parameters apart by
+	// their own position, and there is no segment for a wildcard to sit in.
+	router.HandlerFunc(http.MethodGet, "/v1/schedule", app.listScheduleHandler)
+	router.HandlerFunc(http.MethodPut, "/v1/schedule/:user_id", app.requireAuth(app.requireManager(app.setScheduleHandler)))
+	router.HandlerFunc(http.MethodGet, "/v1/shifts", app.listShiftsHandler)
+	router.HandlerFunc(http.MethodPost, "/v1/shifts", app.requireAuth(app.requireManager(app.createShiftHandler)))
+	router.HandlerFunc(http.MethodPatch, "/v1/shifts/:id", app.requireAuth(app.requireManager(app.updateShiftHandler)))
+	router.HandlerFunc(http.MethodDelete, "/v1/shifts/:id", app.requireAuth(app.requireManager(app.deleteShiftHandler)))
 
 	// Melia Connecta Agents — list for all authenticated users; mutate for managers only
 	router.HandlerFunc(http.MethodGet, "/v1/connecta-agents", app.requireAuth(app.listConnectaAgentsHandler))

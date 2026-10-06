@@ -16,6 +16,11 @@ var (
 	ErrDepartmentRenameClash  = errors.New("department rename would collide with an existing recurring alert")
 	ErrDuplicateConnectaAgent = errors.New("duplicate connecta agent")
 
+	// ErrDuplicateShift: a shift with this name already exists. The name is what
+	// the cell picker shows and what a rota is read by, so two shifts called
+	// "Night" would be indistinguishable on the grid.
+	ErrDuplicateShift = errors.New("duplicate shift")
+
 	ErrDuplicateConsumableItem = errors.New("duplicate consumable item")
 	// ErrDuplicateSupportTicket: this Telefónica ticket id is already logged
 	// against this issue.
@@ -40,6 +45,8 @@ type Models struct {
 	TVSwapAlerts    TVSwapAlertModel
 	LCU             LCUModel
 	Maintenance     MaintenanceModel
+	Shifts          ShiftModel
+	Schedule        ScheduleModel
 }
 
 func NewModels(db *sql.DB) Models {
@@ -61,5 +68,7 @@ func NewModels(db *sql.DB) Models {
 		TVSwapAlerts:    TVSwapAlertModel{DB: db},
 		LCU:             LCUModel{DB: db},
 		Maintenance:     MaintenanceModel{DB: db},
+		Shifts:          ShiftModel{DB: db},
+		Schedule:        ScheduleModel{DB: db},
 	}
 }
