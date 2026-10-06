@@ -87,14 +87,25 @@
   --amber-light: #FFF4DF;
   --green:       #2E8B57;
   --green-light: #EAF6EE;
-  --red:         #D94B4B;
+  /* Red is used as ink on its own wash more often than as a fill, and #D94B4B on
+     --red-light measured 3.57:1 -- passing as large text only, while the SLA
+     breach pill and the overdue badges on the maintenance card are both small.
+     #C13A3A reaches 4.59:1 on the same wash. The dark value is a separate colour
+     for a separate surface; do not assume this one carries over. */
+  --red:         #C13A3A;
   --red-light:   #FBEAEA;
   --red-mid:     #F0B8B8;
   --gray-50:     #FAFAF8;
   --gray-100:    #F5F4F0;
   --gray-200:    #E4E5E7;
   --gray-300:    #D2D4D7;
-  --gray-400:    #7A8490;
+  /* The app's secondary text, and it carries nearly all of it: table headers,
+     stat labels, tile captions, metadata lines, placeholders. #7A8490 measured
+     3.63:1 on --gray-50, 3.80:1 on white and 3.45:1 on --gray-100, so it failed
+     AA on every surface it was used on -- but only in this theme. The dark value
+     below sits at 5.33:1 on its card surface, which is why a dark-only audit
+     never saw it. #5F6A78 clears 4.5:1 on all three. */
+  --gray-400:    #5F6A78;
   --gray-600:    #4B5563;
   --gray-900:    #17202A;
   --radius-sm:   6px;
@@ -106,7 +117,13 @@
 }
 
 html.dark {
-  --blue:        #4C9FE0;
+  /* A dark --blue is mostly ink on a tinted fill rather than a fill itself, and
+     --blue-light is the tint it lands on for every "you are here" state -- the
+     active nav item, the selected chip, the active language button, the printer
+     chip, the avatar, the tick on the chosen room. #4C9FE0 on #123655 measured
+     4.36:1, so all ten of those failed. #5FB0E8 reaches 5.26:1 on the same tint
+     and 6.98:1 on the card surface, which is where the rest of it is used. */
+  --blue:        #5FB0E8;
   --blue-hover:  #79BCEE;
   --blue-light:  #123655;
   --blue-mid:    #1D5F91;
@@ -449,6 +466,17 @@ tbody tr.row-clickable { cursor: pointer; }
   background: var(--red-light); color: var(--red); border: 1px solid var(--red-mid);
 }
 .badge-pending { background: var(--amber-light); color: var(--amber); }
+/* The maintenance card states its urgency three ways -- the 3px left border, the
+   ::before wash and this badge -- and when the badge was a fourth colour the card
+   was arguing with itself: an overdue device carried red everywhere and an amber
+   pill, at 2.54:1. Both of these reuse the .sla-breach pairing above, so the
+   badge and the border it sits beside are the same red from one token.
+   They are not interchangeable with each other, though: overdue is a failure and
+   says so, while "due soon" is a warning, which in this app is --orange. Making
+   that one red would have it shouting in the error colour while its own card
+   border, summary tile and queue dot stayed amber. */
+.badge-overdue { background: var(--red-light);    color: var(--red);    border: 1px solid var(--red-mid); }
+.badge-soon    { background: var(--orange-light); color: var(--orange); border: 1px solid var(--orange); }
 .badge-internet { background: var(--teal-light); color: var(--teal); border: 1px solid var(--teal-mid); }
 .badge-type { background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200); }
 /* "Retired" on a maintenance card. Without a rule of its own it fell through to
@@ -1490,6 +1518,19 @@ html.dark .form-control {
   border-color: var(--gray-300) !important;
   color: var(--gray-900) !important;
 }
+/* Dark --blue is a light accent rather than a dark one, so white ink on it -- the
+   app's main action on every page, "Apt. issue", "Download PDF", all eight
+   "Mark done" buttons -- measured 2.86:1. Dark ink on the same fill gives
+   5.99:1, the same way the dark theme treats that blue as an accent everywhere
+   else it appears.
+   The hover needs its own rule rather than being left to .btn-primary:hover.
+   `html.dark .btn-primary` outranks a single class on that pseudo-class, so
+   without this the hover would never apply in dark at all. It keeps
+   --blue-hover, which in this theme is lighter than --blue rather than darker --
+   the correct direction now that the ink sitting on it is dark, at 8.35:1. */
+html.dark .btn-primary       { background: var(--blue); color: #0B1D2C; }
+html.dark .btn-primary:hover { background: var(--blue-hover); }
+
 html.dark .btn-ghost {
   color: var(--gray-600) !important;
   border-color: var(--gray-300) !important;
@@ -1500,6 +1541,12 @@ html.dark .btn-ghost:hover { background: var(--gray-200) !important; color: var(
    the same way .icon-btn.danger:hover does it. */
 html.dark .btn-danger        { background: var(--red-light) !important; color: var(--red) !important; }
 html.dark .btn-danger:hover  { background: var(--red-mid) !important; }
+
+/* The count of outstanding alerts, on the nav item a technician checks first.
+   Dark --red is a pale salmon, so white on it measured 2.67:1 at 10px. Dark ink
+   on the same fill gives 6.71:1. The light pairing needs no override of its own:
+   it is the light --red on white, which now clears at 5.34:1. */
+html.dark .nav-badge { color: #2A0F0F; }
 
 html.dark .nav-item.active { background: var(--blue-light) !important; color: var(--blue) !important; }
 html.dark .nav-item:hover  { background: var(--gray-200) !important; }
@@ -1524,6 +1571,18 @@ html.dark .badge-slate { background: var(--gray-200) !important; border-color: v
 html.dark .demo-box { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
 html.dark .auth-screen { background: var(--gray-50) !important; }
 html.dark .auth-right  { background: var(--gray-50) !important; }
+   /* The brand panel is the one large surface that is a saturated blue rather than
+      a neutral, so it is the one place where the dark --blue token is used as a
+      background rather than as an accent. That token is a *light* blue: fine as
+      ink on a dark card, wrong as a field behind white text, which lands at 2.4:1
+      -- the sign-in screen, which is the first thing anyone sees. Light mode keeps
+      white on the mid blue at 5.8:1 and the relationship is the same here, white on
+      a blue dark enough to hold it: 12.5:1.
+
+      Using --blue-light rather than a new value also keeps the panel inside the
+      dark theme's own surfaces, so the eye is drawn to the login card on the right
+      rather than to a bright slab on the left. */
+html.dark .auth-left   { background: var(--blue-light) !important; }
 
 @media (max-width: 900px) {
   .stats-grid { grid-template-columns: repeat(2,1fr); }
@@ -5221,27 +5280,34 @@ function Dashboard({ users, stats }) {
 
   return (
     <div ref={barsRef}>
+      {/* The accent on each tile comes from the theme, not from a hex written
+          here. They used to be literals, which meant the dark theme never reached
+          them -- "Resolved" kept the *light* --green at 3.90:1 while its three
+          siblings inherited body ink at 14.36:1, so the least prominent number on
+          the page was the one reporting something good. #639922 was not one of
+          this app's greens at all. Routing all four through tokens lets each page
+          follow the theme with no override of its own. */}
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-label">{t.totalToday}</div>
           <div className="stat-value"><CountUp value={totalIssues}/></div>
-          <div className="stat-sub"><span className="stat-dot" style={{background:'#1769AA'}}></span>{t.aptsAndDepts}</div>
+          <div className="stat-sub"><span className="stat-dot" style={{background:'var(--blue)'}}></span>{t.aptsAndDepts}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">{t.resolved}</div>
-          <div className="stat-value" style={{color:'#2E8B57'}}><CountUp value={resolved}/></div>
-          <div className="stat-sub"><span className="stat-dot" style={{background:'#639922'}}></span>{totalIssues ? Math.round(resolved/totalIssues*100) : 0}{t.resolutionRate}</div>
+          <div className="stat-value" style={{color:'var(--green)'}}><CountUp value={resolved}/></div>
+          <div className="stat-sub"><span className="stat-dot" style={{background:'var(--green)'}}></span>{totalIssues ? Math.round(resolved/totalIssues*100) : 0}{t.resolutionRate}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">{t.avgTime}</div>
           {/* The em dash case gets no unit: "—m" would read as a figure. */}
             <div className="stat-value">{avgNum === null ? avgText : <><CountUp value={avgNum} decimals={1}/><span style={{fontSize:14,fontWeight:400,color:'var(--gray-400)'}}>m</span></>}</div>
-          <div className="stat-sub"><span className="stat-dot" style={{background:'#EF9F27'}}></span>{t.acrossAll}</div>
+          <div className="stat-sub"><span className="stat-dot" style={{background:'var(--amber)'}}></span>{t.acrossAll}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">{t.activeUsers}</div>
           <div className="stat-value"><CountUp value={activeUsers.length}/></div>
-          <div className="stat-sub"><span className="stat-dot" style={{background:'#9FE1CB'}}></span>{activeUsers.map(u=>u.name).join(' · ')||'—'}</div>
+          <div className="stat-sub"><span className="stat-dot" style={{background:'var(--teal-mid)'}}></span>{activeUsers.map(u=>u.name).join(' · ')||'—'}</div>
         </div>
       </div>
       <div className="bottom-grid">
@@ -7956,8 +8022,8 @@ function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit,
           picture is unreadable to a screen reader. */}
       <div className="maint-tags">
         <span className="maint-caption">{typeLabel}</span>
-        {late && <span className="badge badge-pending">{dueText}</span>}
-        {!late && soon && <span className="badge badge-ok" style={{background:'var(--amber-light)',color:'var(--amber)'}}>{dueText}</span>}
+        {late && <span className="badge badge-overdue">{dueText}</span>}
+        {!late && soon && <span className="badge badge-soon">{dueText}</span>}
         {!s.active && <span className="badge badge-slate">{t.maintenanceRetired}</span>}
       </div>
       {/* One fact per icon, so the line reads without labels and wraps cleanly
@@ -8792,19 +8858,23 @@ function ReportsPage({ token, slaMinutes }) {
   const realCount  = report ? report.summary.total_issues - fpCount : 0;
   const fpRate     = report && report.summary.total_issues > 0 ? (fpCount / report.summary.total_issues * 100).toFixed(0) : '0';
 
+  /* Theme tokens rather than hex literals, for the reason given above the
+     Dashboard's own stat grid: written as literals these pinned the tiles to the
+     light palette, so the dark theme left "Resolved" sitting at 3.90:1 against
+     body ink's 14.36:1. */
   const summaryCards = report ? [
-    {label:'Total issues',     value: report.summary.total_issues,  sub:'Apts + Departments',             color:'#1769AA'},
-    {label:'Resolved',         value: report.summary.resolved,      sub:`${report.summary.resolution_rate.toFixed(0)}% rate`, color:'#2E8B57'},
-    {label:'Pending',          value: report.summary.pending,       sub:'Still open',                     color:'#D88A18'},
-    {label:'Avg. time',        value: report.summary.avg_minutes.toFixed(1)+'m', sub:'Per issue',         color:'#1D9E75'},
-    {label:'Total time spent', value: report.summary.total_minutes+'m', sub:'All issues combined',        color:'#1769AA'},
-    {label:'Fastest fix',      value: report.summary.fastest_minutes+'m', sub:'Quickest resolution',     color:'#2E8B57'},
-    {label:'Slowest fix',      value: report.summary.slowest_minutes+'m', sub:'Longest resolution',      color:'#D88A18'},
-    {label:'Apt. issues',      value: report.summary.apt_issues,    sub:'Apartment',                     color:'#1769AA'},
-    {label:'Dept. issues',     value: report.summary.dept_issues,   sub:'Department',                    color:'#1D9E75'},
-    {label:'False positives',  value: fpCount,                      sub:'Nothing was wrong',              color:'#D88A18'},
-    {label:'False positive rate', value: fpRate+'%',                sub:'Of all issues',                  color:'#D88A18'},
-    {label:'Real issues',      value: realCount,                    sub:'Something was wrong',            color:'#2E8B57'},
+    {label:'Total issues',     value: report.summary.total_issues,  sub:'Apts + Departments',             color:'var(--blue)'},
+    {label:'Resolved',         value: report.summary.resolved,      sub:`${report.summary.resolution_rate.toFixed(0)}% rate`, color:'var(--green)'},
+    {label:'Pending',          value: report.summary.pending,       sub:'Still open',                     color:'var(--amber)'},
+    {label:'Avg. time',        value: report.summary.avg_minutes.toFixed(1)+'m', sub:'Per issue',         color:'var(--teal)'},
+    {label:'Total time spent', value: report.summary.total_minutes+'m', sub:'All issues combined',        color:'var(--blue)'},
+    {label:'Fastest fix',      value: report.summary.fastest_minutes+'m', sub:'Quickest resolution',     color:'var(--green)'},
+    {label:'Slowest fix',      value: report.summary.slowest_minutes+'m', sub:'Longest resolution',      color:'var(--amber)'},
+    {label:'Apt. issues',      value: report.summary.apt_issues,    sub:'Apartment',                     color:'var(--blue)'},
+    {label:'Dept. issues',     value: report.summary.dept_issues,   sub:'Department',                    color:'var(--teal)'},
+    {label:'False positives',  value: fpCount,                      sub:'Nothing was wrong',              color:'var(--amber)'},
+    {label:'False positive rate', value: fpRate+'%',                sub:'Of all issues',                  color:'var(--amber)'},
+    {label:'Real issues',      value: realCount,                    sub:'Something was wrong',            color:'var(--green)'},
   ] : [];
 
   const maxType = report ? Math.max(...Object.values(report.by_type), 1) : 1;
