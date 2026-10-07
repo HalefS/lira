@@ -1303,7 +1303,135 @@ html.dark .rota-picker-panel { background: var(--gray-50); border-color: var(--g
 .rota-option.is-abs.active, .rota-option.is-abs:hover { background: var(--blue-light); }
 .rota-option-kind { display: inline-flex; color: var(--abs-ink); flex-shrink: 0; }
 .rota-option-kind svg { width: 14px; height: 14px; }
-.rota-picker-foot {
+/* Rota roster ---------------------------------------------------------------------
+   In Settings, not on the rota page -- see the note above RosterRow for why.
+
+   The only new things here are the row and the section heading. The save bar is
+   .rota-savebar verbatim and the kept-shifts pill is .rota-free verbatim, which is why
+   neither has a block below: reusing them means both are already verified in both
+   themes, and a second copy of either would be a second thing to keep correct.
+
+   --blue INVERTS between themes, so any rule pairing it with --blue-light is correct in
+   both automatically and any rule pairing it with a grey surface has to be read per
+   theme. The only non-token literal here is #fff on the checked tick, matching
+   .btn-primary and .rota-cell.is-away. */
+
+.roster-section {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 16px 0 6px;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--gray-400);
+}
+/* The count sits beside the heading rather than in SetGroup's own badge, because the
+   badge belongs to the collapsed group header and this number changes with every tick --
+   a count that moved while the header is off-screen would be a count nobody saw change.
+   Tabular figures so a row of them lines up as they tick. */
+.roster-count { margin-left: auto; font-family: 'DM Mono', monospace; letter-spacing: 0; }
+
+.roster-list { display: flex; flex-direction: column; }
+/* The rule under the first section, so the two halves read as two halves. --gray-200,
+   the same separator the picker's absence split uses. */
+.roster-list + .roster-section { border-top: 1px solid var(--gray-200); }
+
+.roster-row {
+  position: relative;              /* the hidden input is absolutely placed */
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 6px; border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.roster-row:hover { background: var(--gray-100); }
+html.dark .roster-row:hover { background: var(--gray-200); }
+
+/* opacity 0 rather than display:none, so the input stays focusable and keeps its native
+   checkbox semantics -- a screen reader announces "checkbox, checked" without a word of
+   ARIA from us, and that is the whole accessibility story of this control. */
+.roster-box {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; opacity: 0; cursor: pointer;
+}
+/* :focus-within, not :focus-visible on the input: a zero-opacity input cannot draw a ring
+   of its own. .rota-abs-kind and .rota-tint already do exactly this. */
+.roster-row:focus-within { outline: 2px solid var(--blue); outline-offset: -2px; }
+
+.roster-tick {
+  flex: 0 0 auto;
+  width: 20px; height: 20px; border-radius: var(--radius-sm);
+  /* --gray-400, not --gray-300. The lighter token is the right hairline for a border
+     around a filled cell and the wrong one for the single control that tells you a
+     checkbox is there: measured at 1.42:1 light and 1.58:1 dark against a 3:1 floor
+     for a non-text indicator, so the box was invisible until the pointer landed on it.
+     --gray-400 measures 5.5:1 and 5.33:1 on this same row. */
+  border: 1.5px solid var(--gray-400); background: var(--gray-50);
+  display: flex; align-items: center; justify-content: center;
+  /* Two inks on one fill, because --blue INVERTS between themes. White is right on the
+     dark blue (5.77:1) and unreadable on the pale one (2.37:1, measured) -- the same
+     trap as the run-count pill and the range multiplier, and written here from the
+     pattern rather than measured, so it got wrong a third time. --gray-700 resolves to
+     the same dark ink in BOTH themes, which is why one dark rule covers it. */
+  color: #FFFFFF;
+}
+html.dark .roster-tick { color: var(--gray-700); }
+.roster-tick svg { width: 13px; height: 13px; }
+.roster-box:checked ~ .roster-tick { background: var(--blue); border-color: var(--blue); }
+/* Checked, the border is the fill, so it is not a separate contrast question -- but the
+   FOCUS ring still has to clear 3:1 against whatever it lands on. */
+.roster-row:focus-within .roster-tick { border-color: var(--blue); }
+
+/* min-width: 0 so a long name TRUNCATES instead of pushing the badges off the row --
+   the .set-group-label failure verbatim, and a 34-character Portuguese name will hit it.
+   flex-shrink: 0 on the pill instead, so the count stays whole while the name gives. */
+.roster-id { flex: 1 1 auto; min-width: 0; }
+.roster-name {
+  display: block; font-size: 13.5px; font-weight: 500; color: var(--gray-900);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* A DEACTIVATED ACCOUNT, not an excluded person. Dimmed and badged, never hidden, and
+   never the reason the row is in the second section -- the two are orthogonal and this
+   stylesheet keeps them orthogonal. Same t.inactive string the Team page shows. */
+.roster-row.is-inactive .roster-name { color: var(--gray-600); font-weight: 400; }
+.roster-inactive, .roster-role {
+  display: inline-block; margin: 3px 5px 0 0; border-radius: 10px;
+  font-size: 10px; font-weight: 600; padding: 2px 7px;
+  background: var(--gray-100); color: var(--gray-600);
+}
+html.dark .roster-inactive,
+html.dark .roster-role { background: var(--gray-200); color: var(--gray-600); }
+
+/* The kept-shifts pill IS .rota-free, so it needs no rule -- only this much, so it
+   survives a long name at 380px while the name truncates instead. */
+.roster-row .rota-free, .roster-offlist-row .rota-free { flex-shrink: 0; margin-top: 0; }
+
+/* The confirmation list. Same three class names as .confirm-modal's body; only the list
+   is new. */
+.roster-offlist {
+  list-style: none; margin: 10px 0 0; padding: 0;
+  max-height: 210px; overflow-y: auto;
+}
+.roster-offlist-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 4px; border-bottom: 1px solid var(--gray-200);
+}
+.roster-offlist-row:last-child { border-bottom: 0; }
+.roster-offlist-name {
+  flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 500; color: var(--gray-900);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* The quiet link from the rota page into Settings. It sits with the week controls rather
+   than near the grid, because it navigates rather than acts on what is below it. */
+.rota-rosterlink {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-left: auto; padding: 6px 11px;
+  border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+  background: none; color: var(--gray-600);
+  font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 500;
+  white-space: nowrap; cursor: pointer;
+}
+.rota-rosterlink:hover { border-color: var(--blue-mid); color: var(--blue); background: var(--blue-light); }
+.rota-rosterlink svg { width: 14px; height: 14px; }
+html.dark .rota-rosterlink { border-color: var(--gray-300); color: var(--gray-600); }
+html.dark .rota-rosterlink:hover { color: var(--gray-900); }.rota-picker-foot {
   margin-top: 4px; padding: 6px 10px 4px; font-size: 11.5px; color: var(--gray-400);
   border-top: 1px solid var(--gray-100);
 }
@@ -3494,6 +3622,50 @@ const T = {
     rotaCellLabelAway: '{name}, away, {kind}',
     rotaFreeAway: 'Away all week',
     rotaAbsOnlyGrid: 'Nobody is on a shift this week, but people are marked away.',
+    // -- Rota membership (who is on the rota) --------------------------------
+    // In Settings rather than on the rota page, and reachable from it by one
+    // manager-only link. Configuration, edited a few times a year, blast radius the
+    // whole team -- which is the same argument that puts shift templates in Settings.
+    rotaManageRoster: 'Team on the rota',
+    rosterTitle: 'Who is on the rota',
+    rosterTitleSub: 'Choose which people appear on the team rota. Their shifts are kept if they are removed.',
+    // The one sentence that keeps two orthogonal concepts apart. Deactivating changes
+    // the ACCOUNT; unticking changes the BOARD. Both make a row change, which is exactly
+    // why a manager has to be told which gesture does what.
+    rosterExcludeNote: 'This is not the same as deactivating an account. Unticking somebody here takes their name off the rota and hides their shifts. Their login still works. To stop somebody signing in, deactivate them on the Team page.',
+    rosterRoleManager: 'Manager',
+    // The reassurance, at the row and again in the confirmation. A manager who believes
+    // the shifts are deleted will untick nobody, forever.
+    rosterKeepsCells: '{count} shifts kept',
+    rosterOnRotaHead: 'On the rota',
+    rosterOffRotaHead: 'Not on the rota',
+    rosterCount: '{count} people',
+    rosterNoneOn: 'Nobody is on the rota yet.',
+    rosterEveryoneOn: 'Every account is on the rota.',
+    rosterReadOnly: 'Only a manager can change who is on the rota.',
+    rosterLoaded: '{count} people on the rota.',
+    rosterUnsavedOne: 'One person has an unsaved change.',
+    rosterUnsaved: '{count} people have unsaved changes.',
+    rosterSave: 'Save team',
+    rosterSaved: 'Team on the rota updated',
+    // Removal is stated as reversible in the body copy, and the dialog names every
+    // affected person rather than counting them -- "3 people" is not something anybody
+    // can check against the five boxes they just ticked.
+    rosterOffTitle: 'Take {count} people off the rota?',
+    rosterOffTitleOne: 'Take one person off the rota?',
+    rosterOffBody: 'Their name comes off the rota. The shifts already assigned are kept, and come back untouched if they are added again.',
+    rosterOffYes: 'Take them off',
+    rosterEmptyTitle: 'Put nobody on the rota?',
+    rosterEmptyBody: 'The rota will still be here. Every row disappears from it until somebody is added back.',
+    rosterEmptyYes: 'Put nobody on',
+    // -- Rota empty states. The third is manager-only, because the roster read needs
+    //    a token, and a noticeboard must not print it to the public. -------------
+    rotaSubtitleEmpty: 'Nobody to show yet',
+    rotaNobodyOnRotaHead: 'Nobody is on this rota',
+    rotaNobodyOnRotaBody: 'Shifts are defined, but nobody has been added to the rota. Add people to the rota to show them here.',
+    rotaDefineTeam: 'Choose who is on',
+    rotaNoAccountsHead: 'No accounts exist yet',
+    rotaNoAccountsBody: 'The rota needs at least one person before it can show anything. Add somebody on the Team page.',
     // -- Range selection --------------------------------------------------------
     rotaSelOneDay: '1 day selected',
     rotaSelDays: '{count} days selected',
@@ -4250,6 +4422,42 @@ const T = {
     rotaCellLabelAway: '{name}, ausente, {kind}',
     rotaFreeAway: 'Ausente toda a semana',
     rotaAbsOnlyGrid: 'Esta semana ninguém tem turno atribuído, mas há pessoas marcadas como ausentes.',
+    // -- Equipa da escala (quem está na escala) -------------------------------
+    rotaManageRoster: 'Equipa na escala',
+    rosterTitle: 'Quem está na escala',
+    rosterTitleSub: 'Escolha quem aparece na escala da equipa. Os turnos mantêm-se se alguém for removido.',
+    // A frase que mantém separados dois conceitos ortogonais. Desativar muda a CONTA;
+    // desmarcar muda a ESCALA.
+    rosterExcludeNote: 'Isto não é o mesmo que desativar uma conta. Ao desmarcar alguém aqui, o nome sai da escala e os turnos ficam escondidos. O login continua a funcionar. Para impedir que alguém entre, desative a conta na página da Equipa.',
+    rosterRoleManager: 'Gestor',
+    // A garantia, na linha e outra vez na confirmação. Quem acredite que os turnos
+    // são apagados nunca desmarca ninguém.
+    rosterKeepsCells: '{count} turnos mantidos',
+    rosterOnRotaHead: 'Na escala',
+    rosterOffRotaHead: 'Fora da escala',
+    rosterCount: '{count} pessoas',
+    rosterNoneOn: 'Ainda não há ninguém na escala.',
+    rosterEveryoneOn: 'Todas as contas estão na escala.',
+    rosterReadOnly: 'Só um gestor pode alterar quem está na escala.',
+    rosterLoaded: '{count} pessoas na escala.',
+    rosterUnsavedOne: 'Uma pessoa tem uma alteração por guardar.',
+    rosterUnsaved: '{count} pessoas têm alterações por guardar.',
+    rosterSave: 'Guardar equipa',
+    rosterSaved: 'Equipa da escala atualizada',
+    rosterOffTitle: 'Retirar {count} pessoas da escala?',
+    rosterOffTitleOne: 'Retirar uma pessoa da escala?',
+    rosterOffBody: 'O nome sai da escala. Os turnos já atribuídos são mantidos e voltam intactos se a pessoa voltar a ser adicionada.',
+    rosterOffYes: 'Retirar',
+    rosterEmptyTitle: 'Não pôr ninguém na escala?',
+    rosterEmptyBody: 'A escala continua a existir. Todas as linhas desaparecem dela até alguém voltar a ser adicionado.',
+    rosterEmptyYes: 'Não pôr ninguém',
+    // -- Estados vazios da escala ---------------------------------------------
+    rotaSubtitleEmpty: 'Ainda não há ninguém para mostrar',
+    rotaNobodyOnRotaHead: 'Não está ninguém nesta escala',
+    rotaNobodyOnRotaBody: 'Os turnos estão definidos, mas ninguém foi adicionado à escala. Adicione pessoas à escala para as mostrar aqui.',
+    rotaDefineTeam: 'Escolher quem está',
+    rotaNoAccountsHead: 'Ainda não existem contas',
+    rotaNoAccountsBody: 'A escala precisa de pelo menos uma pessoa antes de poder mostrar alguma coisa. Adicione alguém na página da Equipa.',
     // -- Selecção de intervalos -------------------------------------------------
     rotaSelOneDay: '1 dia seleccionado',
     rotaSelDays: '{count} dias seleccionados',
@@ -10789,7 +10997,20 @@ function SetGroup({ id, icon, title, sub, count, level, defaultOpen, children })
 
   const Heading = level === 1 ? 'h3' : 'h2';
   return (
-    <section className={'set-group' + (open ? ' open' : '') + (level === 1 ? ' set-group--sub' : '')}>
+    /* The id goes on the SECTION, not only in the aria-controls string below.
+
+       SettingsPage's focusGroup effect finds its target with
+       document.getElementById(focusGroup), so a group whose id exists only inside
+       `id + '-body'` is invisible to it: the effect returns early and opens nothing.
+       That silently broke every cross-page link into a Settings group -- including the
+       rota's own "Define shifts" empty-state button, whose entire purpose is to land a
+       manager on the shift catalog. Nothing errored and the destination page was right,
+       which is why it went unnoticed: correct page, wrong target.
+
+       The section is the element that has to be found, because that is what the effect
+       walks up from and what scrollIntoView scrolls to. */
+    <section id={id}
+      className={'set-group' + (open ? ' open' : '') + (level === 1 ? ' set-group--sub' : '')}>
       <Heading style={{margin:0}}>
         <button type="button" className="set-group-head"
           aria-expanded={open} aria-controls={id + '-body'} onClick={toggle}>
@@ -11770,6 +11991,387 @@ function ShiftTintButton({ t, shift, onPick, openUp }) {
   );
 }
 
+/* Who is on the team rota. In Settings, not on the rota page.
+
+   That location is not incidental. The rota page is PUBLIC -- it is a noticeboard -- and
+   the only gate it has is can_edit. Any control near the "6 people, 4 shifts" summary
+   would either be rendered for everybody or appear only once a session resolves, in
+   which case the grid re-flows under the manager's cursor as they sign in. Worse,
+   membership changes CHANGE the grid, so a control that mutates the thing immediately
+   below it -- on a page anonymous visitors are reading at the same time -- invites the
+   "did I just delete Marco?" panic.
+
+   Settings already holds the reasoning: "the shift templates are in Settings rather than
+   on the rota page because they are configuration, edited rarely, by somebody who knows
+   the hotel's hours, while the rota itself is edited often". Rota membership is MORE
+   configuration than shift templates -- edited a few times a year, blast radius the whole
+   team. So it belongs beside them, in a group of its own, reached from the rota page by
+   one quiet manager-only link.
+
+   `picked` below is deliberately NOT the rota's cell draft and lives in a different
+   component entirely. dirtyIds diffs the draft against data.members by days[i].id, so a
+   membership change sharing that state would read as cell edits and the rota's save bar
+   would count people who edited nothing. */
+
+/* One row of the picker.
+   label > input, visually hidden, tick drawn on a span -- the same shape as
+   .rota-abs-kind and .rota-tint, so the file now has three multi-select-style controls
+   and one implementation of it.
+
+   The label WRAPS the whole row, which is what puts the badges and the kept-shifts count
+   into the accessible name for free: a screen reader announces "Marco Silva, 3 shifts
+   kept" rather than just the name. */
+function RosterRow({ t, m, checked, onToggle, showCells }) {
+  return (
+    <label className={'roster-row' + (m.active ? '' : ' is-inactive')}>
+      <input type="checkbox" className="roster-box"
+        checked={!!checked}
+        onChange={() => onToggle(m.user_id)}/>
+      <span className="roster-tick" aria-hidden="true">{checked ? Ic.check : null}</span>
+
+      <Avatar name={m.name} idx={m.avatar_idx} size="sm"/>
+
+      <span className="roster-id">
+        <span className="roster-name">{m.name}</span>
+        {/* Role is a fact about the ACCOUNT, not about rota membership, so it is a
+            badge and never a reason to be excluded. */}
+        {m.role === 'manager' && <span className="roster-role">{t.rosterRoleManager}</span>}
+        {/* Deactivated is a different concept from excluded and gets its own badge.
+            t.inactive is reused verbatim so one concept has one name across the app --
+            it is the same string the Team page shows. */}
+        {m.active === false && <span className="roster-inactive">{t.inactive}</span>}
+      </span>
+
+      {/* The "nothing is lost" sentence, and the only place it can live.
+
+          Shown in the OFF-rota section only. On the rota it is redundant -- an included
+          person with cells is just a working rota, which the grid already shows -- while
+          off the rota it is the entire difference between a reversible board change and
+          something that reads as erasure. That asymmetry is also why the picker needs
+          two sections rather than one.
+
+          Grey, reusing .rota-free, because nothing here is an alarm. A row of "you are
+          about to lose 12 shifts" would be arithmetically true, operationally
+          irrelevant and emotionally decisive in exactly the wrong direction. */}
+      {showCells && m.assigned_cells > 0 && (
+        <span className="rota-free is-away">
+          {Ic.slash}
+          {t.rosterKeepsCells.replace('{count}', m.assigned_cells)}
+        </span>
+      )}
+    </label>
+  );
+}
+
+/* The picker. One Save writes the whole set; there is no per-toggle write.
+
+   Immediate per-toggle writes would be five PUTs for five boxes, a mid-sequence failure
+   that leaves the roster half-applied with no record of what was intended, and no place
+   to summarise what is about to happen -- which is the whole answer to "tick five boxes
+   and close the tab". The backend takes a whole set precisely so this can be one
+   deliberate act. */
+function RosterCard({ token, setToast }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+
+  const [data, setData] = useState(null);
+  // A Set of user_ids, NOT a draft, and deliberately not shaped like one. See the note
+  // above RosterRow about dirtyIds.
+  const [picked, setPicked] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [announce, setAnnounce] = useState('');
+  const [confirmOff, setConfirmOff] = useState(null);
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
+
+  // Rebuild `picked` from the PAYLOAD on every load, never from what this client last
+  // sent. The roster's truth is the server's answer, and a rejected write must not be
+  // able to leave a checkbox disagreeing with it.
+  const load = useCallback(() => apiFetch('/rota/members', { token })
+    .then(res => {
+      const rows = res.members || [];
+      setData({ members: rows, canEdit: !!res.can_edit });
+      setPicked(new Set(rows.filter(m => m.on_rota).map(m => m.user_id)));
+      setErr('');
+      setAnnounce('');
+      const n = rows.filter(m => m.on_rota).length;
+      setTimeout(() => setAnnounce(t.rosterLoaded.replace('{count}', n)), 30);
+    })
+    .catch(ex => setErr((ex && ex.message) || 'Request failed')),
+    [token, t]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // The server orders included-first, so the two sections are a contiguous slice rather
+  // than a sort the client has to reproduce and could get out of step with.
+  const onRota  = (data && data.members || []).filter(m =>  m.on_rota);
+  const offRota = (data && data.members || []).filter(m => !m.on_rota);
+
+  // How many people's membership differs from what is stored. Added and removed together,
+  // matching the "N people, M shifts" grammar the rota subtitle already uses.
+  const changed = (picked && data)
+    ? data.members.filter(m => picked.has(m.user_id) !== !!m.on_rota).length
+    : 0;
+
+  // Who is about to LOSE cells: currently on the rota, has some, and now unticked.
+  // Computed from `picked` rather than after the fact, because it is what the
+  // confirmation has to list.
+  const losing = (picked && data)
+    ? data.members.filter(m => m.on_rota && m.assigned_cells > 0 && !picked.has(m.user_id))
+    : [];
+
+  const toggle = id => setPicked(s => {
+    const next = new Set(s);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const reset = () => setPicked(new Set(
+    data.members.filter(m => m.on_rota).map(m => m.user_id)));
+
+  // Both writes go through here, so the confirm-then-send path and the straight path
+  // cannot drift apart. `confirmEmpty` is the server's acknowledge-the-empty-case flag,
+  // and it is only ever sent from the dialog that asked the question -- asking at the
+  // client keeps the reason next to the button that caused it rather than in a toast
+  // afterwards.
+  async function write(ids, confirmedEmpty) {
+    setBusy(true);
+    setErr('');
+    try {
+      const res = await apiFetch('/rota/members', {
+        method: 'PUT', token,
+        body: { member_ids: ids, confirm_empty: !!confirmedEmpty },
+      });
+      // THE RESPONSE IS THE TRUTH. Not an echo of what was sent and not an optimistic
+      // patch: for most accounts the answer is decided by a row this request never
+      // touched, so the client could not derive it correctly even if it wanted to.
+      const rows = res.members || [];
+      setData({ members: rows, canEdit: !!res.can_edit });
+      setPicked(new Set(rows.filter(m => m.on_rota).map(m => m.user_id)));
+      setConfirmOff(null);
+      setConfirmEmpty(false);
+      setAnnounce('');
+      setTimeout(() => setAnnounce(t.rosterSaved), 30);
+      if (setToast) setToast(t.rosterSaved);
+    } catch (ex) {
+      setErr((ex && ex.message) || 'Request failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function save() {
+    const ids = [...picked];
+    // The empty case gets its own short dialog rather than a longer version of the same
+    // one: it is a different decision, not a bigger version of it.
+    if (ids.length === 0) { setConfirmEmpty(true); return; }
+    // Confirm BEFORE writing, not after. A confirmation that arrives once the change has
+    // already happened cannot prevent it.
+    if (losing.length > 0) {
+      setConfirmOff({ ids, people: losing });
+      return;
+    }
+    write(ids, false);
+  }
+
+  if (err && !data) return <div className="auth-error">{err}</div>;
+  if (!data) return <p className="set-empty">{t.loading}</p>;
+
+  const canEdit = data.canEdit;
+
+  return (
+    <div className="roster">
+      {/* One polite live region for the whole picker. Set on load and on save and on
+          NOTHING else: the checkbox state is native and the count is visible in the
+          save bar, so announcing every tick would turn a five-box operation into a
+          stream of chatter. */}
+      <div className="sr-only" role="status" aria-live="polite">{announce}</div>
+
+      {/* The sentence that keeps two orthogonal concepts apart, said once and here
+          rather than per row. Deactivating changes the ACCOUNT; unticking changes the
+          BOARD. Both make a row change, which is exactly why a manager needs to be told
+          which is which -- and why this picker never calls the deactivate endpoint, and
+          the Team page never calls the roster one. */}
+      {canEdit && (
+        <div className="rota-note">
+          {Ic.info}
+          <span>{t.rosterExcludeNote}</span>
+        </div>
+      )}
+
+      {canEdit && (
+        <>
+          <div className="roster-section">
+            {t.rosterOnRotaHead}
+            <span className="roster-count">{onRota.length}</span>
+          </div>
+          <div className="roster-list">
+            {onRota.length === 0
+              ? <p className="set-empty">{t.rosterNoneOn}</p>
+              : onRota.map(m => (
+                  <RosterRow key={m.user_id} t={t} m={m}
+                    checked={picked.has(m.user_id)} onToggle={toggle} showCells={false}/>
+                ))}
+          </div>
+
+          <div className="roster-section">
+            {t.rosterOffRotaHead}
+            <span className="roster-count">{offRota.length}</span>
+          </div>
+          <div className="roster-list">
+            {offRota.length === 0
+              ? <p className="set-empty">{t.rosterEveryoneOn}</p>
+              : offRota.map(m => (
+                  <RosterRow key={m.user_id} t={t} m={m}
+                    checked={picked.has(m.user_id)} onToggle={toggle} showCells/>
+                ))}
+          </div>
+        </>
+      )}
+
+      {!canEdit && (
+        <p className="set-empty">
+          {t.rosterReadOnly}
+        </p>
+      )}
+
+      {err && <div className="auth-error">{err}</div>}
+
+      {/* Reusing .rota-savebar verbatim rather than inventing a second one. It sits
+          after the list in the DOM, so Tab out of the last row lands on Cancel and then
+          Save with no key handling at all -- the same reason the rota's own save bar
+          lives there, and its comment says so. */}
+      {canEdit && changed > 0 && (
+        <div className="rota-savebar">
+          {Ic.info}
+          <span>{changed === 1 ? t.rosterUnsavedOne : t.rosterUnsaved.replace('{count}', changed)}</span>
+          <span className="rota-savebar-spacer" />
+          <button type="button" className="btn btn-ghost" onClick={reset} disabled={busy}>
+            {t.rotaCancel}
+          </button>
+          <button type="button" className="btn btn-primary" onClick={save}
+            disabled={busy}>
+            {Ic.check} {busy ? '.' : t.rosterSave}
+          </button>
+        </div>
+      )}
+
+      {confirmOff && <ConfirmRosterOff
+        t={t}
+        people={confirmOff.people}
+        busy={busy}
+        onCancel={() => setConfirmOff(null)}
+        onConfirm={() => write(confirmOff.ids, false)}
+      />}
+
+      {confirmEmpty && <ConfirmEmptyRoster
+        t={t}
+        busy={busy}
+        onCancel={() => setConfirmEmpty(false)}
+        onConfirm={() => write([], true)}
+      />}
+    </div>
+  );
+}
+
+/* Taking people off the rota.
+
+   The load-bearing part is the body copy, and it says the shifts COME BACK. The same
+   sentence exists in rotaAbsRemoveBody for absences, for the same reason: a manager who
+   believes the work is deleted will untick nobody, forever. The list names every affected
+   person rather than counting them, because "3 people" is not something anybody can check
+   against the five boxes they just ticked.
+
+   btn-danger even though nothing is deleted, because DiscardDialog sets the precedent
+   and the reason holds: the button is the consequential one, and the colour is a promise
+   that says so.
+
+   The SAFE action takes the initial focus. A reflexive Enter after mis-clicking a
+   checkbox must not take three people off the rota -- the same reasoning as DiscardDialog
+   and ConfirmDeleteIssue, and the reason those two pass initialFocus explicitly rather
+   than letting the header's X have it. */
+function ConfirmRosterOff({ t, people, onCancel, onConfirm, busy }) {
+  const panelRef = useDialog({ onClose: busy ? null : onCancel, initialFocus: '#roster-off-cancel' });
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !busy && onCancel()}>
+      <div className="modal confirm-modal" ref={panelRef} role="dialog" aria-modal="true"
+        aria-labelledby="roster-off-title">
+        <div className="modal-header">
+          <h2 id="roster-off-title">
+            {people.length === 1
+              ? t.rosterOffTitleOne
+              : t.rosterOffTitle.replace('{count}', people.length)}
+          </h2>
+          <button type="button" className="icon-btn" onClick={onCancel} disabled={busy}>{Ic.x}</button>
+        </div>
+
+        <div className="modal-body">
+          <p className="confirm-text">{t.rosterOffBody}</p>
+          <ul className="roster-offlist">
+            {people.map(p => (
+              <li key={p.user_id} className="roster-offlist-row">
+                <Avatar name={p.name} idx={p.avatar_idx} size="sm"/>
+                <span className="roster-offlist-name">{p.name}</span>
+                {p.assigned_cells > 0 && (
+                  <span className="rota-free is-away">
+                    {Ic.slash}
+                    {t.rosterKeepsCells.replace('{count}', p.assigned_cells)}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="modal-footer">
+          <button type="button" id="roster-off-cancel" className="btn btn-ghost"
+            onClick={onCancel} disabled={busy} autoFocus>{t.rotaCancel}</button>
+          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={busy}>
+            {busy ? t.deleting : <>{Ic.check} {t.rosterOffYes}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* The empty roster. Separate because it is a different decision, not a longer version of
+   the same one -- and because the API asks for it explicitly with confirm_empty, so the
+   acknowledgement has to be made in one identifiable place rather than inferred from a
+   dialog that is doing something else. */
+function ConfirmEmptyRoster({ t, onCancel, onConfirm, busy }) {
+  const panelRef = useDialog({ onClose: busy ? null : onCancel, initialFocus: '#roster-empty-cancel' });
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !busy && onCancel()}>
+      <div className="modal confirm-modal" ref={panelRef} role="dialog" aria-modal="true"
+        aria-labelledby="roster-empty-title">
+        <div className="modal-header">
+          <h2 id="roster-empty-title">{t.rosterEmptyTitle}</h2>
+          <button type="button" className="icon-btn" onClick={onCancel} disabled={busy}>{Ic.x}</button>
+        </div>
+        <div className="modal-body confirm-body">
+          <span className="confirm-icon">{Ic.users}</span>
+          {/* No confirm-subject here, unlike the other two confirmations in this file.
+
+             The subject line exists to NAME the thing being acted on -- a shift's hours,
+             an absence's dates -- and there is nothing to name here: the subject is
+             the rota itself, which the dialog title already says. Reusing
+             t.rotaFreeWeek as filler rendered a stray "Not on this rota" inside the
+             dialog, which reads like a field label pointing at nothing. */}
+          <div className="confirm-text">{t.rosterEmptyBody}</div>
+        </div>
+        <div className="modal-footer">
+          <button type="button" id="roster-empty-cancel" className="btn btn-ghost"
+            onClick={onCancel} disabled={busy} autoFocus>{t.rotaCancel}</button>
+          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={busy}>
+            {busy ? t.deleting : <>{Ic.check} {t.rosterEmptyYes}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ShiftSettingsCard({ token, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
@@ -12521,6 +13123,29 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
 // A person's name, for a confirmation that has to say who it is about.
   // ConfirmDeleteIssue repeats its subject for the same reason, and here the subject
   // is a colleague rather than a record.
+  // Whether this installation has ANY accounts, which is not the same question as
+  // whether anybody is on the rota and cannot be answered from the grid: an empty grid
+  // means the roster is empty, and says nothing about whether there is anybody to put
+  // on it. GET /v1/rota/members is requireAuth, so this is unknowable to an anonymous
+  // visitor -- and they are not shown a failed request as though it were an answer.
+  //
+  // Fetched ONLY when the board is already empty AND the caller can edit, so the
+  // ordinary grid path issues no extra request and an anonymous visitor gets none.
+  // `anyAccounts` is tri-state: null means "not known", which is what keeps the
+  // no-accounts message off the public page entirely.
+  const [anyAccounts, setAnyAccounts] = useState(null);
+  useEffect(() => {
+    if (!canEdit || !data || (data.members || []).length > 0) return;
+    let live = true;
+    apiFetch('/rota/members', { token })
+      .then(res => { if (live) setAnyAccounts((res.members || []).length > 0); })
+      // A failure here leaves it null, i.e. unknown, and the page then shows the
+      // generic empty-roster message. Guessing "no accounts" from a failed request would
+      // be the same class of bug as the absence-kind redaction getting backwards.
+      .catch(() => { if (live) setAnyAccounts(null); });
+    return () => { live = false; };
+  }, [canEdit, data, token]);
+
   const nameFor = userId => {
     const m = (data && data.members || []).find(x => x.user_id === userId);
     return m ? m.name : '';
@@ -12704,13 +13329,42 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
           <div>
             <div className="table-title">{t.rotaTitle}</div>
             <div style={{fontSize:12,color:'var(--gray-400)',marginTop:2}}>
-              {t.rotaSubtitle
-                .replace('{members}', (data.members || []).length)
-                .replace('{shifts}', legend.length)}
+              {/* "0 people, 4 shifts" is TRUE and useless, so an empty board gets its
+                  own clause rather than a pair of numbers. The count itself needs no
+                  change: it moves on its own, because data.members is now the filtered
+                  set. A member on the rota with no assignments still counts -- they
+                  have to, or the subtitle disagrees with the number of rows below it. */}
+              {(data.members || []).length === 0 && legend.length > 0
+                ? t.rotaSubtitleEmpty
+                : t.rotaSubtitle
+                    .replace('{members}', (data.members || []).length)
+                    .replace('{shifts}', legend.length)}
             </div>
           </div>
 
           <div className="table-actions">
+            {/* WHO is on the rota, which lives in Settings. Here for managers only,
+                and the gate is can_edit rather than a session check for the reason
+                rotaReadOnly gives: the server reports can_edit:false for a technician
+                and for an anonymous visitor alike, and drawing this for either would be
+                a guess about somebody's permissions that the server would then refuse.
+
+                It sits with the week controls rather than near the grid because it
+                NAVIGATES rather than acting on what is below it -- and because a
+                control that changed the grid it sat above, on a page anonymous visitors
+                are reading at the same time, invites the "did I just delete Marco?"
+                panic. One link, one direction; cat-members carries the way back.
+
+                No count here. The number of people on the rota is already the
+                subtitle directly above, and saying it twice invites the reader to
+                wonder which one is current. */}
+            {canEdit && onGoToSettings && (
+              <button type="button" className="rota-rosterlink"
+                onClick={() => onGoToSettings('cat-members')}>
+                {Ic.users} {t.rotaManageRoster}
+              </button>
+            )}
+
             {/* Week navigation. Two arrows and a range: nothing that looks like a
                 place you can go and stay, because a standing rota does not have
                 weeks to go to. */}
@@ -12835,10 +13489,35 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
             )}
           </div>
         ) : (data.members || []).length === 0 ? (
+          /* Two different truths share this branch, and they need different copy.
+
+             NO ACCOUNTS AT ALL is only knowable to a manager, because the roster read
+             is requireAuth and a noticeboard must not print "there are no accounts in
+             this system" to the public. Its message points at the Team page.
+
+             EVERYBODY IS OFF THE ROTA is the ordinary case: a manager has deliberately
+             unticked everyone. Its message points at cat-MEMBERS, not cat-shifts --
+             the old copy sent the reader to define shifts, which is advice for a state
+             where the shifts are the missing thing, and here they exist. */
           <div className="empty-state">
             {Ic.users}
-            <p className="rota-empty-head">{t.rotaNoMembersHead}</p>
-            <p className="rota-empty-sub">{t.rotaNoMembersBody}</p>
+            {anyAccounts === false ? (
+              <>
+                <p className="rota-empty-head">{t.rotaNoAccountsHead}</p>
+                <p className="rota-empty-sub">{t.rotaNoAccountsBody}</p>
+              </>
+            ) : (
+              <>
+                <p className="rota-empty-head">{t.rotaNobodyOnRotaHead}</p>
+                <p className="rota-empty-sub">{t.rotaNobodyOnRotaBody}</p>
+                {canEdit && onGoToSettings && (
+                  <button type="button" className="btn btn-primary rota-empty-cta"
+                    onClick={() => onGoToSettings('cat-members')}>
+                    {Ic.plus} {t.rotaDefineTeam}
+                  </button>
+                )}
+              </>
+            )}
           </div>
         ) : (
           <>
@@ -13711,6 +14390,19 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
             "3" against "Shifts" would be read as three shifts. */}
         <SetGroup id="cat-shifts" level={1} title={t.adminShifts} sub={t.adminShiftsSub}>
           <ShiftSettingsCard token={token} setToast={setToast}/>
+        </SetGroup>
+
+        {/* WHO is on the rota, beside WHAT the shifts are.
+
+           Its own group rather than a panel inside cat-shifts, because they are
+           different questions with different cadences: a shift is edited when the
+           hotel's hours change, the team when somebody joins or leaves. And no count
+           badge on the header, for the reason cat-shifts has none -- a bare number
+           against "Team on the rota" reads as a number of shifts. The count lives
+           inside the picker, next to the people it counts, where it can move while
+           somebody is watching it. */}
+        <SetGroup id="cat-members" level={1} title={t.rosterTitle} sub={t.rosterTitleSub}>
+          <RosterCard token={token} setToast={setToast}/>
         </SetGroup>
 
       </SetGroup>
