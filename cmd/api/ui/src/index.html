@@ -1196,7 +1196,29 @@ html.dark .rota-free { background: var(--gray-200) !important; border-color: var
 .rota-cell.is-editable { min-height: 44px; cursor: pointer; }
 .rota-cell.is-editable:hover { border-color: var(--blue-mid); background: var(--blue-light); color: var(--blue); }
 .rota-cell.is-editable:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
-/* Overnight: the single use of --orange on this page, and only as an edge. */
+/* Range selection.
+
+   An inset RING rather than a fill. These cells already carry six shift tints, four
+   absence washes and an overnight rail, and a selection fill would have to out-shout
+   all of them -- losing either the selection or the thing the cell means. The ring is
+   drawn inside the cell so it cannot reflow the grid, and it is the same colour and
+   weight on every selected cell so a run reads as one run rather than as seven
+   separately-bordered boxes.
+
+   The two ends are heavier. That is the only thing that distinguishes "this run starts
+   here" from "this run continues", and it is what makes a dragged run readable when it
+   is longer than the eye can hold at a glance. */
+.rota-cell.is-sel { box-shadow: inset 0 0 0 2px var(--blue); }
+.rota-cell.is-sel-end { box-shadow: inset 0 0 0 3px var(--blue); }
+/* The ends win over hover and tint, so the ring does not vanish under the pointer
+   exactly where the manager is looking. These come last and carry !important because
+   the hover rule above is a plain background/border change that would otherwise be
+   interleaved unpredictably with them. */
+.rota-cell.is-sel:hover { border-color: var(--blue); }
+/* An absent day inside a run is still part of the run, and the manager is about to be
+   told it will be skipped -- so it is ringed like the others rather than left bare. The
+   word and the hatch underneath still say what it is. */
+.rota-cell.is-away.is-sel { box-shadow: inset 0 0 0 2px var(--blue); }/* Overnight: the single use of --orange on this page, and only as an edge. */
 .rota-cell.is-night { border-left: 3px solid var(--orange); padding-left: 4px; }
 .rota-cell.is-off.is-night { border-left: 1px solid transparent; }
 /* "+1" on the same baseline as the name so it reads as part of it rather than
@@ -1420,6 +1442,40 @@ html.dark .rota-dirty { background: var(--gray-50); }
    other says they are on the rota and will be back. */
 .rota-free.is-away { gap: 4px; }
 .rota-free.is-away svg { width: 10px; height: 10px; flex: 0 0 auto; }
+/* The run's size, in the name cell. A pill rather than plain text, because it is a
+   transient state and the row's permanent two lines -- name and hours -- must not be
+   pushed around by it appearing and disappearing.
+
+   Two inks on one fill, because --blue INVERTS between themes: rgb(23,105,170) light,
+   rgb(95,176,232) dark. White is right on the first (5.77:1) and unreadable on the
+   second (2.37:1, measured, against a 4.5:1 floor for 10.5px text). --gray-700 is the
+   one token that is the same dark ink in both themes, but on its own it only reaches
+   2.85:1 in light -- so it is the dark-theme half, not a universal answer.
+
+   Scoped to html.dark rather than given a token pair, because this is plain CSS with
+   no inline declaration for a theme selector to lose to. */
+.rota-sel-count {
+  display: inline-flex; margin-top: 4px; padding: 1px 7px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; white-space: nowrap;
+  background: var(--blue); color: #FFFFFF;
+}
+html.dark .rota-sel-count { color: var(--gray-700); }
+/* The multiplier on a picker's options. NOT margin-left:auto: the panel overflows its
+   scroll container on a right-hand column, and the right edge is what gets clipped.
+
+   --blue is right on the panel's own background (5.77:1 light, 6.98:1 dark) and wrong
+   on a wash: measured at 4.47:1 on Night's indigo, just under the 4.5:1 floor for
+   11px text. So the tint gets its own ink, scoped rather than global -- the same
+   failure the legend count had, with the same answer.
+
+   --gray-700 because it resolves to the same dark ink in BOTH themes, so one
+   declaration covers light and dark. Only .is-tinted needs it: the absence options
+   carry no badge, being per-day rather than per-cell. */
+.rota-option-multi {
+  flex-shrink: 0; font-family: 'DM Mono', monospace; font-size: 11px;
+  font-weight: 700; color: var(--blue); white-space: nowrap;
+}
+.rota-option.is-tinted .rota-option-multi { color: var(--gray-700); }
 /* The hours actually worked, with the difference named on its own line rather than
    two numbers struck through each other in one column. */
 .rota-away-hours {
@@ -3438,6 +3494,14 @@ const T = {
     rotaCellLabelAway: '{name}, away, {kind}',
     rotaFreeAway: 'Away all week',
     rotaAbsOnlyGrid: 'Nobody is on a shift this week, but people are marked away.',
+    // -- Range selection --------------------------------------------------------
+    rotaSelOneDay: '1 day selected',
+    rotaSelDays: '{count} days selected',
+    rotaSelSets: 'Sets {count} days',
+    // The one that earns the other three: a run can cross a day somebody is away, and
+    // those days are skipped rather than refused, so the manager is told up front how
+    // many of the N will really change.
+    rotaSelSetsSome: 'Sets {n} of {count} days. The others are absences.',
     // -- Shift tints ------------------------------------------------------------
     shiftTint: 'Colour',
     shiftNewUntitled: 'the new shift',
@@ -4186,6 +4250,13 @@ const T = {
     rotaCellLabelAway: '{name}, ausente, {kind}',
     rotaFreeAway: 'Ausente toda a semana',
     rotaAbsOnlyGrid: 'Esta semana ninguém tem turno atribuído, mas há pessoas marcadas como ausentes.',
+    // -- Selecção de intervalos -------------------------------------------------
+    rotaSelOneDay: '1 dia seleccionado',
+    rotaSelDays: '{count} dias seleccionados',
+    rotaSelSets: 'Define {count} dias',
+    // A frase que ganha o sentido das outras: um intervalo pode cruzar um dia em que
+    // alguém está de ausência, e esses dias são saltados em vez de recusados.
+    rotaSelSetsSome: 'Define {n} de {count} dias. Os outros são ausências.',
     // -- Cores dos turnos -------------------------------------------------------
     shiftTint: 'Cor',
     shiftNewUntitled: 'o novo turno',
@@ -10899,11 +10970,17 @@ function absencesByUser(absences) {
    in a form with room below it, and a 49-cell grid has its right-hand and
    bottom-row cells against the clipped edge of a .table-card. */
 function RotaPicker({ cellId, value, shifts, absence, onPick, onAddAbsence,
-                       onEditAbsence, onRemoveAbsence, memberName, t, alignRight, openUp }) {
+                       onEditAbsence, onRemoveAbsence, memberName, range, selected, selEnd,
+                       autoOpen, t, alignRight, openUp }) {
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const wrapRef = useRef(null);
   const listId = cellId + '-options';
+
+  // Opened by a drag rather than by a click. autoOpen is a NONCE, not a boolean:
+  // selecting the same cell twice has to open the panel twice, and a boolean that is
+  // already true sees no change and does nothing.
+  useEffect(() => { if (autoOpen) setOpen(true); }, [autoOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -10997,7 +11074,8 @@ function RotaPicker({ cellId, value, shifts, absence, onPick, onAddAbsence,
       <button type="button"
         className={'rota-cell' + (absence ? ' is-away' : (value ? '' : ' is-off')) +
           (value && value.overnight ? ' is-night' : '') +
-          (value && value.color ? ' is-tinted' : '') + ' is-editable'}
+          (value && value.color ? ' is-tinted' : '') +
+          (selected ? ' is-sel' : '') + (selEnd ? ' is-sel-end' : '') + ' is-editable'}
         /* ONE style attribute answering both features: the absence ink when the day
            is an absence, otherwise the shift's tint. An untinted cell gets a null
            style and keeps its own background, which is what makes it render exactly
@@ -11108,6 +11186,17 @@ function RotaPicker({ cellId, value, shifts, absence, onPick, onAddAbsence,
                 {o.color && <span className="rota-tint-dot" style={dotStyle(o.color)}/>}
                 {o.abs && <span className="rota-option-kind" aria-hidden="true">{absenceGlyph[o.abs]}</span>}
                 <span className="rota-option-name">{o.name}</span>
+                {/* In the flow, immediately after the name -- NOT at the panel's right
+                    edge. The panel is 226px wide inside an 85px column inside a
+                    horizontally scrolling wrapper, so on a right-hand column it is
+                    clipped at the right (27px over at column 3, 158px at column 6 --
+                    pre-existing, and the same with or without this feature). Anything
+                    pinned to that edge is the first thing to disappear, and this badge
+                    carries the fact the manager most needs before choosing. It also
+                    reads better here: the multiplier belongs beside the thing it
+                    multiplies, not adrift at the far end of the row. */}
+                {range && !o.abs && range.applicable > 1 &&
+                  <span className="rota-option-multi">{range.applicable}&times;</span>}
                 {!o.off && !o.abs && <span className="rota-option-hours">
                   {o.start_time}&ndash;{o.end_time}{o.overnight ? t.rotaPlusOne : ''}
                 </span>}
@@ -11121,7 +11210,20 @@ function RotaPicker({ cellId, value, shifts, absence, onPick, onAddAbsence,
               </React.Fragment>
             );
           })}
-          {!absence && shifts.length === 0 && (
+          {/* What choosing here will do, before it does it. The second sentence
+              exists because the first is not always the whole truth: a run can span
+              a day somebody is away, and those days are skipped rather than refused --
+              and a manager told "sets 6 days" who watches 5 change has been misled by
+              omission. */}
+          {range && range.applicable > 0 && (
+            <div className="rota-picker-foot">
+              {range.applicable < range.count
+                ? t.rotaSelSetsSome.replace('{n}', range.applicable)
+                                    .replace('{count}', range.count)
+                : t.rotaSelSets.replace('{count}', range.count)}
+            </div>
+          )}
+          {!absence && !range && shifts.length === 0 && (
             /* Reachable only in the narrow window where a manager has deleted
                every shift while the grid they came from is still on screen. NOT shown
                on an absent cell: that panel has three options and a foot that already
@@ -11148,6 +11250,202 @@ function RotaTable({ t, week, members, shifts, absences, editing, draft, setCell
   // Grouped once per render rather than per cell, and the same map answers both the
   // per-day lookup and the "is this person away all week" question below.
   const absByUser = useMemo(() => absencesByUser(absences), [absences]);
+  // ---- Range selection ------------------------------------------------------
+  //
+  // One person's run of days, inside one row. `anchor` is the cell the run grew FROM
+  // and never moves; `from`/`to` are its bounds, always ordered.
+  //
+  // The anchor is in the state rather than re-derived from the focused cell, and that
+  // is the whole design. Without it, Shift+ArrowLeft has to work out which end of the
+  // range is "towards the key" from where the focus happens to be, and gets it wrong
+  // the moment the range was made by dragging right-to-left -- at which point holding
+  // the key walks the selection back and forth over itself.
+  const [sel, setSel] = useState(null);
+  // Which cell's picker to open, plus a nonce so the SAME cell can be re-opened.
+  //
+  // A drag cannot open a picker by itself. Once the pointer is captured, the click the
+  // browser synthesises after pointerup is dispatched to the captured element -- the
+  // cell the drag started on -- or to the nearest common ancestor of the two cells,
+  // which is the <tr>. Neither is the cell the manager let go over, so the panel would
+  // open in the wrong place or not at all. Hence an explicit instruction, and hence the
+  // nonce: a boolean would see "still open on this cell" and do nothing.
+  const [openAt, setOpenAt] = useState(null);
+  const dragRef = useRef(null);
+  const swallowRef = useRef(false);
+
+  // Where a pointer is over the grid, as a day index in THIS row, or -1.
+  //
+  // Hit-tested rather than derived from column geometry: the grid scrolls horizontally
+  // inside .rota-table-wrap, the columns are not equal width, and a geometry answer has
+  // to know about the scroll offset -- which is a second implementation of the layout,
+  // and a second thing to keep correct when the layout changes. What the browser says
+  // a point is over IS the layout.
+  //
+  // Same ROW only, and that check is the feature's boundary rather than a defensive
+  // guard: a run crossing into another person would break the save bar's count, which
+  // counts people, and would make one gesture write two rows.
+  const dayAt = (x, y, tr) => {
+    const el = document.elementFromPoint(x, y);
+    if (!el || !el.closest) return -1;
+    const td = el.closest('td[data-rota-i]');
+    if (!td || td.parentElement !== tr) return -1;
+    const n = Number(td.getAttribute('data-rota-i'));
+    return Number.isInteger(n) ? n : -1;
+  };
+
+  const onDayPointerDown = (e, m, i) => {
+    if (!editing) return;
+    if (e.button !== undefined && e.button !== 0) return;   // right-click is not a drag
+    dragRef.current = {
+      userId: m.user_id, i, tr: e.currentTarget.parentElement,
+      x: e.clientX, y: e.clientY, pointerId: e.pointerId,
+      dragging: false, last: i,
+    };
+    // Deliberately NO capturePointer yet. Below the threshold this gesture has to be
+    // indistinguishable from a plain click, and capturing on pointerdown changes which
+    // element the click is dispatched to -- which is the mechanism the plain click
+    // depends on. Capture is claimed by the first move that commits to being a drag.
+  };
+
+  const onDayPointerMove = (e, m) => {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+
+    if (!d.dragging) {
+      // 6px, as a straight-line distance. A click is a press and a release a pixel or
+      // two apart, and a trackpad's resting tremor is routinely more than the 1px that
+      // would read as "obviously not a drag" -- but 6px is still a small fraction of a
+      // cell's width, so a manager who means to drag never has to leave the cell they
+      // started in to commit to it.
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) return;
+      d.dragging = true;
+      try { e.currentTarget.setPointerCapture(d.pointerId); } catch (_) {}
+      setSel({ userId: d.userId, anchor: d.i, from: d.i, to: d.i });
+    }
+
+    const j = dayAt(e.clientX, e.clientY, d.tr);
+    if (j < 0) return;          // off the row: the run holds rather than collapsing
+    d.last = j;
+    const lo = Math.min(d.i, j), hi = Math.max(d.i, j);
+    setSel(s => (s && s.from === lo && s.to === hi) ? s
+                                             : { userId: d.userId, anchor: d.i, from: lo, to: hi });
+  };
+
+  const onDayPointerUp = (e, m) => {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    dragRef.current = null;
+    if (!d.dragging) return;        // a click, not a drag. The button's handler owns it.
+    try { e.currentTarget.releasePointerCapture(d.pointerId); } catch (_) {}
+
+    // Swallow the click the browser is about to synthesise: with the pointer captured
+    // on the cell the drag started on, that click opens the ANCHOR's picker, right
+    // beside the one about to open at the far end. Cleared by the click itself; the
+    // timeout is for the drags that end WITHOUT one -- released outside the window,
+    // pointer cancelled -- which would otherwise eat the manager's next click.
+    swallowRef.current = true;
+    setTimeout(() => { swallowRef.current = false; }, 0);
+
+    // Open at the far end, where the eye already is -- unless that day is an absence.
+    // An absent cell's panel offers Edit and Remove and no shift at all, so a run that
+    // happened to finish on one would be unappliable. The first day in the run that CAN
+    // take a shift gets the panel instead, which is the only case where the panel does
+    // not open under the pointer.
+    const list = absByUser.get(d.userId) || [];
+    const lo = Math.min(d.i, d.last), hi = Math.max(d.i, d.last);
+    let target = absenceAt(list, week.days[d.last].date) ? -1 : d.last;
+    if (target < 0) {
+      for (let k = lo; k <= hi; k++) {
+        if (!absenceAt(list, week.days[k].date)) { target = k; break; }
+      }
+    }
+    if (target < 0) return;        // the whole run is absence: there is nothing to set
+    setOpenAt(a => ({ userId: d.userId, i: target, nonce: (a ? a.nonce : 0) + 1 }));
+  };
+
+  const onGridClickCapture = e => {
+    if (!swallowRef.current) return;
+    swallowRef.current = false;
+    // Capture phase, so this runs before the cell button's own onClick. stopPropagation
+    // from a capture handler stops the rest of React's dispatch tree, which is what
+    // keeps the anchor's picker from opening underneath the one we just asked for.
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
+  const onDayKeyDown = (e, m, i) => {
+    if (!editing) return;
+
+    if (e.key === 'Escape') {
+      if (sel && sel.userId === m.user_id) { setSel(null); e.preventDefault(); }
+      return;
+    }
+    if (!e.shiftKey) return;
+    const left = e.key === 'ArrowLeft', right = e.key === 'ArrowRight';
+    const home = e.key === 'Home', end = e.key === 'End';
+    if (!(left || right || home || end)) return;
+
+    // aria-expanded rather than a prop: the panel's open state is the truth, and it is
+    // already published on the control for assistive technology. Reading it back means
+    // the two can never disagree.
+    const cell = e.target && e.target.closest && e.target.closest('.rota-cell');
+    if (cell && cell.getAttribute('aria-expanded') === 'true') return;
+
+    const n = week.days.length;
+    const mine = sel && sel.userId === m.user_id ? sel : null;
+    const anchor = mine ? mine.anchor : i;
+    let from, to;
+    if (home) {
+      from = 0; to = anchor;
+    } else if (end) {
+      from = anchor; to = n - 1;
+    } else if (left) {
+      // Grow leftward: the left edge moves one further out, the right edge never comes
+      // back in. That is what makes holding the key widen the run instead of shrinking
+      // it and bouncing off the anchor.
+      from = Math.max(0, (mine ? mine.from : anchor) - 1);
+      to = Math.max(anchor, mine ? mine.to : anchor);
+    } else {
+      from = Math.min(anchor, mine ? mine.from : anchor);
+      to = Math.min(n - 1, (mine ? mine.to : anchor) + 1);
+    }
+    setSel({ userId: m.user_id, anchor, from, to });
+    // Focus stays on the anchor. The cell being extended FROM is the one the manager is
+    // looking at, and moving focus would put the focus ring at the far end of a run
+    // whose whole point is being able to see where it started.
+    e.preventDefault();
+  };
+
+  const inSel = (m, i) => !!(sel && sel.userId === m.user_id && i >= sel.from && i <= sel.to);
+
+  // What the panel needs to say about the run: how many days it covers, and how many of
+  // them will actually change.
+  const rangeFor = (m, i) => {
+    if (!inSel(m, i) || !sel) return null;
+    const list = absByUser.get(m.user_id) || [];
+    let applicable = 0;
+    for (let k = sel.from; k <= sel.to; k++) {
+      if (!absenceAt(list, week.days[k].date)) applicable++;
+    }
+    return { count: sel.to - sel.from + 1, applicable };
+  };
+
+  const applyPick = (m, i, s) => {
+    const r = sel && sel.userId === m.user_id && i >= sel.from && i <= sel.to ? sel : null;
+    setSel(null);
+    if (!r) { setCell(m.user_id, i, s); return; }
+    const list = absByUser.get(m.user_id) || [];
+    for (let k = r.from; k <= r.to; k++) {
+      // Absent days inside a run are SKIPPED, not refused. One sick day must not stop a
+      // manager setting the other six, and the panel says how many of the N will
+      // change -- so the skip is stated in advance rather than discovered afterwards.
+      if (!absenceAt(list, week.days[k].date)) setCell(m.user_id, k, s);
+    }
+  };
+
+  // A run belongs to one week. Changing week or leaving edit mode drops it, rather than
+  // leaving a selection painted on cells it no longer describes.
+  useEffect(() => { setSel(null); setOpenAt(null); }, [week.start, editing]);
 
   // Entering edit mode hands focus to the grid's first real cell. On the way out
   // it is left alone: the segmented control is still on screen, so a Tab from
@@ -11161,7 +11459,7 @@ function RotaTable({ t, week, members, shifts, absences, editing, draft, setCell
   const peopleOn = shiftId => members.filter(m => (m.days || []).some(d => d && d.id === shiftId)).length;
 
   return (
-    <div className="rota-table-wrap" ref={gridRef}>
+    <div className="rota-table-wrap" ref={gridRef} onClickCapture={onGridClickCapture}>
       <table className="rota-table">
         <caption className="sr-only">
           {t.rotaTitle} &mdash; {week.start} to {week.end}
@@ -11224,6 +11522,17 @@ function RotaTable({ t, week, members, shifts, absences, editing, draft, setCell
                           </>}
                     </span>
                   </div>
+                  {/* How many days the run covers, on the row it belongs to. The name
+                      cell is the one place in this row with room for words, and a
+                      count floating off to the side would be describing a gesture
+                      rather than a person. */}
+                  {sel && sel.userId === m.user_id && (
+                    <span className="rota-sel-count">
+                      {sel.to - sel.from + 1 === 1
+                        ? t.rotaSelOneDay
+                        : t.rotaSelDays.replace('{count}', sel.to - sel.from + 1)}
+                    </span>
+                  )}
                 </th>
                 {week.days.map((d, i) => {
                   const shift = (m.days || [])[i] || null;
@@ -11244,7 +11553,17 @@ function RotaTable({ t, week, members, shifts, absences, editing, draft, setCell
                         : t.rotaCellLabelOff.replace('{name}', m.name));
                   return (
                     <td key={d.weekday}
-                      className={'rota-day' + (d.is_today ? ' rota-col-today' : '')}>
+                      data-rota-i={i}
+                      className={'rota-day' + (d.is_today ? ' rota-col-today' : '')}
+                      /* On the <td> rather than on the button. The button's own click
+                         and focus behaviour is what a plain click depends on, and
+                         wrapping it in gesture handlers is how that gets broken. The td
+                         sees the same events by bubbling, and once the pointer is
+                         captured it keeps seeing them after the pointer leaves it. */
+                      onPointerDown={editing ? e => onDayPointerDown(e, m, i) : undefined}
+                      onPointerMove={editing ? e => onDayPointerMove(e, m) : undefined}
+                      onPointerUp={editing ? e => onDayPointerUp(e, m) : undefined}
+                      onKeyDown={editing ? e => onDayKeyDown(e, m, i) : undefined}>
                       {editing
                         ? <RotaPicker
                           cellId={cellId}
@@ -11259,14 +11578,41 @@ function RotaTable({ t, week, members, shifts, absences, editing, draft, setCell
                           onEditAbsence={onEditAbsence}
                           onRemoveAbsence={onRemoveAbsence}
                           memberName={m.name}
-                          onPick={s => setCell(m.user_id, i, s)}
+                          onPick={s => applyPick(m, i, s)}
+                          /* The run, as the panel needs it: how many days it covers,
+                             and how many of them can take a shift. Null on every cell
+                             outside the run, so the panel says nothing about a
+                             selection that is not about it. */
+                          range={rangeFor(m, i)}
+                          selected={inSel(m, i)}
+                          selEnd={!!sel && sel.userId === m.user_id && (i === sel.from || i === sel.to)}
+                          autoOpen={openAt && openAt.userId === m.user_id && openAt.i === i
+                            ? openAt.nonce : 0}
                           t={t}
-                          // The last two columns open leftwards, so the panel
-                          // never lands against the clipped right edge of the
-                          // card. The bottom rows are handled the same way by
-                          // openUp, which is left off here only because the
+                          // Columns 3 and up open leftwards, so the panel never
+                          // lands against the clipped right edge. Measured, not
+                          // guessed: the panel is 226px and a day column is
+                          // about 85px, so a left-anchored panel fits at
+                          // columns 0-2 (67px to spare at the tightest, column
+                          // 2) and overflows from column 3 -- 27px over at 3,
+                          // 109px at 4, 158px at 6. This threshold was 5, which
+                          // left columns 3 and 4 opening straight into the
+                          // clipped strip.
+                          //
+                          // alignRight pins the panel's RIGHT edge to the
+                          // cell's, so for these columns it ends where the cell
+                          // ends -- inside the wrap -- with its left edge 226px
+                          // back, also inside. Both edges are safe, not one
+                          // traded for the other.
+                          //
+                          // The overflow itself is older than this feature and
+                          // comes from the panel being a child of a
+                          // horizontally scrolling wrapper; fixing that
+                          // properly means rendering it in a portal, which is a
+                          // layout change of its own. openUp is the same
+                          // question vertically and is left off because the
                           // table scrolls rather than running under the fold.
-                          alignRight={i >= 5}
+                          alignRight={i >= 3}
                           openUp={false}/>
                         : absence
                           ? <div className="rota-cell is-away"
