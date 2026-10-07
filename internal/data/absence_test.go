@@ -24,9 +24,9 @@ func absenceDay(y int, m time.Month, d int) time.Time {
 // because that decision lives entirely in this one function.
 func TestNormaliseShiftColor(t *testing.T) {
 	tests := []struct {
-		name  string
-		in    string
-		want  string
+		name   string
+		in     string
+		want   string
 		wantOK bool
 	}{
 		{"empty means no tint", "", "", true},
@@ -124,9 +124,9 @@ func TestValidateShiftAcceptsNoTint(t *testing.T) {
 // every absence one day short.
 func TestAbsenceDayCountIsInclusive(t *testing.T) {
 	tests := []struct {
-		name       string
+		name        string
 		starts, end time.Time
-		want       int
+		want        int
 	}{
 		{"one day is the same date twice", absenceDay(2026, time.October, 5), absenceDay(2026, time.October, 5), 1},
 		{"a Monday-to-Friday holiday is five days", absenceDay(2026, time.October, 5), absenceDay(2026, time.October, 9), 5},
@@ -397,13 +397,13 @@ func TestAbsenceKinds(t *testing.T) {
 // AbsenceRef has no such field, no handler can leak it by forgetting to clear one.
 func TestAbsenceRefCarriesNoReason(t *testing.T) {
 	a := &Absence{
-		ID:        7,
-		UserID:    3,
-		Kind:      AbsenceSick,
-		StartsOn:  JSONDate(absenceDay(2026, time.October, 5)),
-		EndsOn:    JSONDate(absenceDay(2026, time.October, 9)),
-		Reason:    "back surgery",
-		Version:   2,
+		ID:       7,
+		UserID:   3,
+		Kind:     AbsenceSick,
+		StartsOn: JSONDate(absenceDay(2026, time.October, 5)),
+		EndsOn:   JSONDate(absenceDay(2026, time.October, 9)),
+		Reason:   "back surgery",
+		Version:  2,
 	}
 	ref := a.Ref()
 

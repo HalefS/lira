@@ -1270,6 +1270,17 @@ html.dark .rota-picker-panel { background: var(--gray-50); border-color: var(--g
   white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 .rota-option.is-night { border-left: 3px solid var(--orange); }
+.rota-picker-sep { height: 1px; margin: 5px 6px 3px; background: var(--gray-200); }
+.rota-picker-subhead {
+  padding: 4px 10px 3px; font-size: 10px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--gray-400);
+}
+/* The absence options carry the shared wash, so the picker and the grid agree on what
+   an absence looks like BEFORE the manager has chosen one. */
+.rota-option.is-abs { background: var(--abs-wash); }
+.rota-option.is-abs.active, .rota-option.is-abs:hover { background: var(--blue-light); }
+.rota-option-kind { display: inline-flex; color: var(--abs-ink); flex-shrink: 0; }
+.rota-option-kind svg { width: 14px; height: 14px; }
 .rota-picker-foot {
   margin-top: 4px; padding: 6px 10px 4px; font-size: 11.5px; color: var(--gray-400);
   border-top: 1px solid var(--gray-100);
@@ -1326,6 +1337,135 @@ html.dark .rota-dirty { background: var(--gray-50); }
   font-size: 12px; color: var(--gray-600);
 }
 .rota-settings-night svg { width: 13px; height: 13px; flex-shrink: 0; color: var(--orange); }
+
+/* -- Absences -----------------------------------------------------------------
+   All four kinds share ONE wash, and that is the whole design. A tinted shift cell
+   and an absence cell cannot be separated by colour at any wash strength -- the
+   nearest of the six tint washes measures between 1.00:1 and 1.11:1 against
+   --abs-wash, because a wash is a wash -- so what separates them is structural: a
+   hatch, a 3px rule, a glyph and a word. Colour is left with the only job it can
+   still do here, telling the four kinds apart from each other.
+
+   Four different washes would imply four different SORTS of absence, which is a
+   distinction no reader of a rota needs and which would collide with six shift tints
+   in the same 42-cell grid.
+
+   --gray-900 on --abs-wash measures 11.73:1 light and 13.03:1 dark, so the word in an
+   absence cell is exactly as legible as a shift name. */
+.rota-cell.is-away {
+  position: relative; overflow: hidden; isolation: isolate;
+  flex-direction: column; gap: 2px; padding: 4px 4px 3px;
+  background: var(--abs-wash); border-color: var(--gray-300);
+  color: var(--gray-900); font-size: 10.5px; font-weight: 700;
+  letter-spacing: .05em; text-transform: uppercase; line-height: 1.15;
+}
+/* The hatch. This is the application's first use of a texture and it is the right
+   one: it survives greyscale printing, it survives every colour-vision deficiency,
+   and it is what makes the cell look like a different KIND OF OBJECT rather than a
+   differently-coloured shift. isolation:isolate above keeps it under the glyph and
+   the word without a z-index. */
+.rota-cell-hatch {
+  position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: repeating-linear-gradient(45deg,
+    var(--gray-300) 0, var(--gray-300) 0.9px, transparent 0.9px, transparent 5px);
+  opacity: .55;
+}
+.rota-cell-kind { position: relative; display: inline-flex; color: var(--abs-ink); }
+.rota-cell-kind svg { width: 13px; height: 13px; }
+.rota-cell-absword {
+  position: relative; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* The 3px rule goes on TOP, not as a left rail: the rail slot belongs to overnight
+   and an absence is never an overnight shift. */
+.rota-cell.is-away::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--abs-ink);
+}
+/* "And it carries on past Sunday." On the last covered cell of the week, and only
+   when the run really does continue -- a run ending on the Sunday has nothing to
+   announce. This is the one piece of absence state that CANNOT come out of a per-week
+   array of cells, and it is why the server sends ranges. */
+.rota-cell-then {
+  position: absolute; right: 2px; bottom: 2px;
+  color: var(--gray-400); display: inline-flex;
+}
+.rota-cell-then svg { width: 10px; height: 10px; }
+/* An absent day is not hoverable-to-blue: blue on a cell means "you can change
+   this", and the honest answer is "not until the absence is removed". */
+.rota-cell.is-away.is-editable:hover { border-color: var(--blue-mid); background: var(--abs-wash); color: var(--gray-900); }
+.rota-cell.is-away.is-editable:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+/* A leaver's row is dimmed. An absence is a fact about the CALENDAR, not about the
+   account, so the hatch and the rule are NOT dimmed with it -- a greyed-out hatch is
+   a hatch you cannot count, and counting absent people is the thing a manager does
+   with this feature. */
+.rota-table tr.rota-inactive .rota-cell.is-away { opacity: .72; }
+.rota-table tr.rota-inactive .rota-cell.is-away .rota-cell-hatch,
+.rota-table tr.rota-inactive .rota-cell.is-away::after { opacity: 1; }
+
+/* The legend's second group. */
+.rota-legend-sep { width: 1px; align-self: stretch; margin: 0 4px; background: var(--gray-200); }
+.rota-legend-abs {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px 3px 6px; border-radius: var(--radius-sm);
+  border: 1px solid var(--gray-300); background: var(--abs-wash);
+}
+.rota-legend-abs-ic { display: inline-flex; color: var(--abs-ink); }
+.rota-legend-abs-ic svg { width: 12px; height: 12px; }
+.rota-legend-abs-name { font-size: 12px; font-weight: 600; color: var(--gray-900); white-space: nowrap; }
+.rota-legend-abs-count { font-size: 11px; color: var(--gray-600); white-space: nowrap; }
+
+/* "Not on this rota" and "away all week" both used to be the same pill, and they are
+   materially different statements: one says nobody put this person on anything, the
+   other says they are on the rota and will be back. */
+.rota-free.is-away { gap: 4px; }
+.rota-free.is-away svg { width: 10px; height: 10px; flex: 0 0 auto; }
+/* The hours actually worked, with the difference named on its own line rather than
+   two numbers struck through each other in one column. */
+.rota-away-hours {
+  display: inline-flex; align-items: center; gap: 4px; margin-top: 3px;
+  padding: 1px 7px; border-radius: 999px;
+  font-family: 'DM Mono', monospace; font-size: 10.5px; font-weight: 600;
+  white-space: nowrap; color: var(--gray-600);
+  background: var(--gray-100); border: 1px solid var(--gray-200);
+}
+.rota-away-hours svg { width: 10px; height: 10px; flex: 0 0 auto; }
+html.dark .rota-away-hours { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
+
+/* The editor. */
+.rota-abs-kinds { border: 0; margin: 0; padding: 0; }
+.rota-abs-kinds legend { padding: 0; margin-bottom: 6px; }
+.rota-abs-kindgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.rota-abs-kind {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 9px 4px 7px; border-radius: var(--radius-md); cursor: pointer;
+  border: 1px solid var(--gray-200); background: var(--gray-100);
+}
+.rota-abs-kind input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.rota-abs-kind:hover { border-color: var(--blue-mid); }
+.rota-abs-kind.is-on { border-color: var(--blue); background: var(--blue-light); box-shadow: 0 0 0 1px var(--blue); }
+.rota-abs-kind:focus-within { outline: 2px solid var(--blue); outline-offset: 1px; }
+.rota-abs-kind-ic { display: inline-flex; color: var(--abs-ink); }
+.rota-abs-kind-ic svg { width: 17px; height: 17px; }
+.rota-abs-kind-name { font-size: 11px; font-weight: 600; color: var(--gray-900); text-align: center; line-height: 1.2; }
+.rota-abs-who { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--gray-900); }
+.rota-abs-who svg { width: 16px; height: 16px; color: var(--gray-400); }
+.rota-abs-span { font-size: 12px; color: var(--gray-600); }
+.rota-abs-privacy {
+  display: flex; gap: 8px; margin-top: 7px; padding: 8px 10px;
+  border-radius: var(--radius-sm); background: var(--gray-100);
+  border: 1px solid var(--gray-200); font-size: 11.5px; line-height: 1.45; color: var(--gray-600);
+}
+.rota-abs-privacy svg { width: 13px; height: 13px; flex: 0 0 auto; color: var(--gray-400); margin-top: 1px; }
+/* .form-control sets padding and font but no width, and a textarea with no UA
+   sizing in a flex column collapses to about 20px. */
+.rota-abs-note { min-height: 68px; resize: vertical; width: 100%; font-family: 'DM Sans', sans-serif; }
+.rota-abs-footer { justify-content: space-between; }
+.rota-abs-left { display: flex; gap: 8px; }
+.rota-abs-locked {
+  margin-top: 4px; padding: 6px 10px 4px; font-size: 11.5px; line-height: 1.45;
+  color: var(--gray-600); border-top: 1px solid var(--gray-100);
+}
 
 /* -- Shift tints --------------------------------------------------------------
    One rule this whole block is built on:
@@ -3256,6 +3396,48 @@ const T = {
     rotaUnsaved: '{count} unsaved',
     rotaEditHint: 'Pick a shift for each day. Days you clear become days off.',
     rotaEditHintClean: 'Nothing changed yet.',
+    // -- Absences ---------------------------------------------------------------
+    rotaAbsKindLabel: 'Reason',
+    rotaAbsKind: { vacation: 'Holiday', sick: 'Sick leave', training: 'Training', unavailable: 'Unavailable' },
+    // The word IN the cell, upper-cased by CSS. All four have to fit a 92px column at
+    // 10.5px, which is why the generic kind is AWAY and not UNAVAILABLE.
+    rotaAbsShort: { vacation: 'HOLIDAY', sick: 'SICK', training: 'TRAINING', unavailable: 'AWAY' },
+    rotaAbsGroupHead: 'Mark as away',
+    rotaAbsAddTitle: 'Mark somebody away',
+    rotaAbsEditTitle: 'Edit absence',
+    rotaAbsFrom: 'From',
+    rotaAbsTo: 'To',
+    rotaAbsNote: 'Note (optional)',
+    rotaAbsNotePlaceholder: 'Only managers see this.',
+    // Said at the field rather than in a policy page: somebody typing a diagnosis
+    // deserves to know at the moment of typing that it will not reach a noticeboard.
+    rotaAbsNotePrivacy: 'This note is never sent to anyone who is not a manager, and it is never printed on the rota.',
+    rotaAbsSpanOne: '1 day',
+    rotaAbsSpan: '{count} days',
+    rotaAbsSave: 'Save absence',
+    rotaAbsSaveChanges: 'Save changes',
+    rotaAbsAdded: 'Absence saved',
+    rotaAbsSaved: 'Absence updated',
+    rotaAbsDeleted: 'Absence removed',
+    rotaAbsLoadFailed: 'The absence could not be loaded',
+    rotaAbsRemove: 'Remove',
+    rotaAbsRemoveTitle: 'Remove this absence?',
+    // The load-bearing sentence: the recurring shift was never touched, and a manager
+    // who believes otherwise will delete a holiday and lose four Earlys.
+    rotaAbsRemoveBody: '{name} goes back to whatever the standing rota says for those dates. The dates themselves are not deleted.',
+    rotaAbsRemoveYes: 'Remove it',
+    rotaAbsRemoveOption: 'Remove this absence',
+    rotaAbsEditOption: 'Edit this absence',
+    rotaAbsLocked: 'This day is an absence, so no shift can be set on it. Remove the absence first.',
+    rotaAbsPeopleOne: '1 person away',
+    rotaAbsPeople: '{count} people away',
+    rotaAbsHoursAway: '{hours} h away',
+    // Deliberately not rotaCellLabelOff. "Away" and "day off" are the two statements
+    // this feature exists to keep apart, and a screen-reader user is exactly who must
+    // never hear one when the other is true.
+    rotaCellLabelAway: '{name}, away, {kind}',
+    rotaFreeAway: 'Away all week',
+    rotaAbsOnlyGrid: 'Nobody is on a shift this week, but people are marked away.',
     // -- Shift tints ------------------------------------------------------------
     shiftTint: 'Colour',
     shiftNewUntitled: 'the new shift',
@@ -3914,7 +4096,6 @@ const T = {
     resetCodeCopied: 'Copiado',
     resetCodeDone: 'Concluído',
     createBtn: 'Criar conta',
-    demoAccounts: 'Contas de demonstração',
     noAccount: 'Não tem conta?',
     signUp: 'Registar',
     haveAccount: 'Já tem conta?',
@@ -3959,6 +4140,52 @@ const T = {
     rotaUnsaved: '{count} por guardar',
     rotaEditHint: 'Escolha um turno para cada dia. Os dias que limpar passam a ser dias de folga.',
     rotaEditHintClean: 'Nada alterado ainda.',
+    // -- Ausências ---------------------------------------------------------------
+    rotaAbsKindLabel: 'Motivo',
+    // Baixa médica, not Doença and not Falta: *baixa* is the HR noun, and *falta* would
+    // be read as an absence-of-record rather than as the absence itself.
+    rotaAbsKind: { vacation: 'Férias', sick: 'Baixa médica', training: 'Formação', unavailable: 'Indisponível' },
+    // A palavra NA célula, em maiúsculas por CSS. As quatro têm de caber numa coluna
+    // de 92px a 10,5px — e é por isso que o motivo genérico é AUSENTE e não
+    // INDISPONÍVEL. FORMAÇÃO é a mais longa das quatro e ainda assim cabe.
+    rotaAbsShort: { vacation: 'FÉRIAS', sick: 'BAIXA', training: 'FORMAÇÃO', unavailable: 'AUSENTE' },
+    rotaAbsGroupHead: 'Marcar como ausente',
+    rotaAbsAddTitle: 'Marcar alguém como ausente',
+    rotaAbsEditTitle: 'Editar ausência',
+    rotaAbsFrom: 'De',
+    rotaAbsTo: 'Até',
+    rotaAbsNote: 'Nota (opcional)',
+    rotaAbsNotePlaceholder: 'Só os gestores veem isto.',
+    // Dito aqui e não numa página de política: quem escreve um diagnóstico merece
+    // saber no momento em que o escreve que a nota não sai daqui.
+    rotaAbsNotePrivacy: 'Esta nota nunca é enviada a quem não seja gestor e nunca é impressa na escala.',
+    rotaAbsSpanOne: '1 dia',
+    rotaAbsSpan: '{count} dias',
+    rotaAbsSave: 'Guardar ausência',
+    rotaAbsSaveChanges: 'Guardar alterações',
+    rotaAbsAdded: 'Ausência guardada',
+    rotaAbsSaved: 'Ausência atualizada',
+    rotaAbsDeleted: 'Ausência removida',
+    rotaAbsLoadFailed: 'Não foi possível carregar a ausência',
+    rotaAbsRemove: 'Remover',
+    rotaAbsRemoveTitle: 'Remover esta ausência?',
+    // A frase que importa: o turno da escala nunca foi tocado. Quempensar o contrário
+    // apaga unas férias e perde quatro turnos de manhã.
+    rotaAbsRemoveBody: '{name} volta ao que a escala permanente diz para essas datas. As datas em si não são apagadas.',
+    rotaAbsRemoveYes: 'Remover',
+    rotaAbsRemoveOption: 'Remover esta ausência',
+    rotaAbsEditOption: 'Editar esta ausência',
+    rotaAbsLocked: 'Este dia é uma ausência, por isso não lhe é possível atribuir um turno. Remova primeiro a ausência.',
+    rotaAbsPeopleOne: '1 pessoa ausente',
+    rotaAbsPeople: '{count} pessoas ausentes',
+    rotaAbsHoursAway: '{hours} h de ausência',
+    // Deliberadamente não é a etiqueta de "dia de folga". "Ausente" e "dia de folga" são
+    // as duas afirmações que esta funcionalidade existe para manter separadas.
+    // Os marcadores {name} e {kind} são um CONTRATO com o código, não texto: o
+    // código substitui literalmente esses dois, em qualquer idioma.
+    rotaCellLabelAway: '{name}, ausente, {kind}',
+    rotaFreeAway: 'Ausente toda a semana',
+    rotaAbsOnlyGrid: 'Esta semana ninguém tem turno atribuído, mas há pessoas marcadas como ausentes.',
     // -- Cores dos turnos -------------------------------------------------------
     shiftTint: 'Cor',
     shiftNewUntitled: 'o novo turno',
@@ -10546,6 +10773,22 @@ function shiftISO(iso, n) {
   const [y, m, d] = iso.split('-').map(Number);
   return localISODate(new Date(y, m - 1, d + n));
 }
+/* How many calendar days an inclusive [from, to] span covers, or 0 if it is not a
+span at all.
+
+   UTC throughout, and Date.UTC rather than dividing a duration by 24h -- the server's
+Absence.DayCount says the same thing for the same reason: two LOCAL midnights are 23
+or 25 hours apart in real time across a DST change, and a division then loses a day
+twice a year. The form needs this to tell a manager how much they have just booked
+while they are looking at a Monday-to-Sunday grid, which is exactly the range where a
+DST boundary can fall inside it. */
+function absenceDayCount(fromISO, toISO) {
+  if (!fromISO || !toISO || toISO < fromISO) return 0;
+  const [fy, fm, fd] = fromISO.split('-').map(Number);
+  const [ty, tm, td] = toISO.split('-').map(Number);
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86400000) + 1;
+}
+
 function isoToDate(iso) {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, m - 1, d);
@@ -10563,6 +10806,88 @@ function rotaWeekHours(member) {
   return (member.days || []).reduce((n, s) => n + shiftMinutes(s), 0);
 }
 
+/* The four reasons a person can be off on a date, and what each is allowed to look
+   like.
+
+   Order is how much each is allowed to disclose, which is not the order the schema
+   lists them in and is the reason this is a list here rather than an enum.
+
+   An absence is NOT a shift and never renders as one: no name, no hours, no rail. It
+   is a hatch, a rule, a glyph and a word. Two absences may cover one date -- the
+   server allows it, because sick leave inside a booked holiday is a real thing -- so
+   absenceAt returns the FIRST and the cell shows that one.
+
+   `--hue` is the per-kind accent. vacation is violet, which appears nowhere else in
+   this application, so a reader who learns it once keeps it. away is a structural
+   grey, deliberately: a generic absence is meant to be unremarkable, and grey is a
+   colour no manager can pick as a shift tint. */
+const ABSENCE_KINDS = [
+  { id: 'vacation',    hue: 'var(--violet)' },
+  { id: 'sick',        hue: 'var(--teal)' },
+  { id: 'training',    hue: 'var(--green)' },
+  { id: 'unavailable', hue: 'var(--gray-600)' },
+];
+const absenceKind = id => ABSENCE_KINDS.find(k => k.id === id) || ABSENCE_KINDS[3];
+const absenceHue  = id => absenceKind(id).hue;
+const absenceGlyph = {
+  vacation: Ic.sun, sick: Ic.thermometer, training: Ic.cap, unavailable: Ic.slash,
+};
+
+/* The absence covering one person on one date, or null.
+
+   `list` is already that person's absences -- SchedulePage groups the flat
+   GET /v1/schedule array by user_id once rather than rescanning it per cell.
+
+   Comparisons are string comparisons on "YYYY-MM-DD", which is what the server
+   marshals JSONDate to and what week.days[i].date already carries. No Date objects
+   anywhere in here, so there is no timezone to get wrong -- and this is exactly the
+   trap the server-side Absences.Covers comment describes, where a `date` column
+   scanned from Postgres is midnight UTC and the week's dates are local midnight.
+
+   A run is a RANGE rather than seven per-week cells, and that is what lets this
+   answer a question the per-week shape cannot: whether the absence carries on past
+   the end of the week on screen. See the continuation marker in RotaTable. */
+function absenceAt(list, iso) {
+  if (!list || !iso) return null;
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    if (a.starts_on <= iso && iso <= a.ends_on) return a;
+  }
+  return null;
+}
+
+/* The hours that will ACTUALLY be worked this week.
+
+   rotaWeekHours stays exactly as it is and stays the standing total: it is what the
+   recurring rota says, and it is the number that has to survive an absence ending.
+   This is the other number, and it is the one a manager is reconciling a week
+   against -- somebody whose Wednesday is HOLIDAY is not working Wednesday's eight
+   hours this week, and being told "16 h/week" for them is the one control that
+   exists to make an uneven rota visible reporting it wrong.
+
+   The two differ only when an absence covers a day that had a shift, so a rota with
+   no absences renders identically to before. */
+function rotaWorkedMinutes(member, week, absencesByUser) {
+  const list = absencesByUser && absencesByUser.get(member.user_id);
+  return (member.days || []).reduce((n, s, i) => {
+    const d = week && week.days && week.days[i];
+    if (d && absenceAt(list, d.date)) return n;
+    return n + shiftMinutes(s);
+  }, 0);
+}
+
+/* Grouped once per render rather than per cell: 42 cells times a scan of the whole
+   absence list is 42 scans, and the grouping is also what lets a member be absent
+   for a whole week be answered in O(1) per cell. */
+function absencesByUser(absences) {
+  const map = new Map();
+  for (const a of (absences || [])) {
+    if (!map.has(a.user_id)) map.set(a.user_id, []);
+    map.get(a.user_id).push(a);
+  }
+  return map;
+}
+
 /* One cell's shift chooser.
    The panel geometry, the outside-click mousedown and the capture-phase Escape
    handler are RoomPicker's, deliberately. A second popover in this file would
@@ -10573,7 +10898,8 @@ function rotaWeekHours(member) {
    alignRight and openUp are the two corrections RoomPicker does not need: it sits
    in a form with room below it, and a 49-cell grid has its right-hand and
    bottom-row cells against the clipped edge of a .table-card. */
-function RotaPicker({ cellId, value, shifts, onPick, t, alignRight, openUp }) {
+function RotaPicker({ cellId, value, shifts, absence, onPick, onAddAbsence,
+                       onEditAbsence, onRemoveAbsence, memberName, t, alignRight, openUp }) {
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const wrapRef = useRef(null);
@@ -10599,16 +10925,32 @@ function RotaPicker({ cellId, value, shifts, onPick, t, alignRight, openUp }) {
     };
   }, [open]);
 
-  // "Day off" first, then every shift in the order a day happens. The current
-  // choice is in that list already, so it is picked by clicking it again rather
-  // than by a separate control that would have to mean the same thing.
-  const options = [{off: true, name: t.rotaDayOff, start_time: '', end_time: '', overnight: false}]
+  // "Day off" first, then every shift in the order a day happens, then the four
+  // absence kinds. ONE flat list, not two: a listbox may only contain options, and a
+  // second list would mean a second roving cursor, a second End, and a second set of
+  // answers to "where does Down go from here".
+  //
+  // The current choice is in that list already, so it is picked by clicking it again
+  // rather than by a separate control that would have to mean the same thing.
+  const shiftOpts = [{off: true, name: t.rotaDayOff, start_time: '', end_time: '', overnight: false}]
     .concat(shifts.map(s => ({ ...s })));
+  const options = shiftOpts.concat(ABSENCE_KINDS.map(k => ({ abs: k.id, name: t.rotaAbsKind[k.id] })));
+  // Where the absences begin, and therefore where the separator and the second
+  // heading go. A named constant rather than an index into `options` at two places,
+  // because the positions drift together the moment a shift is added.
+  const sepAt = shiftOpts.length;
+
   const chosenIdx = value
     ? options.findIndex(o => !o.off && o.id === value.id)
     : 0;
 
   const choose = o => {
+    // An absence is not a rota cell, so it does not go through onPick. It opens the
+    // dialog and saves itself there -- absence writes are immediate, like a retire in
+    // the Settings card, and folding them into a draft that Cancel could throw away
+    // would make a holiday something a manager could lose by changing their mind
+    // about a shift.
+    if (o.abs) { setOpen(false); onAddAbsence && onAddAbsence(o.abs); return; }
     onPick(o.off ? null : o);
     setOpen(false);
   };
@@ -10622,28 +10964,45 @@ function RotaPicker({ cellId, value, shifts, onPick, t, alignRight, openUp }) {
       }
       return;
     }
-    if (e.key === 'ArrowDown') { setCursor(c => Math.min(c + 1, options.length - 1)); e.preventDefault(); }
+    if (e.key === 'ArrowDown') { setCursor(c => Math.min(c + 1, optionCount - 1)); e.preventDefault(); }
     else if (e.key === 'ArrowUp') { setCursor(c => Math.max(c - 1, 0)); e.preventDefault(); }
     else if (e.key === 'Home') { setCursor(0); e.preventDefault(); }
-    else if (e.key === 'End') { setCursor(options.length - 1); e.preventDefault(); }
+    else if (e.key === 'End') { setCursor(optionCount - 1); e.preventDefault(); }
     else if (e.key === 'Enter' || e.key === ' ') {
       // Enter picks the highlighted option. With nothing highlighted it is left
       // alone, so the key still does whatever the key does outside a picker.
+      // Enter on an absent cell's panel picks whatever is highlighted, which is the
+      // three-item list rather than a shift. So the dispatch has to know which panel
+      // it is in -- and for this one it opens a dialog instead of writing a cell.
+      if (absence) {
+        if (cursor === 0) { setOpen(false); }
+        else if (cursor === 1) { setOpen(false); onEditAbsence && onEditAbsence(absence); }
+        else { setOpen(false); onRemoveAbsence && onRemoveAbsence(absence); }
+        e.preventDefault();
+        return;
+      }
       if (options[cursor] !== undefined) { choose(options[cursor]); e.preventDefault(); }
     }
   };
 
+  // The number of options in the panel that is OPEN, not the shift list's length.
+  // An absent cell's panel has three, and Home/End/ArrowDown must address those or a
+  // keyboard user can move the cursor onto an option that is not there.
+  const optionCount = absence ? 3 : options.length;
   const optionId = i => listId + '-' + i;
   const activeId = (open && options[cursor] !== undefined) ? optionId(cursor) : undefined;
 
   return (
     <div className="rota-picker" ref={wrapRef}>
       <button type="button"
-        className={'rota-cell' + (value ? '' : ' is-off') + (value && value.overnight ? ' is-night' : '') +
+        className={'rota-cell' + (absence ? ' is-away' : (value ? '' : ' is-off')) +
+          (value && value.overnight ? ' is-night' : '') +
           (value && value.color ? ' is-tinted' : '') + ' is-editable'}
-        /* An untinted cell gets a null style and keeps its own background, which is
-           what makes it render exactly as it did before the tint existed. */
-        style={tintStyle(value)}
+        /* ONE style attribute answering both features: the absence ink when the day
+           is an absence, otherwise the shift's tint. An untinted cell gets a null
+           style and keeps its own background, which is what makes it render exactly
+           as it did before the tint existed. */
+        style={absence ? { '--abs-ink': absenceHue(absence.kind) } : tintStyle(value)}
         role="combobox"
         aria-expanded={open}
         aria-controls={listId}
@@ -10651,7 +11010,17 @@ function RotaPicker({ cellId, value, shifts, onPick, t, alignRight, openUp }) {
         aria-haspopup="listbox"
         onClick={() => { setOpen(o => !o); setCursor(Math.max(chosenIdx, 0)); }}
         onKeyDown={onKeyDown}>
-        {value
+        {absence
+          ? <>
+              {/* The same four cues as the read-only cell -- hatch, glyph, word --
+                  so a cell does not change shape when a manager presses Edit. */}
+              <span className="rota-cell-hatch" aria-hidden="true"/>
+              <span className="rota-cell-kind" aria-hidden="true">
+                {absenceGlyph[absence.kind]}
+              </span>
+              <span className="rota-cell-absword">{t.rotaAbsShort[absence.kind]}</span>
+            </>
+          : value
           ? <>
               <span className="rota-cell-name">{value.name}</span>
               {/* "+1" on the name's baseline, so it reads as part of the shift
@@ -10664,17 +11033,71 @@ function RotaPicker({ cellId, value, shifts, onPick, t, alignRight, openUp }) {
       {open && (
         <div className={'rota-picker-panel' + (alignRight ? ' align-right' : '') + (openUp ? ' open-up' : '')}
           id={listId} role="listbox">
-          {options.map((o, i) => {
+          {/* An absent cell's panel, and it REPLACES the shift list rather than
+              sitting under a disabled copy of it. That is where the rule "you cannot
+              set a shift on a day somebody is away" is actually enforced: setCell is
+              never called, because the options that would call it are not rendered at
+              all. Showing a list of shifts that cannot be chosen only invites the
+              click. */}
+          {absence ? (
+            <>
+              <div className="rota-abs-locked">{t.rotaCellLabelAway
+                .replace('{name}', memberName)
+                .replace('{kind}', t.rotaAbsKind[absence.kind])}</div>
+              <button type="button" role="option" id={optionId(0)} aria-selected="true"
+                className={'rota-option is-abs rota-option-chosen' + (cursor === 0 ? ' active' : '')}
+                style={{ '--abs-ink': absenceHue(absence.kind) }}
+                onMouseEnter={() => setCursor(0)}
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => setOpen(false)}>
+                <span className="rota-option-tick">{Ic.check}</span>
+                <span className="rota-option-kind" aria-hidden="true">
+                  {absenceGlyph[absence.kind]}
+                </span>
+                <span className="rota-option-name">{t.rotaAbsKind[absence.kind]}</span>
+                <span className="rota-option-hours">
+                  {absence.starts_on.slice(5)}&ndash;{absence.ends_on.slice(5)}
+                </span>
+              </button>
+              <button type="button" role="option" id={optionId(1)} aria-selected="false"
+                className={'rota-option' + (cursor === 1 ? ' active' : '')}
+                onMouseEnter={() => setCursor(1)}
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => { setOpen(false); onEditAbsence && onEditAbsence(absence); }}>
+                {Ic.edit}<span className="rota-option-name">{t.rotaAbsEditOption}</span>
+              </button>
+              <button type="button" role="option" id={optionId(2)} aria-selected="false"
+                className={'rota-option' + (cursor === 2 ? ' active' : '')}
+                onMouseEnter={() => setCursor(2)}
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => { setOpen(false); onRemoveAbsence && onRemoveAbsence(absence); }}>
+                {Ic.trash}<span className="rota-option-name">{t.rotaAbsRemoveOption}</span>
+              </button>
+              <div className="rota-picker-foot">{t.rotaAbsLocked}</div>
+            </>
+          ) : options.map((o, i) => {
             const selected = o.off ? !value : (!!value && o.id === value.id);
             return (
-              <button type="button" key={o.off ? 'off' : o.id}
+              <React.Fragment key={o.abs ? 'abs-' + o.abs : (o.off ? 'off' : o.id)}>
+              {/* Both headings, not just a rule. A separator says "there are two
+                  lists"; a heading says what the second one IS, and rotaChooseShift --
+                  defined in both tables and used nowhere until now -- is exactly the
+                  first one's caption. aria-hidden, because the option COUNT a screen
+                  reader sees has to stay equal to options.length for End and for
+                  aria-activedescendant to mean anything. */}
+              {i === 1 && <div className="rota-picker-subhead" role="presentation" aria-hidden="true">{t.rotaChooseShift}</div>}
+              {i === sepAt && <>
+                <div className="rota-picker-sep" role="presentation" aria-hidden="true"/>
+                <div className="rota-picker-subhead" role="presentation" aria-hidden="true">{t.rotaAbsGroupHead}</div>
+              </>}
+              <button type="button"
                 role="option"
                 id={optionId(i)}
                 aria-selected={selected}
                 className={'rota-option' + (i === cursor ? ' active' : '') +
                   (selected ? ' rota-option-chosen' : '') + (o.overnight ? ' is-night' : '') +
-                  (o.color ? ' is-tinted' : '')}
-                style={tintStyle(o)}
+                  (o.color ? ' is-tinted' : '') + (o.abs ? ' is-abs' : '')}
+                style={o.abs ? { '--abs-ink': absenceHue(o.abs) } : tintStyle(o)}
                 onMouseEnter={() => setCursor(i)}
                 onMouseDown={e => e.preventDefault()}   // keep focus so the panel stays open
                 onClick={() => choose(o)}>
@@ -10683,22 +11106,27 @@ function RotaPicker({ cellId, value, shifts, onPick, t, alignRight, openUp }) {
                     discipline is what keeps the tint apart from the overnight edge
                     beside it. */}
                 {o.color && <span className="rota-tint-dot" style={dotStyle(o.color)}/>}
+                {o.abs && <span className="rota-option-kind" aria-hidden="true">{absenceGlyph[o.abs]}</span>}
                 <span className="rota-option-name">{o.name}</span>
-                {!o.off && <span className="rota-option-hours">
+                {!o.off && !o.abs && <span className="rota-option-hours">
                   {o.start_time}&ndash;{o.end_time}{o.overnight ? t.rotaPlusOne : ''}
                 </span>}
                 {/* The same badge the legend uses. A retired shift reaches
                     this list through a cell that is still assigned to it, which
                     is the only way it can be here at all -- so the picker is
                     exactly where the badge is needed most. */}
-                {!o.off && o.active === false &&
+                {!o.off && !o.abs && o.active === false &&
                   <span className="rota-legend-retired">{t.rotaRetired}</span>}
               </button>
+              </React.Fragment>
             );
           })}
-          {shifts.length === 0 && (
+          {!absence && shifts.length === 0 && (
             /* Reachable only in the narrow window where a manager has deleted
-               every shift while the grid they came from is still on screen. */
+               every shift while the grid they came from is still on screen. NOT shown
+               on an absent cell: that panel has three options and a foot that already
+               explains itself, and "no shifts defined" there would read as a warning
+               about the absence. */
             <div className="rota-picker-foot">{t.rotaNoShiftsHead}</div>
           )}
         </div>
@@ -10712,9 +11140,14 @@ function RotaPicker({ cellId, value, shifts, onPick, t, alignRight, openUp }) {
    anywhere inside it -- an anonymous visitor and a manager looking at the rota
    produce byte-identical DOM here, which is the only way to be sure the
    permission flag cannot produce a rendering difference nobody looked at. */
-function RotaTable({ t, week, members, shifts, editing, draft, setCell }) {
+function RotaTable({ t, week, members, shifts, absences, editing, draft, setCell,
+                      onAddAbsence, onEditAbsence, onRemoveAbsence }) {
   const shown = editing ? (draft || []) : members;
   const gridRef = useRef(null);
+
+  // Grouped once per render rather than per cell, and the same map answers both the
+  // per-day lookup and the "is this person away all week" question below.
+  const absByUser = useMemo(() => absencesByUser(absences), [absences]);
 
   // Entering edit mode hands focus to the grid's first real cell. On the way out
   // it is left alone: the segmented control is still on screen, so a Tab from
@@ -10748,8 +11181,23 @@ function RotaTable({ t, week, members, shifts, editing, draft, setCell }) {
         </thead>
         <tbody>
           {shown.map(m => {
+            const list = absByUser.get(m.user_id) || [];
             const mins = rotaWeekHours(m);
+            // What will actually be worked, which is not what the recurring rota says
+            // once an absence covers a day that had a shift.
+            const worked = rotaWorkedMinutes(m, week, absByUser);
+            const awayMins = mins - worked;
             const free = !(m.days || []).some(Boolean);
+
+            // "Not on this rota" and "away all week" are DIFFERENT statements and must
+            // never be the same pill. The stored week of somebody on holiday all week
+            // is usually all-null, so the plain `free` test calls them "not on this
+            // rota" -- which is false. They are on the rota. They are away. That is
+            // exactly the confusion this feature exists to prevent, arriving through
+            // the back door.
+            const awayAll = free && week.days.every(d => absenceAt(list, d.date));
+            const freeLabel = awayAll ? t.rotaFreeAway : t.rotaFreeWeek;
+
             return (
               <tr key={m.user_id} className={m.active ? undefined : 'rota-inactive'}>
                 <th scope="row" className="rota-name-cell">
@@ -10758,15 +11206,33 @@ function RotaTable({ t, week, members, shifts, editing, draft, setCell }) {
                     <span className="rota-member-text">
                       <span className="rota-member-name">{m.name}</span>
                       {free
-                        ? <span className="rota-free">{t.rotaFreeWeek}</span>
-                        : <div className="rota-member-hours">
-                            {t.rotaWeekHours.replace('{hours}', (mins / 60).toFixed(mins % 60 ? 1 : 0))}
-                          </div>}
+                        ? <span className={'rota-free' + (awayAll ? ' is-away' : '')}>
+                            {awayAll && <span aria-hidden="true">{Ic.slash}</span>}
+                            {freeLabel}
+                          </span>
+                        : <>
+                            <div className="rota-member-hours">
+                              {t.rotaWeekHours.replace('{hours}', (worked / 60).toFixed(worked % 60 ? 1 : 0))}
+                            </div>
+                            {/* The hours lost to an absence, named on its own line. A
+                                struck-through standing total would be two numbers in one
+                                column, and this grid has exactly one column for totals. */}
+                            {awayMins > 0 && <span className="rota-away-hours">
+                              {Ic.slash}
+                              {t.rotaAbsHoursAway.replace('{hours}', (awayMins / 60).toFixed(awayMins % 60 ? 1 : 0))}
+                            </span>}
+                          </>}
                     </span>
                   </div>
                 </th>
                 {week.days.map((d, i) => {
                   const shift = (m.days || [])[i] || null;
+                  // The absence covering this date, if any. An absence BEATS the
+                  // recurring shift for that day, and -- the point -- the shift is
+                  // not erased: Days[i] stays exactly as the pattern says it, so a
+                  // manager can still see what the rota has them on that weekday and
+                  // move it when the absence ends. Precedence is not deletion.
+                  const absence = absenceAt(list, d.date);
                   const cellId = 'rota-u' + m.user_id + '-d' + (i + 1);
                   // "Nobody on this rota" and "a day off" both print a dash, and
                   // aria-label is what tells them apart -- the row badge already
@@ -10784,6 +11250,15 @@ function RotaTable({ t, week, members, shifts, editing, draft, setCell }) {
                           cellId={cellId}
                           value={shift}
                           shifts={shifts}
+                          /* The absence covering this date, if any. It goes to the
+                             picker rather than being handled around it, because the
+                             picker IS the cell's control, and a cell whose control
+                             cannot express its state is a lie. */
+                          absence={absenceAt(list, d.date)}
+                          onAddAbsence={kind => onAddAbsence(m.user_id, m.name, kind, d.date)}
+                          onEditAbsence={onEditAbsence}
+                          onRemoveAbsence={onRemoveAbsence}
+                          memberName={m.name}
                           onPick={s => setCell(m.user_id, i, s)}
                           t={t}
                           // The last two columns open leftwards, so the panel
@@ -10793,6 +11268,33 @@ function RotaTable({ t, week, members, shifts, editing, draft, setCell }) {
                           // table scrolls rather than running under the fold.
                           alignRight={i >= 5}
                           openUp={false}/>
+                        : absence
+                          ? <div className="rota-cell is-away"
+                              style={{ '--abs-ink': absenceHue(absence.kind) }}>
+                              <span className="rota-cell-hatch" aria-hidden="true"/>
+                              <span className="rota-cell-kind" aria-hidden="true">
+                                {absenceGlyph[absence.kind]}
+                              </span>
+                              {/* The word, in caps by CSS. This is the WCAG 1.4.1
+                                  answer: the hatch, the rule and the colour are all
+                                  colour or texture, and the word is the part that
+                                  survives neither. */}
+                              <span className="rota-cell-absword">
+                                {t.rotaAbsShort[absence.kind]}
+                              </span>
+                              {/* "And it carries on past Sunday." Only on the run's last
+                                  covered cell of the week, and only when the run really
+                                  does continue. This is the one piece of absence state
+                                  that cannot come out of a per-week array of cells,
+                                  and it is why the server sends ranges. */}
+                              {absence.ends_on > week.end && d.date === week.end &&
+                                <span className="rota-cell-then" aria-hidden="true">{Ic.chevron}</span>}
+                              <span className="sr-only">
+                                {t.rotaCellLabelAway
+                                  .replace('{name}', m.name)
+                                  .replace('{kind}', t.rotaAbsKind[absence.kind])}
+                              </span>
+                            </div>
                         : <div
                             className={'rota-cell' + (shift ? '' : ' is-off') +
                               (shift && shift.overnight ? ' is-night' : '') +
@@ -11306,6 +11808,158 @@ function ShiftSettingsCard({ token, setToast }) {
   );
 }
 
+/* Marking somebody away.
+
+   Follows DiscardDialog exactly: useDialog with the initial focus on the SAFE action,
+   modal-overlay > modal > role="dialog" aria-modal, a header with an h2 and an X, a
+   body, and a footer. Cancel takes the focus rather than Save, for the reason
+   ConfirmDeleteIssue and DiscardDialog both give -- Enter is often still held over
+   from whatever the manager did before the dialog opened, and here a reflexive Enter
+   would write a dated absence onto a colleague's record.
+
+   Delete is NOT in this dialog's primary position. A footer carrying both Save and
+   Remove is a mis-click generator, and this file already separates the two acts
+   elsewhere: the Settings card puts its delete confirmation under the list, and
+   ConfirmDeleteIssue is its own component. So Remove opens a second dialog with the
+   same shape.
+
+   The NOTE carries its privacy rule with it, at the field, rather than in a policy
+   page: somebody typing a diagnosis deserves to know at the moment of typing that it
+   will not reach a noticeboard. The server enforces that -- AbsenceRef, the shape the
+   public grid carries, has no note field at all -- so this text is reassurance rather
+   than the mechanism. */
+function AbsenceDialog({ t, dlg, setDlg, spanDays, err, busy, onCancel, onSave, onRemove }) {
+  const panelRef = useDialog({ onClose: busy ? null : onCancel, initialFocus: '#rota-abs-cancel' });
+  const invalid = !dlg.starts_on || !dlg.ends_on || dlg.ends_on < dlg.starts_on;
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !busy && onCancel()}>
+      <div className="modal confirm-modal" ref={panelRef} role="dialog" aria-modal="true"
+        aria-labelledby="rota-abs-title">
+        <div className="modal-header">
+          <h2 id="rota-abs-title">{dlg.id ? t.rotaAbsEditTitle : t.rotaAbsAddTitle}</h2>
+          <button type="button" className="icon-btn" onClick={onCancel} disabled={busy}>{Ic.x}</button>
+        </div>
+
+        <div className="modal-body">
+          {/* Who this is about, stated in the dialog rather than left to the cell the
+              manager clicked from -- ConfirmDeleteIssue repeats its subject line for
+              the same reason: the confirm can be triggered from a row they are
+              looking at rather than at. */}
+          <div className="rota-abs-who">{Ic.person}<span>{dlg.name}</span></div>
+
+          {/* A fieldset with a legend, not a div with a caption. Four radios are one
+              question and the fieldset is the element that says so. */}
+          <fieldset className="rota-abs-kinds">
+            <legend className="form-group-h">{t.rotaAbsKindLabel}</legend>
+            <div className="rota-abs-kindgrid">
+              {ABSENCE_KINDS.map(k => (
+                <label key={k.id}
+                  className={'rota-abs-kind' + (dlg.kind === k.id ? ' is-on' : '')}
+                  style={{ '--abs-ink': k.hue }}>
+                  <input type="radio" name="rota-abs-kind" value={k.id}
+                    checked={dlg.kind === k.id}
+                    onChange={() => setDlg({ ...dlg, kind: k.id })}/>
+                  <span className="rota-abs-kind-ic" aria-hidden="true">{absenceGlyph[k.id]}</span>
+                  <span className="rota-abs-kind-name">{t.rotaAbsKind[k.id]}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="rota-abs-from">{t.rotaAbsFrom}</label>
+              <input id="rota-abs-from" type="date" className="form-control"
+                value={dlg.starts_on}
+                onChange={e => setDlg({ ...dlg, starts_on: e.target.value })}/>
+            </div>
+            <div className="form-group">
+              <label htmlFor="rota-abs-to">{t.rotaAbsTo}</label>
+              <input id="rota-abs-to" type="date" className="form-control"
+                value={dlg.ends_on} min={dlg.starts_on}
+                onChange={e => setDlg({ ...dlg, ends_on: e.target.value })}/>
+            </div>
+          </div>
+
+          {/* Stated rather than predicted. A run longer than the week on screen is the
+              NORMAL case for this feature, not an edge case: a manager typing
+              Monday-to-Friday while looking at Monday-to-Sunday needs to be told how
+              many days they have just booked. Computed by absenceDayCount, which is
+              UTC-based for the DST reason its own comment gives. */}
+          <div className="rota-abs-span">
+            {spanDays === 1 ? t.rotaAbsSpanOne : t.rotaAbsSpan.replace('{count}', spanDays)}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="rota-abs-note">{t.rotaAbsNote}</label>
+            <textarea id="rota-abs-note" className="form-control rota-abs-note" rows={3}
+              maxLength={200} value={dlg.note || ''}
+              placeholder={t.rotaAbsNotePlaceholder}
+              onChange={e => setDlg({ ...dlg, note: e.target.value })}/>
+            <div className="rota-abs-privacy">
+              {Ic.shield}<span>{t.rotaAbsNotePrivacy}</span>
+            </div>
+          </div>
+
+          {err && <div className="auth-error">{err}</div>}
+        </div>
+
+        <div className="modal-footer rota-abs-footer">
+          <span className="rota-abs-left">
+            {dlg.id
+              ? <button type="button" className="btn btn-danger" onClick={onRemove} disabled={busy}>
+                  {Ic.trash} {t.rotaAbsRemove}
+                </button>
+              : null}
+          </span>
+          <button type="button" id="rota-abs-cancel" className="btn btn-ghost"
+            onClick={onCancel} disabled={busy} autoFocus>{t.rotaCancel}</button>
+          <button type="button" className="btn btn-primary" onClick={onSave}
+            disabled={busy || invalid}>
+            {Ic.check} {busy ? '.' : (dlg.id ? t.rotaAbsSaveChanges : t.rotaAbsSave)}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Removing one.
+
+   The body copy is the load-bearing part: it says the recurring rota comes BACK, not
+   that the days are removed. The recurring shift was never touched, and a manager who
+   believes otherwise will delete a holiday and lose four Earlys. The server says the
+   same thing in its DELETE response, for the same reader. */
+function ConfirmRemoveAbsence({ t, target, onCancel, onConfirm, busy }) {
+  const panelRef = useDialog({ onClose: busy ? null : onCancel, initialFocus: '#rota-abs-del-cancel' });
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !busy && onCancel()}>
+      <div className="modal confirm-modal" ref={panelRef} role="dialog" aria-modal="true"
+        aria-label={t.rotaAbsRemoveTitle}>
+        <div className="modal-header">
+          <h2>{t.rotaAbsRemoveTitle}</h2>
+          <button type="button" className="icon-btn" onClick={onCancel} disabled={busy}>{Ic.x}</button>
+        </div>
+        <div className="modal-body confirm-body">
+          <span className="confirm-icon">{Ic.trash}</span>
+          <div className="confirm-text">
+            {t.rotaAbsRemoveBody.replace('{name}', target.name)}
+            <span className="confirm-subject">{target.starts_on} &ndash; {target.ends_on}</span>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button type="button" id="rota-abs-del-cancel" className="btn btn-ghost"
+            onClick={onCancel} disabled={busy} autoFocus>{t.rotaCancel}</button>
+          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={busy}>
+            {busy ? t.deleting : <>{Ic.trash} {t.rotaAbsRemoveYes}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* Throwing away unsaved edits.
 
    Every other confirmation in this app is destructive and uses btn-danger; this
@@ -11374,6 +12028,106 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
   const [busy, setBusy]     = useState(false);
   const [announce, setAnnounce] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+// Absences are written IMMEDIATELY, the way a retire is written in the Settings
+  // card, rather than staged in the rota draft.
+  //
+  // This is the one place the two features deliberately do NOT share a save. An
+  // absence is not a rota cell: it is dated, it outlives any week on screen, and it
+  // belongs to somebody's calendar rather than to the standing pattern. Putting it in
+  // the draft would mean a manager could lose a colleague's holiday by pressing Cancel
+  // because they changed their mind about a shift three cells away -- and the save bar
+  // counts PEOPLE with rota edits, so the absence would not even appear in "1 unsaved".
+  //
+  // The trade is one honest wrinkle, and it is better than the alternative: after
+  // marking somebody away, Save is disabled because nothing in the DRAFT changed. That
+  // is correct -- the absence was already saved, and the toast said so a moment
+  // earlier -- and the answer is the toast, not a save bar that pretends otherwise.
+  const [absDlg, setAbsDlg] = useState(null);        // the open AbsenceDialog
+  const [absTarget, setAbsTarget] = useState(null);  // the open remove confirmation
+  const [absBusy, setAbsBusy] = useState(false);
+  const [absErr, setAbsErr] = useState('');
+
+  // From the cell picker: "mark this person away on this date", with the kind the
+  // manager already chose. The date comes from the cell rather than from today,
+  // because the whole point is that a manager can be looking at next week.
+  function openAbsAdd(userId, name, kind, dateISO) {
+    setAbsErr('');
+    setAbsDlg({
+      id: null, userId, name, kind: kind || 'vacation',
+      starts_on: dateISO, ends_on: dateISO, note: '',
+    });
+  }
+
+  // From the cell picker on an absent cell. The note is NOT in the grid payload --
+  // AbsenceRef has no field for it -- so it is fetched here, once, when a manager
+  // actually opens the dialog. That is the price of the type boundary that keeps it
+  // off a public noticeboard, and it is a price worth paying on a rare action.
+  async function openAbsEdit(a, name) {
+    setAbsErr('');
+    setAbsBusy(true);
+    try {
+      const res = await apiFetch('/absences/' + a.id, { token });
+      const full = res.absence || a;
+      setAbsDlg({
+        id: full.id, userId: full.user_id, name,
+        kind: full.kind, starts_on: full.starts_on, ends_on: full.ends_on,
+        note: full.reason || '', version: full.version,
+      });
+    } catch (ex) {
+      setAbsErr((ex && ex.message) || 'Request failed');
+      setToast(t.rotaAbsLoadFailed);
+    } finally {
+      setAbsBusy(false);
+    }
+  }
+
+  function openAbsRemove(dlg) {
+    setAbsTarget({ id: dlg.id, name: dlg.name, starts_on: dlg.starts_on, ends_on: dlg.ends_on });
+  }
+
+  async function saveAbs() {
+    if (!absDlg) return;
+    setAbsBusy(true);
+    setAbsErr('');
+    const body = {
+      user_id: absDlg.userId, kind: absDlg.kind,
+      starts_on: absDlg.starts_on, ends_on: absDlg.ends_on,
+      reason: absDlg.note || '',
+    };
+    if (absDlg.id) body.version = absDlg.version;
+    try {
+      await apiFetch(absDlg.id ? '/absences/' + absDlg.id : '/absences', {
+        method: absDlg.id ? 'PATCH' : 'POST', token, body });
+      setAbsDlg(null);
+      // Re-read the grid rather than patching the absence into local state: the
+      // window filter, the continuation marker and the per-member hours all derive
+      // from the range, and re-deriving them here would be a second implementation of
+      // rules the server already owns.
+      await load(weekISO);
+      setToast(absDlg.id ? t.rotaAbsSaved : t.rotaAbsAdded);
+    } catch (ex) {
+      setAbsErr((ex && ex.message) || 'Request failed');
+    } finally {
+      setAbsBusy(false);
+    }
+  }
+
+  async function removeAbs() {
+    if (!absTarget) return;
+    setAbsBusy(true);
+    setAbsErr('');
+    try {
+      await apiFetch('/absences/' + absTarget.id, { method: 'DELETE', token });
+      setAbsTarget(null);
+      setAbsDlg(null);
+      await load(weekISO);
+      setToast(t.rotaAbsDeleted);
+    } catch (ex) {
+      setAbsErr((ex && ex.message) || 'Request failed');
+    } finally {
+      setAbsBusy(false);
+    }
+  }
 
   const onThisWeek = weekISO === mondayISO(new Date());
   const canEdit = !!(data && data.canEdit);
@@ -11384,10 +12138,14 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
     return apiFetch('/schedule?week=' + wk, {token})
       .then(res => {
         setData({
-          week:    res.week,
-          members: res.members || [],
-          shifts:  res.shifts  || [],
-          canEdit: !!res.can_edit,
+          week:     res.week,
+          members:  res.members || [],
+          shifts:   res.shifts  || [],
+          // Dated ranges, already filtered by the server to the week on screen and
+          // already reduced by it for anybody who is not a manager. Both of those are
+          // the server's job and neither is re-done here.
+          absences: res.absences || [],
+          canEdit:  !!res.can_edit,
         });
         setError('');
       })
@@ -11414,6 +12172,54 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
   /* Dirty is the set of MEMBERS whose days differ, not the set of cells. One PUT
      goes out per person, so a count of cells would overstate the work and a count
      of changes would understate it. */
+// A person's name, for a confirmation that has to say who it is about.
+  // ConfirmDeleteIssue repeats its subject for the same reason, and here the subject
+  // is a colleague rather than a record.
+  const nameFor = userId => {
+    const m = (data && data.members || []).find(x => x.user_id === userId);
+    return m ? m.name : '';
+  };
+
+  // The absence half of the legend: one chip per KIND, counting PEOPLE, built from
+  // what is actually on screen rather than from anything the client already knows.
+  //
+  // Deduplicating by kind is what makes the redaction work from this side too: the
+  // payload already says "unavailable" where a manager would see "sick leave", so a
+  // public board shows "Unavailable - 2 people" and never mentions sick leave. And
+  // that follows from the payload rather than from a second client-side remap that
+  // could disagree with it.
+  //
+  // Counting PEOPLE rather than rows, and counting each person once per kind they are
+  // actually shown under.
+  //
+  // Both halves matter. Rows would say a fortnight of holiday is two people away. And
+  // a plain per-kind count would say "Holiday - 1 person, Sick leave - 1 person" about
+  // ONE person who is away all week and happens to have sick leave recorded inside
+  // their holiday -- two chips reading as two people, which is the number a manager
+  // staffing a shift would actually use.
+  //
+  // So it walks the grid's own rule: for each member and each day, the absence the
+  // CELL shows, which is the first one covering it. A person appears under a kind only
+  // where they are genuinely shown as that kind, and a sick absence inside a holiday
+  // contributes to the holiday -- which is also the more truthful statement, since the
+  // holiday is why they are away.
+  const absLegend = useMemo(() => {
+    if (!data) return [];
+    const byUser = absencesByUser(data.absences);
+    const counts = new Map();
+    for (const m of (data.members || [])) {
+      const list = byUser.get(m.user_id);
+      if (!list) continue;
+      const seen = new Set();
+      for (const d of data.week.days) {
+        const a = absenceAt(list, d.date);
+        if (a) seen.add(a.kind);
+      }
+      for (const kind of seen) counts.set(kind, (counts.get(kind) || 0) + 1);
+    }
+    return [...counts.entries()].map(([kind, count]) => ({ kind, count }));
+  }, [data]);
+
   const dirtyIds = useMemo(() => {
     if (!editing || !draft || !data) return [];
     const was = new Map(data.members.map(m => [m.user_id, m]));
@@ -11625,7 +12431,7 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
           <span>{onThisWeek ? t.rotaStanding : t.rotaOtherWeek}</span>
         </div>
 
-        {legend.length > 0 && (data.members || []).length > 0 && (
+        {(legend.length > 0 || absLegend.length > 0) && (data.members || []).length > 0 && (
           <div className="rota-legend">
             {legend.map(x => (
               <span key={x.id}
@@ -11645,6 +12451,24 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
                 {x.active === false && <span className="rota-legend-retired">{t.rotaRetired}</span>}
               </span>
             ))}
+            {/* The absence group, and ONLY when there is one. An empty second group
+                behind a rule reads as "absences exist but none are this week", which
+                is a different and more alarming statement than "no absences". */}
+            {absLegend.length > 0 && <>
+              <span className="rota-legend-sep" aria-hidden="true"/>
+              {absLegend.map(k => (
+                <span key={k.kind} className="rota-legend-abs"
+                  style={{ '--abs-ink': absenceHue(k.kind) }}>
+                  <span className="rota-legend-abs-ic" aria-hidden="true">
+                    {absenceGlyph[k.kind]}
+                  </span>
+                  <span className="rota-legend-abs-name">{t.rotaAbsKind[k.kind]}</span>
+                  <span className="rota-legend-abs-count">
+                    {k.count === 1 ? t.rotaAbsPeopleOne : t.rotaAbsPeople.replace('{count}', k.count)}
+                  </span>
+                </span>
+              ))}
+            </>}
           </div>
         )}
 
@@ -11652,7 +12476,7 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
             indistinguishable from "everybody is off all week" -- a materially
             different statement, and the more alarming one to get wrong. So the
             grid does not render. */}
-        {legend.length === 0 ? (
+        {legend.length === 0 && absLegend.length === 0 ? (
           <div className="empty-state">
             {Ic.calendar}
             <p className="rota-empty-head">{t.rotaNoShiftsHead}</p>
@@ -11671,15 +12495,40 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
             <p className="rota-empty-sub">{t.rotaNoMembersBody}</p>
           </div>
         ) : (
-          <RotaTable
-            t={t}
-            week={data.week}
-            members={data.members || []}
-            shifts={legend}
-            editing={editing}
-            draft={draft}
-            setCell={setCell}
-          />
+          <>
+            {/* "Nobody is on a shift this week, but people are marked away" is a real
+                state, and the no-shifts empty state above is actively misleading in it
+                -- it would tell a manager nobody has been rostered when in fact seven
+                people are visibly off. The grid still renders so the absences are
+                legible; the note says what is actually true about the rota. */}
+            {legend.length === 0 && (
+              <div className="rota-note">
+                {Ic.info}
+                <span>
+                  {t.rotaAbsOnlyGrid}
+                  {canEdit && onGoToSettings && (
+                    <button type="button" className="btn btn-ghost rota-empty-cta"
+                      onClick={() => onGoToSettings('cat-shifts')}>
+                      {Ic.plus} {t.rotaDefineShifts}
+                    </button>
+                  )}
+                </span>
+              </div>
+            )}
+            <RotaTable
+              t={t}
+              week={data.week}
+              members={data.members || []}
+              shifts={legend}
+              absences={data.absences || []}
+              editing={editing}
+              draft={draft}
+              setCell={setCell}
+              onAddAbsence={openAbsAdd}
+              onEditAbsence={openAbsEdit}
+              onRemoveAbsence={a => openAbsRemove({ ...a, name: nameFor(a.user_id) })}
+            />
+          </>
         )}
 
         {/* Save and Cancel, after the grid. .table-footer is already this file's
@@ -11711,6 +12560,26 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
         count={dirtyIds.length}
         onCancel={() => setConfirmDiscard(false)}
         onDiscard={() => { setConfirmDiscard(false); leaveEdit(); }}
+      />}
+
+      {absDlg && <AbsenceDialog
+        t={t}
+        dlg={absDlg}
+        setDlg={setAbsDlg}
+        spanDays={absenceDayCount(absDlg.starts_on, absDlg.ends_on)}
+        err={absErr}
+        busy={absBusy}
+        onCancel={() => { setAbsDlg(null); setAbsErr(''); }}
+        onSave={saveAbs}
+        onRemove={() => openAbsRemove(absDlg)}
+      />}
+
+      {absTarget && <ConfirmRemoveAbsence
+        t={t}
+        target={absTarget}
+        busy={absBusy}
+        onCancel={() => setAbsTarget(null)}
+        onConfirm={removeAbs}
       />}
     </div>
   );
