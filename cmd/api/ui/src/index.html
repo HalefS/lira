@@ -1124,21 +1124,28 @@ html.dark .rota-table tbody td.rota-day { border-left-color: var(--gray-200) !im
    column that changes width when Edit is pressed throws the eye off the row it
    is reading. */
 .rota-table thead th.rota-name-head,
-.rota-table tbody td.rota-name-cell {
+.rota-table tbody th.rota-name-cell {
   position: sticky; left: 0; width: 208px; box-shadow: 1px 0 0 var(--gray-200);
 }
 .rota-table thead th.rota-name-head { z-index: 4; }
-.rota-table tbody td.rota-name-cell { z-index: 2; text-align: left; }
+.rota-table tbody th.rota-name-cell { z-index: 2; text-align: left; }
+/* The padding these rules NEVER had, because they targeted a td and the element is a
+   th, so the whole column fell back to the UA default and the avatar sat flush against
+   the left border. 10px is not a taste decision: it is the header's own padding
+   (:1107), so the avatar's left edge lines up with the MEMBER heading above it. 7px
+   matches the header's vertical rhythm. font-weight:normal because a th is bold by
+   default and .rota-member-name's 600 should not be competing with an inherited 700. */
+.rota-table tbody th.rota-name-cell { padding: 7px 10px; font-weight: normal; vertical-align: middle; }
 /* The header is given no background at all: `thead th` already paints it
    --gray-50 in light and the dark block repaints it --gray-200, and both are
    correct for a pinned cell. Declaring one here would have to fight an
    !important and win it back for no gain. */
-.rota-table tbody td.rota-name-cell { background: var(--gray-50); }
-.rota-table tbody tr:hover td.rota-name-cell { background: var(--gray-100); }
+.rota-table tbody th.rota-name-cell { background: var(--gray-50); }
+.rota-table tbody tr:hover th.rota-name-cell { background: var(--gray-100); }
 /* !important because the blanket dark rule near the end of this stylesheet
    paints every td on hover with it, and this cell has to be told otherwise or
    the name column goes white-on-white against the dark card. */
-html.dark .rota-table tbody tr:hover td.rota-name-cell { background: var(--gray-200) !important; }
+html.dark .rota-table tbody tr:hover th.rota-name-cell { background: var(--gray-200) !important; }
 
 .rota-member { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .rota-member-text { min-width: 0; }
@@ -1249,28 +1256,47 @@ html.dark .rota-free { background: var(--gray-200) !important; border-color: var
 .rota-table thead th.rota-headcol-today .rota-daynum { color: var(--blue); }
 .rota-table tbody td.rota-col-today { box-shadow: inset 1px 0 0 var(--blue-mid), inset -1px 0 0 var(--blue-mid); }
 
-/* The cell picker. The geometry is RoomPicker's, deliberately: absolutely
-   positioned inside a relatively positioned cell, overlaying the rows below
-   rather than pushing them down, z-index 30 above everything else in the content
-   area. A second popover here would mean a second set of answers to the
-   questions .room-picker already answers -- what Escape does, what a click
-   outside does. The JSX reuses its outside-click and capture-phase-Escape
-   handlers verbatim. */
+/* The cell picker. The DISMISSAL geometry is RoomPicker's, deliberately: overlaying the
+   rows below rather than pushing them down, one Escape, one outside click, and the JSX
+   reusing RoomPicker's handlers verbatim. A second popover here would mean a second set
+   of answers to what Escape does and what a click outside does, and the two would
+   drift.
+
+   What changed is the POSITIONING, and it is not a preference. position:fixed rather
+   than absolute, because the cell sits under five clipping ancestors and overflow
+   clipping beats any z-index:
+
+       .rota-table-wrap  overflow-x: auto    .content  overflow: auto
+       .table-card       overflow: hidden    .main     overflow: hidden
+                                             .app      overflow: hidden
+
+   So z-index:30 achieved nothing against .table-card, and the panel was cut off at the
+   card's edge on the lower rows -- measured 119px past the card at row 4 and 174px at
+   row 5 on a 890px viewport, with the last three options off-screen entirely.
+
+   NOT createPortal: with the panel in document.body, the outside-click handler
+   `wrapRef.contains(e.target)` is false for an option, so mousedown closes the panel
+   before click fires and the click lands on an unmounted button. Picking a shift would
+   silently do nothing. See useAnchoredPanel, which is also where the constraint that
+   makes position:fixed work is written down -- an ancestor with transform, filter,
+   will-change, contain or perspective would put this back inside the clip.
+
+   top and left are 0 because useAnchoredPanel writes both in a layout effect; max-height
+   is gone for the same reason, and overflow-y is now the FALLBACK for a viewport too
+   short to hold the panel whole rather than the normal case. It was 244px against 358px
+   of content, so the option list scrolled on every open, including the top row where
+   there was room for all of it.
+
+   align-right and open-up are deleted rather than kept as fallbacks. Both were one
+   measurement of one panel width against one card width at one viewport width; the
+   viewport clamp in the hook is correct at every width. */
 .rota-picker { position: relative; display: block; }
 .rota-picker-panel {
-  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0;
-  min-width: 216px; max-height: 244px; overflow-y: auto; padding: 4px;
+  position: fixed; z-index: 30; top: 0; left: 0;
+  min-width: 216px; max-height: none; overflow-y: auto; padding: 4px;
   background: #fff; border: 1px solid var(--gray-200);
-  border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
 }
-/* Two of the seven sit against the right edge of the card, and .table-card is
-   overflow:hidden to clip its own corners -- a panel opening rightwards would be
-   silently cut in half. Saturday and Sunday open leftwards. */
-.rota-picker-panel.align-right { left: auto; right: 0; }
-/* And the last two rows, vertically, for the same reason: the panel would open
-   under the fold with no way to reach it but scrolling the grid out from under
-   the pointer. */
-.rota-picker-panel.open-up { top: auto; bottom: calc(100% + 4px); }
 html.dark .rota-picker-panel { background: var(--gray-50); border-color: var(--gray-300); }
 
 /* Forked from .room-option for exactly one reason: that class sets DM Mono,
@@ -1761,7 +1787,11 @@ html.dark .rota-tint:not(.is-none) { background: var(--tint-wash-dark); color: #
   .rota-table-wrap { overflow: visible; }
   .rota-table { min-width: 0; }
   .rota-table thead th.rota-name-head,
-  .rota-table tbody td.rota-name-cell { position: static; box-shadow: none; }
+  .rota-table tbody th.rota-name-cell { position: static; box-shadow: none; }
+  /* The edit panels are position:fixed, so they would print wherever they happened to
+     be when the print dialog opened -- possibly off the sheet entirely, since the
+     clamp keeps them inside the VIEWPORT rather than inside the page. */
+  .rota-picker-panel { display: none !important; }
   .rota-table thead { display: table-header-group; }
 }
 .bar-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--gray-100); }
@@ -3709,7 +3739,11 @@ const T = {
     rotaNoMembersBody: 'Shifts are defined, but there is nobody in the team to put them on.',
     rotaLoadFailed: 'The rota could not be loaded',
     rotaFreeWeek: 'Not on this rota',
-    rotaWeekHours: '{hours} h/week',
+    // No "/week". The unit says hours and the page IS one week, so the period said
+    // nothing a reader did not already know -- and this sits in a 208px column beside
+    // a name, which is not where a second word belongs. Matches rotaAbsHoursAway's bare
+    // form, so the two lines under one name read consistently.
+    rotaHoursLabel: '{hours} h',
     rotaPeopleOn: '{count} on it',
     rotaPlusOne: ' +1',
     rotaRetired: 'Retired',
@@ -4498,7 +4532,9 @@ const T = {
     rotaNoMembersBody: 'Os turnos estão definidos, mas não há ninguém na equipa para os atribuir.',
     rotaLoadFailed: 'Não foi possível carregar a escala',
     rotaFreeWeek: 'Não está nesta escala',
-    rotaWeekHours: '{hours} h/semana',
+    // Sem "/semana", pelo mesmo motivo que o inglês: a coluna tem 208px ao lado de um
+    // nome, e a página já é uma semana.
+    rotaHoursLabel: '{hours} h',
     rotaPeopleOn: '{count} neste',
     rotaPlusOne: ' +1',
     rotaRetired: 'Desativado',
@@ -11180,23 +11216,143 @@ function absencesByUser(absences) {
   return map;
 }
 
-/* One cell's shift chooser.
-   The panel geometry, the outside-click mousedown and the capture-phase Escape
-   handler are RoomPicker's, deliberately. A second popover in this file would
-   mean a second set of answers to the questions .room-picker already answers --
-   what Escape does, what a click outside does, whether the panel survives the
-   dialog that owns it -- and the two would drift.
+/* Where a fixed-position popover goes, and when it moves.
 
-   alignRight and openUp are the two corrections RoomPicker does not need: it sits
-   in a form with room below it, and a 49-cell grid has its right-hand and
-   bottom-row cells against the clipped edge of a .table-card. */
+   ONE function, called on open, on scroll and on resize, so the three cannot disagree
+   about which side the panel is on -- the failure mode when two of them compute
+   placement independently is a panel that is correctly placed on open and wrong a
+   second later.
+
+   capture:true on the scroll listener because .content is the scroll container and
+   scroll events do not bubble to window.
+
+   The panel is position:fixed rather than absolutely positioned inside the cell, and
+   NOT rendered through createPortal. A fixed box is positioned against the viewport and
+   is not clipped by ancestor overflow, which matters because the cell sits under five
+   clipping ancestors:
+
+       .rota-table-wrap   overflow-x: auto     (the horizontal scroller)
+       .table-card        overflow: hidden
+       .content           overflow: auto      (the vertical scroller)
+       .main              overflow: hidden
+       .app               overflow: hidden
+
+   Overflow clipping beats any z-index, so the panel's z-index:30 achieved nothing
+   against .table-card and it was cut off at the card's edge on the bottom rows --
+   measured 119px past the card at row 4 and 174px at row 5, on a 890px viewport.
+
+   Why not createPortal, since react-dom exports it: it would break option clicks on
+   arrival. The outside-click handler is
+   `wrapRef.current.contains(e.target)`, and options carry onMouseDown={e => e.preventDefault()}
+   -- which stops focus moving, not propagation. With the panel in document.body,
+   wrapRef.contains(option) is false, so mousedown on an option closes the panel before
+   the click fires and the button is already unmounted. Picking a shift would silently
+   do nothing. A portal would turn a one-line CSS problem into a rewrite of the
+   dismissal contract, and would also have to re-thread id and aria-controls across the
+   DOM boundary. Keeping the panel a child of .rota-picker leaves all of that untouched.
+
+   THE CONSTRAINT THAT MAKES position:fixed WORK, and the reason it is worth grepping
+   for: an ancestor only re-captures a fixed descendant if it establishes a containing
+   block, which means transform, perspective, filter, backdrop-filter, will-change
+   (any of those four), contain: paint/layout/strict, or content-visibility. None of
+   .rota-table-wrap, .table-card, .content, .main, .app or #root declares any of them
+   today. Adding one -- an entry animation on .content is the obvious accident --
+   silently puts this panel back inside the clip, and it fails as "the panel is cut
+   off" rather than as an error. */
+function useAnchoredPanel(open, anchorRef, panelRef, onAnchorGone) {
+  const place = React.useCallback(() => {
+    const a = anchorRef.current, p = panelRef.current;
+    if (!a || !p) return;
+
+    const r = a.getBoundingClientRect();
+
+    // The anchor has left the viewport entirely. Following it would leave a keyboard
+    // user holding a listbox they cannot see, so this closes instead. Scrolling the
+    // page is fine; losing the thing you opened is not.
+    if (r.bottom <= 0 || r.top >= window.innerHeight) {
+      if (onAnchorGone) onAnchorGone();
+      return;
+    }
+
+    const GAP = 4, M = 8;
+    const vh = window.innerHeight, vw = window.innerWidth;
+    const h = p.getBoundingClientRect().height;
+
+    // Down if it fits below, otherwise up if it fits above, otherwise whichever side
+    // has more room -- and that last branch is the only one that can scroll, because
+    // the hook writes max-height to whatever room actually exists. At 358px of content
+    // on a 890px viewport it is unreachable, which is the point: the requirement is
+    // that the panel FITS rather than that it scrolls.
+    const down = vh - r.bottom - GAP - M;
+    const up   = r.top - GAP - M;
+    const below = down >= h || down >= up;
+    const room = Math.max(0, below ? down : up);
+
+    p.style.maxHeight = room + 'px';
+    p.style.top = (below ? r.bottom + GAP : r.top - GAP - Math.min(h, room)) + 'px';
+
+    // One clamp, replacing the old `i >= 3` column threshold. That number was a
+    // measurement of one panel width against one card width at one viewport width; the
+    // only edge a fixed panel has to respect is the window's, and this is correct at
+    // every width, sidebar width and zoom level.
+    const w = p.getBoundingClientRect().width;
+    p.style.left = Math.min(Math.max(M, r.left), Math.max(M, vw - M - w)) + 'px';
+  }, [anchorRef, panelRef, onAnchorGone]);
+
+  // useLayoutEffect, not useEffect: the panel has to be placed AFTER it has been
+  // measured, and this is what guarantees it is painted in the right place before the
+  // browser shows it. With a passive effect the first frame puts it at the top-left of
+  // the viewport and then snaps it, which is visible.
+  React.useLayoutEffect(() => { if (open) place(); }, [open, place]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    // One frame per scroll burst. There is only ever one open panel, so the cost is one
+    // getBoundingClientRect per frame -- cheaper than the alternative of letting the
+    // panel drift away from its cell while the grid scrolls under it.
+    let raf = 0;
+    const tick = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; place(); });
+    };
+    window.addEventListener('scroll', tick, true);
+    window.addEventListener('resize', tick);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', tick, true);
+      window.removeEventListener('resize', tick);
+    };
+  }, [open, place]);
+
+  return place;
+}
+
+/* One cell's shift chooser.
+   The DISMISSAL geometry, the outside-click mousedown and the capture-phase Escape
+   handler are RoomPicker's, deliberately. A second popover in this file would mean a
+   second set of answers to the questions .room-picker already answers -- what Escape
+   does, what a click outside does, whether the panel survives the dialog that owns
+   it -- and the two would drift.
+
+   The POSITIONING is not RoomPicker's, and cannot be: it sits in a form with room
+   below it, whereas a cell in a 49-cell grid sits under five clipping ancestors, so
+   the panel here is position:fixed and placed by useAnchoredPanel above. It used to
+   take two props instead -- alignRight={i >= 3} and openUp={false} -- which were a
+   measurement of one panel width against one card width at one viewport width, and
+   which left the lower rows clipped anyway. */
 function RotaPicker({ cellId, value, shifts, absence, onPick, onAddAbsence,
                        onEditAbsence, onRemoveAbsence, memberName, range, selected, selEnd,
-                       autoOpen, t, alignRight, openUp }) {
+                       autoOpen, t }) {
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const wrapRef = useRef(null);
+  const panelRef = useRef(null);
   const listId = cellId + '-options';
+
+  // Placement, and only placement. Focus stays on the cell and aria-activedescendant
+  // moves -- which is the opposite of what useDialog does, and is why this picker
+  // deliberately does not use it.
+  useAnchoredPanel(open, wrapRef, panelRef, () => setOpen(false));
 
   // Opened by a drag rather than by a click. autoOpen is a NONCE, not a boolean:
   // selecting the same cell twice has to open the panel twice, and a boolean that is
@@ -11330,7 +11486,7 @@ function RotaPicker({ cellId, value, shifts, absence, onPick, onAddAbsence,
       </button>
 
       {open && (
-        <div className={'rota-picker-panel' + (alignRight ? ' align-right' : '') + (openUp ? ' open-up' : '')}
+        <div className="rota-picker-panel" ref={panelRef}
           id={listId} role="listbox">
           {/* An absent cell's panel, and it REPLACES the shift list rather than
               sitting under a disabled copy of it. That is where the rule "you cannot
@@ -11731,7 +11887,7 @@ function RotaTable({ t, week, members, shifts, absences, editing, draft, setCell
                           </span>
                         : <>
                             <div className="rota-member-hours">
-                              {t.rotaWeekHours.replace('{hours}', (worked / 60).toFixed(worked % 60 ? 1 : 0))}
+                              {t.rotaHoursLabel.replace('{hours}', (worked / 60).toFixed(worked % 60 ? 1 : 0))}
                             </div>
                             {/* The hours lost to an absence, named on its own line. A
                                 struck-through standing total would be two numbers in one
@@ -11810,31 +11966,14 @@ function RotaTable({ t, week, members, shifts, absences, editing, draft, setCell
                           autoOpen={openAt && openAt.userId === m.user_id && openAt.i === i
                             ? openAt.nonce : 0}
                           t={t}
-                          // Columns 3 and up open leftwards, so the panel never
-                          // lands against the clipped right edge. Measured, not
-                          // guessed: the panel is 226px and a day column is
-                          // about 85px, so a left-anchored panel fits at
-                          // columns 0-2 (67px to spare at the tightest, column
-                          // 2) and overflows from column 3 -- 27px over at 3,
-                          // 109px at 4, 158px at 6. This threshold was 5, which
-                          // left columns 3 and 4 opening straight into the
-                          // clipped strip.
-                          //
-                          // alignRight pins the panel's RIGHT edge to the
-                          // cell's, so for these columns it ends where the cell
-                          // ends -- inside the wrap -- with its left edge 226px
-                          // back, also inside. Both edges are safe, not one
-                          // traded for the other.
-                          //
-                          // The overflow itself is older than this feature and
-                          // comes from the panel being a child of a
-                          // horizontally scrolling wrapper; fixing that
-                          // properly means rendering it in a portal, which is a
-                          // layout change of its own. openUp is the same
-                          // question vertically and is left off because the
-                          // table scrolls rather than running under the fold.
-                          alignRight={i >= 3}
-                          openUp={false}/>
+                          // No positioning props. They used to be alignRight={i >= 3}
+                          // and openUp={false}, and every claim in the comment that
+                          // justified them is now false: the panel is fixed and clamped
+                          // to the viewport by useAnchoredPanel, which knows the room
+                          // that actually exists rather than a column index measured at
+                          // one window size. A stale confident explanation is worse
+                          // than none, so it went with the props.
+                          />
                         : absence
                           ? <div className="rota-cell is-away"
                               style={{ '--abs-ink': absenceHue(absence.kind) }}>
@@ -11911,9 +12050,17 @@ function RotaTable({ t, week, members, shifts, absences, editing, draft, setCell
    sheet is a legend nobody can order, which is why the six come first and the
    hundred come after. A control that offers a hundred choices before offering the
    six right ones is one most managers never finish. */
-function ShiftTintButton({ t, shift, onPick, openUp }) {
+function ShiftTintButton({ t, shift, onPick }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
+  const panelRef = useRef(null);
+
+  // The SAME latent bug this session fixed for the cell picker, hit before anybody
+  // reported it: this panel opened downward inside .set-group-inner{overflow:hidden}
+  // -> .content -> .main -> .app, with openUp never passed a value, so a shift at the
+  // bottom of its Settings group was clipped. Fixed here for free by the panel becoming
+  // position:fixed, plus the same hook so it flips when there is no room below.
+  useAnchoredPanel(open, wrapRef, panelRef, () => setOpen(false));
 
   // Verbatim from RotaPicker, and deliberately so: one set of answers to "what does
   // Escape do here" rather than two that can drift.
@@ -11951,7 +12098,7 @@ function ShiftTintButton({ t, shift, onPick, openUp }) {
       </button>
 
       {open && (
-        <div className={'rota-picker-panel rota-tint-pop' + (openUp ? ' open-up' : '')}
+        <div className="rota-picker-panel rota-tint-pop" ref={panelRef}
           role="group" aria-label={t.shiftTintPicker.replace('{name}', shift.name)}>
           {/* Real radios, not role=radio on a div. A native radio group brings
               arrow-key traversal, the checked state and the tab stop for free, and
