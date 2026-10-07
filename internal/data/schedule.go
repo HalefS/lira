@@ -562,7 +562,7 @@ type ScheduleModel struct {
 // codebase has already had to unpick twice (loadIssueChildren,
 // LCUModel.testsForUnits).
 //
-//  1. every user, with the five fields a row needs and nothing else;
+//  1. every user ON THE ROTA, with the five fields a row needs and nothing else;
 //  2. every assignment, joined to its shift;
 //  3. every absence touching the week on screen.
 //
@@ -587,6 +587,14 @@ type ScheduleModel struct {
 // had tidied away. Keeping the row makes "clear this person's week" a deliberate
 // act, and Active is in the payload so the page can render them muted.
 //
+// ONE NUMBER WILL NOW DIVERGE, AND BOTH SIDES OF IT ARE RIGHT.
+// Shift.AssignmentCount is a correlated count over the whole shift_assignments table,
+// including cells belonging to members who are off the rota, while the grid's legend
+// counts people who are ON it. So a shift whose only users were excluded reads "0
+// people" in the legend while the Settings delete dialog says clearing it destroys N
+// cells. One counts people on the board; the other counts rows that exist. Neither is
+// the bug the other looks like -- do not "fix" either.
+//
 // The users query deliberately does not reuse scanUser. That scanner selects
 // password_hash and its struct carries the account's email address, and this is
 // served to callers with no token at all. The columns are written out here so that
@@ -601,10 +609,33 @@ func (m ScheduleModel) Week(ref time.Time) (*ScheduleWeek, error) {
 		Absences: []*AbsenceRef{},
 	}
 
+	// Only the rota's MEMBERS now. Read the predicate carefully, because the obvious
+	// spelling is the opposite of what is meant:
+	//
+	//	EXISTS (... AND rm.included)      WRONG: false when the table is empty, so a
+	//	                                  fresh install renders an EMPTY noticeboard.
+	//	                                  This was written that way once.
+	//	NOT EXISTS (... AND NOT rm.included)  right: excluded iff a row says false.
+	//
+	// The migration's rule is "A MISSING ROW MEANS INCLUDED", so the test is for the
+	// presence of an exclusion, not of an inclusion. rota_members ships empty and must
+	// stay meaningful while empty -- that is the whole reason 000032 inserts no rows.
+	//
+	// NOT EXISTS and not LEFT JOIN ... WHERE NOT rm.included either: a WHERE on the
+	// right table of a LEFT JOIN is an inner join wearing a disguise. The partial index
+	// on (user_id) WHERE included keeps the absence-probe cheap.
+	//
+	// Deactivated members are still INCLUDED here. Membership and deactivation are
+	// orthogonal -- see rota_roster.go -- so a leaver stays on the board and renders
+	// muted unless a manager also unticks them.
 	rows, err := m.DB.QueryContext(ctx, `
-		SELECT id, name, avatar_idx, role, active
-		FROM users
-		ORDER BY active DESC, created_at ASC, id ASC`)
+		SELECT u.id, u.name, u.avatar_idx, u.role, u.active
+		FROM users u
+		WHERE NOT EXISTS (
+			SELECT 1 FROM rota_members rm
+			WHERE rm.user_id = u.id AND NOT rm.included
+		)
+		ORDER BY u.active DESC, u.created_at ASC, u.id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -657,10 +688,18 @@ func (m ScheduleModel) Week(ref time.Time) (*ScheduleWeek, error) {
 		}
 		member, found := byUser[userID]
 		if !found {
-			// Cannot happen while the FK holds -- the first query reads every user
-			// without a filter -- but a cell landing nowhere would be a silent drop,
-			// and silent drops are what the no-filter decision above is most
-			// vulnerable to.
+			// NORMAL PATH, and the reason query 2 is allowed to keep reading every
+			// assignment: this is somebody a manager has taken OFF the rota. Their
+			// shift_assignments are deliberately never deleted, so their seven cells
+			// are still here and are discarded right here.
+			//
+			// That is the whole design in one branch. Deleting those rows instead would
+			// make re-inclusion lossy, and a manager who removes somebody for a week
+			// and adds them back next week would get seven empty cells rather than
+			// their week back untouched.
+			//
+			// It was previously commented as impossible -- correctly, while query 1
+			// had no filter. Do not read that as dead code.
 			continue
 		}
 		// The CHECK keeps weekday in 1..7; the belt is the array bound.
@@ -689,6 +728,22 @@ func (m ScheduleModel) Week(ref time.Time) (*ScheduleWeek, error) {
 		return nil, err
 	}
 	for _, a := range absences {
+		// An absence belonging to somebody who is not on this rota is KEPT and stays
+		// reachable through the manager-only /v1/absences endpoints -- excluding
+		// somebody from a rota is not a statement that their March holiday was wrong.
+		//
+		// It is not part of THIS board, though: the person has no row for the grid to
+		// hang it on, and publishing "the colleague who is not on your rota is away on
+		// the 5th" is a different disclosure from "who is on tonight".
+		//
+		// Filtered here in Go rather than in SQL on purpose. AbsenceModel.InWindow is
+		// shared with listAbsencesHandler, which is manager-only and must keep showing
+		// a removed person's leave; filtering in SQL would silently break that screen.
+		// Going through byUser also means the predicate cannot drift from query 1,
+		// because it IS query 1's result.
+		if _, onBoard := byUser[a.UserID]; !onBoard {
+			continue
+		}
 		out.Absences = append(out.Absences, a.Ref())
 	}
 

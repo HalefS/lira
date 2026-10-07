@@ -194,6 +194,44 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPatch, "/v1/absences/:id", app.requireAuth(app.requireManager(app.updateAbsenceHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/absences/:id", app.requireAuth(app.requireManager(app.deleteAbsenceHandler)))
 
+	// Rota membership -- WHO the rota is for, as opposed to who is on which day.
+	//
+	// The read is requireAuth and NOT public, which is the opposite of the grid next
+	// door and needs the reason. GET /v1/schedule is public because a rota is a
+	// noticeboard, and its payload DOES leak the included set -- it is the list of rows.
+	// So publishing this would add nothing about who is on, while adding everything
+	// about who is NOT: every account, including the deactivated leavers the grid
+	// renders muted, plus how many cells each holds. That is an account roster with no
+	// noticeboard justification, and it exists here because a WRITE needs it.
+	//
+	// The read is not manager-only either. GET /v1/users above is already requireAuth
+	// and returns every account with strictly more (email, avatar_data, language,
+	// must_reset_password), so a manager gate would protect nothing and would put the
+	// two halves of one idea in two files.
+	//
+	// /v1/rota/members, and NOT /v1/schedule/roster, because httprouter keeps one
+	// routing tree PER METHOD and refuses a static segment beside a named parameter in
+	// the same tree -- in BOTH registration orders. Verified against httprouter
+	// v1.3.0, not assumed:
+	//
+	//	static after  the wildcard: panic: 'roster' in new path
+	//	                           '/v1/schedule/roster' conflicts with existing
+	//	                           wildcard ':user_id'
+	//	static before the wildcard: panic: wildcard route ':user_id' conflicts with
+	//	                           existing children
+	//
+	// So /v1/schedule/roster would crash the process inside New(), before the
+	// listener binds, and read as a boot failure rather than a routing mistake. The
+	// comment above /v1/schedule:user_id argues only about paths of DIFFERENT lengths,
+	// which is why this looks safe and is not. A fresh first segment has no such rule.
+	//
+	// The roster write carries no version parameter, and none is needed: it is a PUT of
+	// the WHOLE set, like PUT /v1/schedule/:user_id, so there is no partial row for a
+	// second manager to interleave with. Race safety is an exclusive table lock inside
+	// data.RotaRosterModel.Set.
+	router.HandlerFunc(http.MethodGet, "/v1/rota/members", app.requireAuth(app.listRotaMembersHandler))
+	router.HandlerFunc(http.MethodPut, "/v1/rota/members", app.requireAuth(app.requireManager(app.setRotaMembersHandler)))
+
 	// Melia Connecta Agents — list for all authenticated users; mutate for managers only
 	router.HandlerFunc(http.MethodGet, "/v1/connecta-agents", app.requireAuth(app.listConnectaAgentsHandler))
 	router.HandlerFunc(http.MethodPost, "/v1/connecta-agents", app.requireAuth(app.requireManager(app.createConnectaAgentHandler)))

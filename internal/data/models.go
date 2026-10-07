@@ -53,6 +53,15 @@ type Models struct {
 	// for. ScheduleModel.Week reads absences itself, so both call sites get them
 	// without either having to remember.
 	Absences AbsenceModel
+	// RotaMembers is a third separate model for the same reason. Membership is
+	// configuration about WHICH people the rota is for rather than a cell in it, and
+	// the two have genuinely different lifecycles: absences change weekly, membership
+	// changes yearly. Folding it into Schedule would grow the one model that
+	// deliberately separates the recurring pattern from the dated exceptions.
+	//
+	// ScheduleModel.Week applies membership itself, so the grid does not have to
+	// remember to, and the picker reads through this one.
+	RotaMembers RotaRosterModel
 }
 
 func NewModels(db *sql.DB) Models {
@@ -77,5 +86,6 @@ func NewModels(db *sql.DB) Models {
 		Shifts:          ShiftModel{DB: db},
 		Schedule:        ScheduleModel{DB: db},
 		Absences:        AbsenceModel{DB: db},
+		RotaMembers:     RotaRosterModel{DB: db},
 	}
 }
