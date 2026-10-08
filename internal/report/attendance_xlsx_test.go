@@ -394,9 +394,11 @@ func TestAttendanceXLSXHeaderFields(t *testing.T) {
 	if got := d.cell(t, xlsxSheet, "C5"); got != "05-10 a 11-10" {
 		t.Errorf("Semana = %q", got)
 	}
-	// Data Entrega is the Monday of the week being printed, as the sheet asks for.
-	if got := d.cell(t, xlsxSheet, "C6"); got != "46300" {
-		t.Errorf("Data Entrega serial = %q, want 46300 (2026-10-05)", got)
+	// Data Entrega is the Monday AFTER the printed week: a sheet covering Mon 5th to
+	// Sun 11th is handed in on Mon 12th. That is the template own rule -- its four
+	// sample weeks each sit exactly seven days after their Monday.
+	if got := d.cell(t, xlsxSheet, "C6"); got != "46307" {
+		t.Errorf("Data Entrega serial = %q, want 46307 (2026-10-12, the Monday after)", got)
 	}
 	for i, p := range colPair {
 		want := itoa(46300 + i)

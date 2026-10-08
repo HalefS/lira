@@ -296,8 +296,10 @@ func (x *xlsxWriter) fill(v attendanceView, start, end time.Time) error {
 	if err := x.setCell("C5", strCell("C5", x.styleOf("C5", 18), x.sstIdx(v.WeekLabel))); err != nil {
 		return err
 	}
-	// Data Entrega is the current Monday, as the sheet asks for.
-	if err := x.setCell("C6", numCell("C6", x.styleOf("C6", 19), serialFor(mondayOf(start)))); err != nil {
+	// Data Entrega is the Monday AFTER the printed week, matching the view the PDF
+	// renders from and the template own four sample weeks.
+	if err := x.setCell("C6", numCell("C6", x.styleOf("C6", 19),
+		serialFor(mondayOf(start).AddDate(0, 0, 7)))); err != nil {
 		return err
 	}
 	for i := 0; i < 7; i++ {
@@ -414,7 +416,6 @@ func (x *xlsxWriter) writeMemberBlock(v attendanceView) error {
 			l := fmt.Sprintf("%s%d", string(xlsxDayCols[day*2]), row)
 			rt := fmt.Sprintf("%s%d", string(xlsxDayCols[day*2+1]), row)
 			c := r.Cells[day]
-			start, end := c.Split()
 			if c.Status != "" {
 				// One word across the pair, so the pair MERGES and the Saida cell
 				// keeps its style while staying empty.
@@ -424,8 +425,8 @@ func (x *xlsxWriter) writeMemberBlock(v attendanceView) error {
 			} else {
 				// Two times, so the pair must be SPLIT. Left merged, the Saida
 				// would vanish with nothing to say so.
-				block.WriteString(strCell(l, x.styleOf(l, 7), x.sstIdx(start)))
-				block.WriteString(strCell(rt, x.styleOf(rt, 7), x.sstIdx(end)))
+				block.WriteString(strCell(l, x.styleOf(l, 7), x.sstIdx(c.Start())))
+				block.WriteString(strCell(rt, x.styleOf(rt, 7), x.sstIdx(c.End())))
 			}
 		}
 		block.WriteString(blankCell(fmt.Sprintf("Q%d", row), x.styleOf(fmt.Sprintf("Q%d", row), 10)))
@@ -484,10 +485,4 @@ func escapeXML(s string) string {
 
 func unescapeXML(s string) string {
 	return strings.NewReplacer("&lt;", "<", "&gt;", ">", "&quot;", `"`, "&apos;", "'", "&amp;", "&").Replace(s)
-}
-
-// mondayOf snaps a date back to the Monday of its week.
-func mondayOf(t time.Time) time.Time {
-	d := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
-	return d.AddDate(0, 0, -int(d.Weekday())+1)
 }

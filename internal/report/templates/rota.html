@@ -1,23 +1,37 @@
 <!DOCTYPE html>
 <!--
-  The weekly attendance sheet, "Folha de Ponto/Turnos".
+  The attendance sheet, as a PDF.
 
-  PORTUGUESE, deliberately. This is a Portuguese HR form, not a translation of an
-  English report, and the Excel twin of it is written in Portuguese. The button that
-  downloads this document is bilingual; the artefact is not.
+  A CONVERSION of the spreadsheet, not a redesign of it. The grid below is the
+  workbook's grid. Every merge here is one the workbook has, taken from its
+  mergeCells list:
 
-  Grid: NINE columns, one cell per member-day, showing "22:00-06:00" on a single
-  baseline. The obvious alternative is the Excel layout -- an Entrada and a Saida
-  column under each of the seven days -- which needs 14 narrow time columns on A4.
-  It does not fit: at the 7pt floor a signed document can use, fourteen columns
-  leave about 37mm for Nome, and a name column that cannot hold a Portuguese full
-  name is worse than useless on a sheet a manager signs. Shift.Label() already
-  defines how a shift reads in a cell, so the hyphen between the two times is that
-  definition reused rather than a second one written here.
+      A1:Q2       the title bar
+      C3:D3       .. C6:D6   a header field and its value
+      C7:D7       .. O7:P7   a weekday name across its two columns
+      Q7:Q9       Observacao down all three header rows
+      C9:D9       .. O9:P9   a date across its two columns
+      C10:Q10     the Nome bar
+      P{last}:Q{last}        the signature
 
-  Colgroup widths sum to 186mm, which is the A4 portrait content width
-  (210 - 12 - 12) declared by @page in base.css. table-layout:fixed in base.css
-  makes them authoritative.
+  Seventeen columns: the A gutter, B for the labels and the names, C..P for the
+  seven Entrada/Saida pairs, Q for Observacao. Every row below accounts for all
+  seventeen, including the A gutter, which is empty but must be present or the row
+  silently shifts a column left -- the failure that turns a two-cell day into a
+  one-cell day and leaves the last column off the page.
+
+  LANDSCAPE, because the workbook asks for it: its pageSetup carries
+  orientation="landscape" scale="70" fitToPage="1". Fourteen time columns in A4
+  portrait leave about 9mm each, legible only at 6.5pt and with too little left for
+  a name column that has to hold "Ana Maria Ferreira de Albuquerque Santos".
+  Landscape gives 13.2mm per column at a comfortable size.
+
+  No bands, no legend, no hours sub-line, no away-all-week ribbon. The workbook has
+  none of them, and an earlier version of this document added all four. "Away all
+  week" and "not on this rota" are still two different facts here; the workbook
+  carries that difference the way it should, in the WORD -- an absent member is all
+  "Feria", one with no shifts is all "Folga" -- rather than in a label bolted beside
+  the name.
 -->
 <html lang="pt">
 <head>
@@ -29,299 +43,204 @@
 <style>
 {{BASE_CSS}}
 
-/* ── Attendance-sheet-specific rules ────────────────────────────────────────
-   Everything grammatical (page geometry, bands, table borders, the palette)
-   lives in base.css and is shared with the other two reports. Only the
-   proportions below are this document own: a nine-column grid, a form-field
-   header row, and a footer that puts the key beside the signature. */
-
-/* The header fields are ruled form fields, not a bordered table. A solid rule with
-   nothing on it reads as a value that failed to load; a dotted one reads as
-   somewhere for a person to write. That is the same idiom as .empty in base.css,
-   one step quieter, and it is what makes the two fields the application cannot
-   fill -- Departamento and Data Entrega -- look like a form to complete rather
-   than a bug. The two that ARE filled get solid rules, which is exactly what
-   makes the dotted pair read as pending rather than missing. */
-.meta-row {
-  display: grid;
-  grid-template-columns: 62mm 32mm 44mm 48mm;
-  margin-bottom: 5mm;
-}
-.meta-label {
-  font-size: 7pt; font-weight: 600; letter-spacing: 0.35pt;
-  text-transform: uppercase; color: var(--gray-400);
-}
-.meta-value {
-  font-size: 8.5pt; font-weight: 600; color: var(--gray-900);
-  border-bottom: 0.3mm solid var(--gray-300);
-  padding: 0.9mm 0 1.4mm;
-  min-height: 6mm;
-}
-.meta-value.is-blank {
-  border-bottom: 0.3mm dotted var(--gray-300);
+/* ── This document own page geometry ─────────────────────────────────────────
+   base.css declares @page for A4 portrait, sized around the two fixed header and
+   footer bands the other two reports wear. This one wears no bands -- the workbook
+   has no header band either -- so the margins belong to the sheet and the
+   orientation follows the workbook own pageSetup. */
+@page {
+  size: A4 landscape;
+  margin: 10mm 10mm 8mm;
 }
 
-/* ── The grid ─────────────────────────────────────────────────────────────── */
+/* 297 - 20 = 277mm of content width, as: A 2mm gutter, B 55mm for the names,
+   fourteen day columns at 13.2mm, Q 34mm for Observacao. */
+table.sheet { width: 100%; table-layout: fixed; border-collapse: collapse; }
+table.sheet col.c-a    { width: 2mm; }
+table.sheet col.c-name { width: 55mm; }
+table.sheet col.c-day  { width: 13.2mm; }
+table.sheet col.c-obs  { width: 34mm; }
 
-.c-name { text-align: left; vertical-align: middle; }
-.c-time { text-align: center; vertical-align: middle; }
+table.sheet th,
+table.sheet td {
+  border: 0.2mm solid var(--gray-300);
+  padding: 0.9mm 1mm;
+  vertical-align: middle;
+}
 
-/* Tighter than base.css defaults, for a measured reason: the name cell carries two
-   lines (name + hours) and at the default 1.8mm vertical padding each row came out
-   near 10.6mm, which put twenty members on a second page. At these values the same
-   sheet fits, and a twenty-row grid is dense in a way that reads correctly -- it is
-   a week, not a report to be skimmed. The day cell is 7pt because it is the densest
-   content on the sheet and monospace at 7pt still clears print legibility; 7pt is
-   the floor and nothing here goes below it. */
-.rota-doc td { padding: 1.2mm 1.5mm; }
-.rota-doc td.c-time {
+/* Column A is the workbook gutter: present in every row, always empty. */
+td.c-gutter, th.c-gutter { border: none; padding: 0; }
+
+/* A1:Q2. */
+td.c-title { font-size: 13pt; font-weight: 700; text-align: left; padding: 2.2mm 3mm; }
+
+/* The four header fields: label in B, value in C:D, as the workbook has them. */
+td.c-field-label {
+  font-size: 7.5pt; font-weight: 600; color: var(--gray-600);
+  text-transform: uppercase; letter-spacing: 0.3pt;
+}
+td.c-field-value { font-size: 8.5pt; font-weight: 500; color: var(--gray-900); }
+
+/* The three header rows. base.css already gives th the blue fill at 7pt uppercase
+   that the workbook own header uses, so only the date row differs -- it is lighter,
+   because it is supporting information rather than a heading. */
+th.c-head { font-size: 7pt; font-weight: 600; text-align: center; }
+thead tr.h-dates th {
+  background: var(--blue-lt) !important;
+  color: var(--blue) !important;
+  font-weight: 400; text-transform: none; letter-spacing: 0;
+  font-size: 6.5pt; text-align: center;
+}
+td.c-nomebar { background: var(--gray-100); }
+th.c-stacked { text-align: left; }
+
+/* Body. The name wraps and is never truncated: it is the one column a signed
+   document cannot abbreviate. */
+td.c-name { font-size: 8pt; font-weight: 500; text-align: left; }
+td.c-time {
   font-family: 'DM Mono', ui-monospace, Consolas, monospace;
-  font-size: 7pt; white-space: nowrap;
-  color: var(--gray-900); text-align: center; vertical-align: middle;
+  font-size: 7pt; text-align: center; white-space: nowrap;
 }
+/* A day with nothing on it. The workbook styles Folga, Feriado and Falta with the
+   SAME cell style -- one grey fill and one ink -- and this matches it. An earlier
+   version tinted each absence kind differently, which is genuinely easier to read but
+   is not what the spreadsheet looks like, and a PDF that is supposed to be the sheet
+   printed cannot colour four things the sheet leaves grey.
 
-/* A deactivated account is still a row -- the rota keeps it on purpose, so a later
-   reactivation cannot silently resurrect a row a manager thought they had tidied.
-   It is greyed by COLOUR, not by opacity: opacity is a compositing effect and it
-   greys out unpredictably through a print pipeline. */
-.rota-doc tr.inactive .c-name .nm { color: var(--gray-600); font-weight: 500; }
+   The words still carry the distinction on their own, which is the better signal
+   anyway: it survives a greyscale print and a photocopy, and it does not depend on
+   the reader knowing what "teal" was meant to mean. */
+td.c-off {
+  font-size: 7pt; font-style: italic; text-align: center;
+  background: var(--gray-100); color: var(--gray-600);
+}
+td.c-away {
+  font-size: 7pt; font-style: italic; font-weight: 600; text-align: center;
+  background: var(--gray-100); color: var(--gray-900);
+}
+td.c-obs { font-size: 7pt; }
 
-/* Names wrap; they are never truncated. An ellipsis is a screen affordance that
-   exists because a horizontal scroller needs a stable column -- in print there is
-   no scroller, so it is just a name with its tail amputated on a signed document. */
-.nm { font-size: 8pt; font-weight: 600; line-height: 1.15; }
-.nm-sub { font-size: 6.5pt; font-weight: 400; line-height: 1.2; color: var(--gray-400); margin-top: 0.4mm; }
-
-/* "Folga" is the resting state and the quietest thing on the sheet. A week where
-   four people are off is an ordinary week; tinting it would turn a normal rota
-   into an incident report. Grey and italic, no fill beyond the existing zebra. */
-.c-off {
-  color: var(--gray-400); font-style: italic;
-  text-align: center; vertical-align: middle;
-}
-
-/* An absence is italic AND tinted. Italic is the cue that survives greyscale
-   printing, which is how a signed sheet usually ends up filed; a tint and a grey
-   collapse to the same value. The inset ring keeps the cell bounded where the
-   tint is palest and the page has been photocopied.
-   The `tbody tr.` prefix is required: the zebra rule in base.css is equally
-   specific and would otherwise win on even-numbered rows. */
-tbody tr td.c-away {
-  background: var(--abs-wash);
-  color: var(--ink);
-  font-style: italic; font-weight: 600;
-  text-align: center; vertical-align: middle;
-  box-shadow: inset 0 0 0 0.25mm var(--ink);
-}
-td.c-away.vacation  { --ink: var(--violet); }
-td.c-away.sick      { --ink: var(--teal); }
-td.c-away.training  { --ink: var(--green); }
-td.c-away.other     { --ink: var(--gray-600); }
-
-/* "Away all week" and "not on this rota" produce an identical grid -- seven word
-   cells and no times -- so the difference has to live in the name cell, exactly as
-   it does on screen. The rail down the leading edge repeats the recipe and its
-   specificity trap already documented in base.css for the false-alarm row. */
-tbody tr.away-all td.c-name {
-  box-shadow: inset 0.9mm 0 0 var(--violet);
-}
-.nm-sub.is-away { color: var(--violet); font-weight: 600; }
-
-/* ── Footer: the key beside the signature ─────────────────────────────────── */
-
-/* The Excel leaves a thick-bordered empty block for the signature. On paper a heavy
-   empty box reads as a rendering error, prints as a black bar, and detaches the
-   signature from the table it attests to. What the Excel spends that space on is
-   wasted anyway, so the key moves here -- it is dead space on the sheet and it
-   buys back about 11mm of page budget. */
-.footrow {
-  display: grid;
-  grid-template-columns: 96mm 90mm;
-  margin-top: 7mm;
-  break-inside: avoid;
-}
-.legend {
-  max-width: 58mm;
-}
-.legend-h {
-  font-size: 7pt; font-weight: 600; letter-spacing: 0.35pt;
-  text-transform: uppercase; color: var(--gray-400);
-  margin: 2.4mm 0 1.2mm;
-}
-.legend-h:first-child { margin-top: 0; }
-.legend-row {
-  display: flex; align-items: baseline; gap: 2mm;
-  font-size: 7.5pt; padding: 0.35mm 0;
-}
-.legend-name { color: var(--gray-900); font-weight: 500; }
-.legend-time, .legend-count {
-  font-family: 'DM Mono', ui-monospace, Consolas, monospace;
-  color: var(--gray-600);
-}
-.legend-count { margin-left: auto; color: var(--gray-400); }
-.legend-dot {
-  width: 2.2mm; height: 2.2mm; border-radius: 0.6mm; flex-shrink: 0;
-  display: inline-block;
-}
-.footnote {
-  font-size: 6.5pt; color: var(--gray-400); margin-top: 2.4mm;
-}
-
-.signblock-head {
-  display: flex; align-items: baseline; justify-content: space-between;
-}
-.signblock-date { font-size: 7pt; color: var(--gray-600); }
-.rule-dotted {
-  display: inline-block; width: 22mm;
-  border-bottom: 0.3mm dotted var(--gray-300);
-}
-/* Heavier than the 0.3mm fill-in rules on purpose: this is the one line on the
-   document that carries weight, so it should not read as another blank. */
-.signblock-rule {
-  margin-top: 1.6mm;
-  border-bottom: 0.4mm solid var(--gray-900);
-  height: 18mm;
-}
+/* The signature row. The workbook gives it a 60-point height and merges P:Q, so the
+   space to sign is the row itself rather than an empty box drawn under it. */
+td.c-sign { font-size: 7.5pt; font-weight: 500; text-align: left; vertical-align: top; height: 20mm; }
+.footnote { font-size: 6.5pt; color: var(--gray-400); margin-top: 2mm; }
 </style>
 </head>
 <body>
 
-<div class="band-top">
-  <div class="logo-mark">L</div>
-  <div style="margin-left:3.5mm">
-    <div class="title">Folha de Ponto/Turnos</div>
-    <div class="subtitle">LIRA — Llana IT Reporting &amp; Alerts</div>
-  </div>
-  <div class="right" style="margin-left:auto">
-    <div class="date">{{.RangeLabel}}</div>
-    <div class="gen">Gerado em {{.GeneratedAt}}</div>
-  </div>
-</div>
-
 <div class="sheet">
-  <div class="meta-row">
-    <div>
-      <div class="meta-label">Departamento</div>
-      <div class="meta-value is-blank">&nbsp;</div>
-    </div>
-    <div>
-      <div class="meta-label">Mês</div>
-      <div class="meta-value">{{.MonthLabel}}</div>
-    </div>
-    <div>
-      <div class="meta-label">Semana</div>
-      <div class="meta-value">{{.WeekLabel}}</div>
-    </div>
-    <div>
-      <div class="meta-label">Data Entrega</div>
-      <div class="meta-value is-blank">&nbsp;</div>
-    </div>
-  </div>
+<table class="sheet">
+  <colgroup>
+    <col class="c-a" /><col class="c-name" />
+    {{range .Days}}<col class="c-day" /><col class="c-day" />{{end}}
+    <col class="c-obs" />
+  </colgroup>
 
-  {{if .Empty}}
-    <div class="empty">Sem membros na rota nesta semana.</div>
-  {{else}}
-  <table class="rota-doc">
-    <colgroup>
-      <col style="width:36mm" />
-      <col style="width:18mm" /><col style="width:18mm" /><col style="width:18mm" />
-      <col style="width:18mm" /><col style="width:18mm" /><col style="width:18mm" />
-      <col style="width:18mm" />
-      <col style="width:24mm" />
-    </colgroup>
-    <thead>
-      <tr>
-        <th rowspan="2">Nome</th>
-        {{range .Days}}<th>{{.Name}}</th>{{end}}
-        <th rowspan="2">Observação</th>
-      </tr>
-      <tr class="rownum">
-        {{range .Days}}<th>{{.Date}}</th>{{end}}
-      </tr>
-    </thead>
-    <tbody>
-      {{range .Rows}}
-      <tr class="{{if .Inactive}}inactive{{end}} {{if .AwayAll}}away-all{{end}}">
-        <td class="c-name">
-          <div class="nm">{{.Name}}</div>
-          {{if .AwayAll}}
-            <div class="nm-sub is-away">{{.AwayWord}}</div>
-          {{else if .NotOnRota}}
-            <div class="nm-sub">Sem turnos nesta semana</div>
-          {{else}}
-            <div class="nm-sub">{{.Hours}}</div>
-          {{end}}
-        </td>
-        {{range .Cells}}
-          {{if .Times}}
-            {{/* No "+1" marker in the cell. Measured: at 7pt DM Mono the pair is
-                 16.3mm, "+1" adds 3mm, and with padding that is 22mm against a
-                 column budget of 19mm -- the marker did not fit and the cell
-                 overflowed into the next weekday, which is precisely the "is she
-                 on at 22:00 or does she finish at 06:00" question the sheet exists
-                 to answer. A finish earlier than the start is plainly next-day on a
-                 clock sheet, the key names Night with its times, and the footnote
-                 states the convention. The marker would have been decoration. */}}
-            <td class="c-time">{{.Times}}</td>
-          {{else}}
-            {{if eq .Status "Folga"}}
-              <td class="c-off">Folga</td>
-            {{else if eq .Status "Feria"}}
-              <td class="c-away vacation">Feria</td>
-            {{else if eq .Status "Falta"}}
-              <td class="c-away sick">Falta</td>
-            {{else if eq .Status "Formação"}}
-              <td class="c-away training">Formação</td>
-            {{else}}
-              <td class="c-away other">{{.Status}}</td>
-            {{end}}
-          {{end}}
+  <tbody>
+
+  <!-- A1:Q2 -->
+  <tr>
+    <td class="c-title" colspan="17">Folha de Ponto/Turnos</td>
+  </tr>
+
+  <!-- C3:D3 .. C6:D6 -->
+  <tr>
+    <td class="c-gutter"></td>
+    <td class="c-field-label">Departamento :</td>
+    <td class="c-field-value" colspan="2"></td>
+    <td colspan="13"></td>
+  </tr>
+  <tr>
+    <td class="c-gutter"></td>
+    <td class="c-field-label">Mês :</td>
+    <td class="c-field-value" colspan="2">{{.MonthLabel}}</td>
+    <td colspan="13"></td>
+  </tr>
+  <tr>
+    <td class="c-gutter"></td>
+    <td class="c-field-label">Semana :</td>
+    <td class="c-field-value" colspan="2">{{.WeekLabel}}</td>
+    <td colspan="13"></td>
+  </tr>
+  <tr>
+    <td class="c-gutter"></td>
+    <td class="c-field-label">Data Entrega :</td>
+    <td class="c-field-value" colspan="2">{{.DeliveryLabel}}</td>
+    <td colspan="13"></td>
+  </tr>
+
+  <!-- The three header rows. Observacao spans all three, as Q7:Q9 does.
+       Rows 8 and 9 do NOT carry a cell in that column: a rowspan occupies the column
+       for the rows below it, and adding a placeholder there appends an EIGHTEENTH
+       column instead, which pushes Observacao off the right edge of the sheet. -->
+  <tr>
+    <td class="c-gutter"></td>
+    <th class="c-stacked">Dia</th>
+    {{range .Days}}<th class="c-head" colspan="2">{{.Name}}</th>{{end}}
+    <th class="c-stacked" rowspan="3">Observação</th>
+  </tr>
+  <tr>
+    <td class="c-gutter"></td>
+    <th class="c-stacked">Hora</th>
+    {{range .Days}}<th class="c-head">Entrada</th><th class="c-head">Saida</th>{{end}}
+  </tr>
+  <tr class="h-dates">
+    <td class="c-gutter"></td>
+    <th class="c-stacked">Datas</th>
+    {{range .Days}}<th colspan="2">{{.Date}}</th>{{end}}
+  </tr>
+
+  <!-- C10:Q10, the Nome bar -->
+  <tr>
+    <td class="c-gutter"></td>
+    <th class="c-stacked">Nome</th>
+    <td class="c-nomebar" colspan="15"></td>
+  </tr>
+
+  <!-- The members -->
+    {{range .Rows}}
+    <tr>
+      <td class="c-gutter"></td>
+      <td class="c-name">{{.Name}}</td>
+      {{range .Cells}}
+        {{/* A worked day is TWO cells, Entrada and Saida, which is what the
+             workbook has: that pair is left unmerged. A day carrying a word is ONE
+             cell spanning both, which is the merge the workbook has for every
+             Folga, Feria and Falta. Swapping these would put a word in one half of
+             the day and a gap in the other. */}}
+        {{if .Start}}
+          <td class="c-time">{{.Start}}</td>
+          <td class="c-time">{{.End}}</td>
+        {{else if eq .Status "Folga"}}
+          <td class="c-off" colspan="2">Folga</td>
+        {{else}}
+          <td class="c-away" colspan="2">{{.Status}}</td>
         {{end}}
-        <td class="c-obs"></td>
-      </tr>
       {{end}}
-    </tbody>
-  </table>
-  {{end}}
+      <td class="c-obs"></td>
+    </tr>
+    {{end}}
 
-  <div class="footrow">
-    <div class="legend">
-      {{if .Turnos}}
-      <div class="legend-h">Turnos</div>
-      {{range .Turnos}}
-      <div class="legend-row">
-        <span class="legend-name">{{.Label}}</span>
-        <span class="legend-time">{{.Times}}</span>
-        <span class="legend-count">{{.Count}}</span>
-      </div>
-      {{end}}
-      {{end}}
-      {{if .Motivos}}
-      <div class="legend-h">Motivos</div>
-      {{range .Motivos}}
-      <div class="legend-row">
-        <span class="legend-dot" style="background:{{.Hue}}"></span>
-        <span class="legend-name">{{.Label}}</span>
-        <span class="legend-count">{{.Count}}</span>
-      </div>
-      {{end}}
-      {{end}}
-      {{if .FootNote}}<div class="footnote">{{.FootNote}}</div>{{end}}
-    </div>
+    {{if .Empty}}
+    <tr>
+      <td class="c-gutter"></td>
+      <td class="c-name">Sem membros na rota nesta semana.</td>
+      <td colspan="14"></td>
+      <td class="c-obs"></td>
+    </tr>
+    {{end}}
 
-    <div class="signblock">
-      <div class="signblock-head">
-        <span class="meta-label">Assinatura do Responsável</span>
-        <span class="signblock-date">Data <span class="rule-dotted"></span></span>
-      </div>
-      <div class="signblock-rule"></div>
-    </div>
-  </div>
-</div>
+  <!-- The signature, merged across the last day and Observacao, as P:Q is. -->
+  <tr>
+    <td class="c-gutter"></td>
+    <td colspan="14"></td>
+    <td class="c-sign" colspan="2">Assinatura do Responsável:</td>
+  </tr>
 
-<div class="band-bottom">
-  <span>{{.MonthLabel}} · {{.WeekLabel}}</span>
-  <span>LIRA</span>
+  </tbody>
+</table>
+
+{{if .FootNote}}<div class="footnote">{{.FootNote}}</div>{{end}}
 </div>
 
 </body>

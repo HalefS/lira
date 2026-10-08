@@ -171,20 +171,23 @@ func TestAttendanceShiftSurvivesOnOtherDays(t *testing.T) {
 		Absences: []*data.AbsenceRef{attAbsence(1, data.AbsenceVacation, "2026-10-05", "2026-10-05")},
 	})
 
-	if strings.Contains(h, "08:00-16:00") {
+	if strings.Contains(h, ">08:00<") {
 		t.Error("the covered Monday shift should not print")
 	}
-	if !strings.Contains(h, "09:00-17:00") {
-		t.Error("the uncovered Tuesday shift must still print")
+	if !strings.Contains(h, ">09:00<") || !strings.Contains(h, ">17:00<") {
+		t.Error("the uncovered Tuesday shift must still print, both of its times")
 	}
 }
 
-// "Away all week" and "not on this rota" are different facts that produce an
-// identical grid, so the name cell has to carry the difference.
+// "Away all week" and "not on this rota" are different facts, and the sheet still
+// tells them apart -- but now the way the WORKBOOK does, in the word in the cell
+// rather than a label beside the name. An absent member is all "Feria"; one with no
+// shifts is all "Folga". A sheet that printed both as "Folga" would be telling a
+// manager somebody worked a day they were on holiday for, which is the one thing the
+// absence feature exists to prevent.
 //
-// Asserted on the view rather than the HTML: the string "away-all" also appears in
-// the stylesheet that the template inlines, so a substring check on the rendered
-// document passes whether or not the row was marked.
+// The flags are asserted on the view; the difference a reader actually sees is
+// asserted on the rendered words.
 func TestAttendanceAwayAllWeekIsNotDayOff(t *testing.T) {
 	m := &data.ScheduleMember{UserID: 1, Name: "Ana", Role: "technician", Active: true}
 
@@ -207,17 +210,15 @@ func TestAttendanceAwayAllWeekIsNotDayOff(t *testing.T) {
 	}
 
 	h := renderOK(t, absentAllWeek)
-	if !strings.Contains(h, "away-all") {
-		t.Error("the rendered sheet should mark the row away-all")
+	if strings.Contains(h, "Folga") {
+		t.Error("an absent member must not be printed as Folga on any day")
 	}
-	if !strings.Contains(h, ">Feria</div>") {
-		t.Error("the away-all sub-line should name the absence")
-	}
-	if strings.Contains(h, "Sem turnos nesta semana") {
-		t.Error("an absent member must not be labelled as having no rota")
+	if n := strings.Count(h, ">Feria<"); n < 7 {
+		t.Errorf("an absent member should carry the absence word on all seven days, got %d", n)
 	}
 
-	// The other half: no shifts and no absence is NOT away.
+	// The other half, on the page as well as the view: no shifts and no absence is
+	// Folga in all seven cells, which is a different document from the one above.
 	v2 := newAttendanceView(&data.ScheduleWeek{
 		Week:    attWeek("2026-10-05"),
 		Members: []*data.ScheduleMember{m},
@@ -231,8 +232,8 @@ func TestAttendanceAwayAllWeekIsNotDayOff(t *testing.T) {
 	if h2 := renderOK(t, &data.ScheduleWeek{
 		Week:    attWeek("2026-10-05"),
 		Members: []*data.ScheduleMember{m},
-	}); !strings.Contains(h2, "Sem turnos nesta semana") {
-		t.Error("the rendered sheet should say the member has no shifts")
+	}); !strings.Contains(h2, ">Folga<") {
+		t.Error("a member with no shifts should print Folga, which is what the workbook does")
 	}
 }
 
@@ -262,8 +263,8 @@ func TestAttendanceOvernightExplainsItselfWithoutAMarker(t *testing.T) {
 	}
 
 	h := renderOK(t, w)
-	if !strings.Contains(h, "22:00-06:00") {
-		t.Error("the night should print both its times")
+	if !strings.Contains(h, ">22:00<") || !strings.Contains(h, ">06:00<") {
+		t.Error("the night should print both its times, one under each heading")
 	}
 	if strings.Contains(h, "+1") {
 		t.Error("the +1 marker overflows the day column; do not re-add it to the cell")
@@ -271,10 +272,13 @@ func TestAttendanceOvernightExplainsItselfWithoutAMarker(t *testing.T) {
 	if !strings.Contains(h, "termina no dia seguinte") {
 		t.Error("the footnote should explain a next-day finish")
 	}
-	// The key carries the shift name with its times, so a reader can still see that
-	// the 22:00-06:00 cell is the night.
-	if !strings.Contains(h, "Night") {
-		t.Error("the key should name the shift the cell belongs to")
+	// The workbook prints no shift names and no key, so neither does this. A reader
+	// sees 22:00 in one column and 06:00 in the next, and knows it finishes after
+	// midnight, which is what a clock sheet asks of them.
+	// Asserted on the markup, not on the word: "Turnos" is part of the title
+	// "Folha de Ponto/Turnos", so a substring check would pass for the wrong reason.
+	if strings.Contains(h, `class="legend-h"`) {
+		t.Error("the PDF must not add a shift key; the workbook has none")
 	}
 
 	// A week with no nights must not carry a line about nothing.
@@ -361,25 +365,23 @@ func TestAttendanceMonthLabelIsPortuguese(t *testing.T) {
 	}
 }
 
-// The deactivation is rendered as grey, not as opacity: opacity is a compositing
-// effect and greys out unpredictably through a print pipeline.
-func TestAttendanceInactiveMemberIsGreyedNotFaded(t *testing.T) {
+// The rota keeps a deactivated account as a row on purpose, so a later reactivation
+// cannot silently resurrect a row somebody thought they had tidied away. The sheet
+// prints every row it is given: the workbook has no concept of a deactivated account,
+// and inventing one here would be a difference between the two documents.
+func TestAttendanceInactiveMemberIsStillListed(t *testing.T) {
 	h := renderOK(t, &data.ScheduleWeek{
 		Week: attWeek("2026-10-05"),
 		Members: []*data.ScheduleMember{
 			{UserID: 1, Name: "Ana", Active: false},
-			{Name: "Bo", Active: true},
+			{UserID: 2, Name: "Bo", Active: true},
 		},
 	})
-	if !strings.Contains(h, `class="inactive`) {
-		t.Error("a deactivated member should carry the inactive class")
+	if !strings.Contains(h, ">Ana<") {
+		t.Error("a deactivated member must still be printed")
 	}
-	idx := strings.Index(h, "tr class=\"inactive")
-	if idx < 0 {
-		t.Fatal("could not locate the inactive row")
-	}
-	if strings.Contains(h[:idx], "opacity") {
-		t.Error("the inactive state must not be rendered with opacity")
+	if !strings.Contains(h, ">Bo<") {
+		t.Error("an active member must still be printed")
 	}
 }
 
@@ -471,23 +473,50 @@ func TestAttendanceSheetDoesNotGainABlankPage(t *testing.T) {
 	}
 }
 
-// The day cell is one string, not two columns. This is a regression test against
-// someone "fixing" it back to the Excel's Entrada/Saida pair, which does not fit
-// A4 portrait at a legible size.
-func TestAttendanceDayCellIsASingleString(t *testing.T) {
+// The PDF must have the WORKBOOK layout, and the load-bearing detail is that a
+// worked day is TWO cells and a word day is ONE merged cell.
+//
+// The previous version of this document deliberately did the opposite -- one cell per
+// day reading "22:00-06:00" -- on the grounds that fourteen columns were too narrow
+// in A4 portrait. That reasoning still holds, which is why the sheet is now
+// LANDSCAPE, exactly as the workbook own pageSetup asks. The layout itself was never
+// the application decision to make: this PDF is the spreadsheet, printed.
+func TestAttendanceDayLayoutMatchesTheWorkbook(t *testing.T) {
 	m := &data.ScheduleMember{UserID: 1, Name: "Ana", Role: "technician", Active: true}
-	m.Days = [7]*data.Shift{attShift("22:00", "06:00", true), nil, nil, nil, nil, nil, nil}
+	m.Days = [7]*data.Shift{attNight("22:00", "06:00"), nil, nil, nil, nil, nil, nil}
 
 	h := renderOK(t, &data.ScheduleWeek{
 		Week:    attWeek("2026-10-05"),
 		Members: []*data.ScheduleMember{m},
 	})
-	if !strings.Contains(h, "22:00-06:00") {
-		t.Error("the day cell should carry both times on one baseline")
+
+	// A worked day: two separate time cells, Entrada then Saida.
+	if !strings.Contains(h, ">22:00<") || !strings.Contains(h, ">06:00<") {
+		t.Error("the night should print its two times in two cells")
 	}
-	// Nine columns: Nome, seven days, Observacao. Fourteen time columns is the
-	// layout this replaced.
-	if n := strings.Count(h, "<col style="); n != 9 {
-		t.Errorf("expected a 9-column colgroup, found %d columns", n)
+	// A word day: ONE cell spanning both, which is the merge the workbook has.
+	if !strings.Contains(h, `colspan="2">Folga</td>`) {
+		t.Error("a day with no shift should be one cell spanning the Entrada/Saida pair")
+	}
+	// The headings, which are the whole reason the pair exists.
+	for _, want := range []string{">Entrada<", ">Saida<", ">Nome<", ">Observação<"} {
+		if !strings.Contains(h, want) {
+			t.Errorf("the sheet header is missing %s", want)
+		}
+	}
+	if !strings.Contains(h, "size: A4 landscape") {
+		t.Error("the sheet should print landscape, matching the workbook pageSetup")
+	}
+	// Data Entrega is the Monday after the week, and it is on the page.
+	if !strings.Contains(h, "12-10-26") {
+		t.Error("Data Entrega should be the Monday after the printed week (2026-10-12)")
+	}
+	// The band chrome the other two reports wear, and the invented key beside it,
+	// are gone: the workbook has none of them.
+	// Also asserted on markup: base.css is inlined into the document and defines
+	// .band-top and .band-bottom whatever this template does with them, so searching
+	// for the class NAMES can only ever pass.
+	if strings.Contains(h, `<div class="band-top">`) || strings.Contains(h, `<div class="band-bottom">`) {
+		t.Error("the sheet must not wear the report header/footer bands; the workbook has none")
 	}
 }

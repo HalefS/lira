@@ -105,18 +105,32 @@ func (c attendanceCell) Label() string {
 	return c.Times
 }
 
-// Start and End split the one string back into its two clock times, for the
-// spreadsheet, which prints one under each of the Entrada and Saida headings.
-// Splitting on the hyphen is safe here because these are the server's own times,
-// written "HH:MM" with a single hyphen between them.
-func (c attendanceCell) Split() (string, string) {
+// Start and End are the two clock times of a worked day, split back out of the one
+// string, for the two renderers that need them apart: the spreadsheet prints one
+// under the Entrada heading and one under Saida, and so does the PDF, because the
+// PDF is a conversion of that workbook rather than its own design.
+//
+// Splitting on the hyphen is safe here because these are the server own times,
+// written "HH:MM" with exactly one hyphen between them. Both return "" for a day
+// carrying a status word, so a caller can use Start alone to ask "is this worked?".
+func (c attendanceCell) Start() string {
 	if c.Status != "" {
-		return "", ""
+		return ""
 	}
 	if i := strings.IndexByte(c.Times, '-'); i >= 0 {
-		return c.Times[:i], c.Times[i+1:]
+		return c.Times[:i]
 	}
-	return c.Times, ""
+	return c.Times
+}
+
+func (c attendanceCell) End() string {
+	if c.Status != "" {
+		return ""
+	}
+	if i := strings.IndexByte(c.Times, '-'); i >= 0 {
+		return c.Times[i+1:]
+	}
+	return ""
 }
 
 // attendanceRow is one member.
@@ -147,12 +161,22 @@ type attendanceLegendEntry struct {
 
 // attendanceView is the whole document.
 type attendanceView struct {
-	MonthLabel  string
-	WeekLabel   string
-	FromDate    string
-	ToDate      string
-	RangeLabel  string
-	GeneratedAt string
+	MonthLabel string
+	WeekLabel  string
+	// DeliveryLabel is Data Entrega: the Monday AFTER the week being printed, so a
+	// sheet covering Mon 5th to Sun 11th is handed in on Mon 12th. That is the
+	// template own rule -- its four sample weeks each carry a delivery date exactly
+	// seven days after their Monday -- so the export follows the workbook rather
+	// than inventing a second convention beside it.
+	//
+	// It lives here, formatted once, because the two renderers write it two
+	// different ways: the spreadsheet as a date serial and the PDF as text. One
+	// field, two presentations, no chance of them disagreeing.
+	DeliveryLabel string
+	FromDate      string
+	ToDate        string
+	RangeLabel    string
+	GeneratedAt   string
 
 	Days    []attendanceDayColumn
 	Rows    []attendanceRow
@@ -217,15 +241,18 @@ func newAttendanceView(w *data.ScheduleWeek) attendanceView {
 	start := w.Week.Start.Time()
 	end := w.Week.End.Time()
 
+	delivery := mondayOf(start).AddDate(0, 0, 7)
 	v := attendanceView{
-		MonthLabel:   attendanceMonths[int(start.Month())-1] + " " + start.Format("2006"),
-		WeekLabel:    start.Format("02-01") + " a " + end.Format("02-01"),
-		FromDate:     start.Format(time.DateOnly),
-		ToDate:       end.Format(time.DateOnly),
-		RangeLabel:   start.Format("02-01-2006") + " a " + end.Format("02-01-2006"),
-		GeneratedAt:  time.Now().Format("02/01/2006 15:04"),
-		HasOvernight: false,
+		MonthLabel:    attendanceMonths[int(start.Month())-1] + " " + start.Format("2006"),
+		WeekLabel:     start.Format("02-01") + " a " + end.Format("02-01"),
+		DeliveryLabel: delivery.Format("02-01-06"),
+		FromDate:      start.Format(time.DateOnly),
+		ToDate:        end.Format(time.DateOnly),
+		RangeLabel:    start.Format("02-01-2006") + " a " + end.Format("02-01-2006"),
+		GeneratedAt:   time.Now().Format("02/01/2006 15:04"),
+		HasOvernight:  false,
 	}
+	_ = delivery
 
 	// The seven column heads come from Week.Days, which is already Monday-anchored
 	// and already carries the weekday labels. The calendar is NOT recomputed here:
@@ -369,4 +396,13 @@ func absenceHue(word string) string {
 	default:
 		return "var(--gray-600)"
 	}
+}
+
+// mondayOf snaps a date back to the Monday of its week. It lives here rather than
+// beside either renderer because Data Entrega is the Monday AFTER the printed week
+// and both renderers need that same anchor: agreeing on where the week starts is the
+// one thing that must not be decided twice.
+func mondayOf(t time.Time) time.Time {
+	d := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+	return d.AddDate(0, 0, -int(d.Weekday())+1)
 }
