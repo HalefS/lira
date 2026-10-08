@@ -260,13 +260,18 @@ func newAttendanceView(w *data.ScheduleWeek) attendanceView {
 	// report package exists to avoid, and a week off by one column looks correct.
 	for _, d := range w.Week.Days {
 		dt := d.Date.Time()
-		name := d.Label
-		if name == "" {
-			// WeekDay.Label is set by the server; fall back to the local table rather
-			// than print an empty column head.
-			if d.Weekday >= 1 && d.Weekday <= 7 {
-				name = attendanceWeekdays[d.Weekday-1]
-			}
+		// The weekday NUMBER picks the name, not WeekDay.Label. Label is the
+		// server's own short label and it is ENGLISH -- the live payload carries
+		// "Mon", "Tue", "Wed" -- so preferring it printed an English day head on a
+		// Portuguese document, which is how MON and TUE ended up above Segunda and
+		// Terca. The number is the ISO weekday and the same in both, so it is the
+		// reliable key; Label is only a fallback for a weekday outside 1..7, where
+		// there is nothing better to print.
+		name := ""
+		if d.Weekday >= 1 && d.Weekday <= 7 {
+			name = attendanceWeekdays[d.Weekday-1]
+		} else {
+			name = d.Label
 		}
 		v.Days = append(v.Days, attendanceDayColumn{
 			Name:    name,
