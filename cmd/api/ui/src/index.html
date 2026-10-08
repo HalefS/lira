@@ -1487,6 +1487,36 @@ html.dark .rota-dirty { background: var(--gray-50); }
    left and two buttons on the right. */
 .rota-savebar .btn { font-size: 12px; padding: 6px 14px; }
 
+/* The attendance-sheet download. It sits last in .table-actions and owns the right
+   edge with margin-left:auto, so the week controls stay grouped on the left with
+   the mode switch rather than being shoved apart by a growing spacer. */
+.rota-pdf-btn { margin-left: auto; }
+.rota-pdf-btn svg { transition: transform 0.15s ease; }
+.rota-pdf-btn.spinning svg { animation: sysSpin 0.7s linear infinite; }
+/* .btn-ghost has no :disabled rule, so a disabled ghost button otherwise keeps its
+   hover background and hover colour and reads as live. Say so explicitly. */
+.btn-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-ghost:disabled:hover { background: none; color: var(--gray-600); }
+/* Respect the preference. .sys-refresh-btn does not, which is an omission rather
+   than a decision worth copying. */
+@media (prefers-reduced-motion: reduce) {
+  .rota-pdf-btn.spinning svg { animation: none; }
+}
+
+/* The PDF error strip. A toast alone would be wrong: a missing Chromium is
+   permanent and will not fix itself while a 2.8s toast is still fading, and this
+   notice does not dismiss for the same reason. The raw server wording -- which
+   names a browser binary for an operator -- never reaches the DOM. */
+.rota-notice {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 18px 14px; padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--red-light); color: var(--red);
+  border-left: 3px solid var(--red);
+  font-size: 13px;
+}
+.rota-notice svg { width: 16px; height: 16px; flex-shrink: 0; }
+
 /* Empty states. */
 .rota-empty-head { margin: 0; font-size: 15px; font-weight: 600; color: var(--gray-900); }
 .rota-empty-sub  { margin: 0; max-width: 46ch; font-size: 13px; color: var(--gray-600); line-height: 1.55; }
@@ -3657,6 +3687,18 @@ const T = {
     // manager-only link. Configuration, edited a few times a year, blast radius the
     // whole team -- which is the same argument that puts shift templates in Settings.
     rotaManageRoster: 'Team on the rota',
+    // The attendance sheet download. "Attendance sheet (PDF)" rather than the
+    // consumables page bare "Download PDF", because that string does not say WHAT
+    // is downloaded and this button whole job is to name the artefact.
+    rotaDownloadPdf: 'Attendance sheet (PDF)',
+    rotaDownloadPdfTitle: 'Download the weekly attendance sheet as a PDF',
+    // The button is dead while editing, and the reason is worth saying: the server
+    // holds the SAVED week while the screen shows the draft, so a download
+    // mid-edit prints a sheet that does not match what the manager is looking at.
+    rotaPdfLockedWhileEditing: 'Save or cancel your edits first — the printed sheet is the saved week.',
+    // Deliberately NOT the server wording. That string names a chromium binary for
+    // an operator; this is for the person who pressed the button.
+    rotaDownloadPdfUnavailable: 'PDF reports are not available on this server. Your administrator can enable them by installing Chromium.',
     rosterTitle: 'Who is on the rota',
     rosterTitleSub: 'Choose which people appear on the team rota. Their shifts are kept if they are removed.',
     // The one sentence that keeps two orthogonal concepts apart. Deactivating changes
@@ -4458,6 +4500,10 @@ const T = {
     rotaAbsOnlyGrid: 'Esta semana ninguém tem turno atribuído, mas há pessoas marcadas como ausentes.',
     // -- Equipa da escala (quem está na escala) -------------------------------
     rotaManageRoster: 'Equipa na escala',
+    rotaDownloadPdf: 'Folha de ponto (PDF)',
+    rotaDownloadPdfTitle: 'Transferir a folha de ponto semanal em PDF',
+    rotaPdfLockedWhileEditing: 'Guarde ou cancele as alterações primeiro — a folha impressa é a semana guardada.',
+    rotaDownloadPdfUnavailable: 'Os relatórios em PDF não estão disponíveis neste servidor. O administrador pode ativá-los instalando o Chromium.',
     rosterTitle: 'Quem está na escala',
     rosterTitleSub: 'Escolha quem aparece na escala da equipa. Os turnos mantêm-se se alguém for removido.',
     // A frase que mantém separados dois conceitos ortogonais. Desativar muda a CONTA;
@@ -13142,6 +13188,71 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
   const [absBusy, setAbsBusy] = useState(false);
   const [absErr, setAbsErr] = useState('');
 
+  // The attendance-sheet download. pdfUnavailable is SEPARATE from pdfError on
+  // purpose: a failed generation is worth retrying, while a 501 means this server
+  // has no browser at all and will still have none in ten minutes. Retrying that
+  // burns a request and a 30s ceiling for nothing, so the button goes dead and the
+  // notice explains why.
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState('');
+  const [pdfUnavailable, setPdfUnavailable] = useState(false);
+
+  /* Download the weekly attendance sheet.
+     Manager-only endpoint. Fetches with the bearer header rather than following a
+     plain link, which is the same reason the consumables download is written this
+     way. Two rules about the response worth stating:
+
+       - The server names its own filename in Content-Disposition and the browser
+         honours it on a blob download, so the date range in the name is the
+         server's, not a second calendar computed here.
+       - 501 is mapped to a message for the person who pressed the button, never
+         to the server's raw wording, which names a chromium binary for an
+         operator. The raw body goes to the console instead. */
+  async function downloadAttendancePDF() {
+    if (pdfBusy || pdfUnavailable) return;
+    setPdfBusy(true);
+    setPdfError('');
+    try {
+      const res = await fetch(`${API}/reports/rota/weekly.pdf?week=${weekISO}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        let msg = t.rotaDownloadPdfTitle;
+        try {
+          const body = await res.json();
+          if (body.error) {
+            msg = typeof body.error === 'string'
+              ? body.error : Object.values(body.error).join(', ');
+          }
+        } catch {}
+        if (res.status === 501) {
+          setPdfUnavailable(true);
+          setPdfError(t.rotaDownloadPdfUnavailable);
+          setToast(t.rotaDownloadPdfUnavailable);
+          console.warn('attendance pdf unavailable:', msg);
+        } else {
+          setPdfError(msg);
+          setToast(msg);
+        }
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setPdfError(String(e.message || e));
+      setToast(String(e.message || e));
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
   // From the cell picker: "mark this person away on this date", with the kind the
   // manager already chose. The date comes from the cell rather than from today,
   // because the whole point is that a manager can be looking at next week.
@@ -13568,8 +13679,47 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
                  indistinguishable from a failed load. */
               <span className="rota-readonly">{Ic.eye}<span>{t.rotaReadOnly}</span></span>
             )}
+
+            {/* The attendance sheet. Last in the toolbar, and a ghost rather than a
+                primary button: the committing action on this page is Save, in the
+                save bar below the grid, and two solid blue buttons on one screen
+                compete for the same eye.
+
+                disabled while editing is load-bearing, not defensive. The server
+                holds the SAVED week and the screen shows the draft, so downloading
+                mid-edit prints a sheet that does not match what is on screen --
+                the same class of bug as "0 unsaved" appearing after an absence
+                save. The tooltip says so rather than leaving a dead control.
+
+                The label does NOT change to t.generatingPdf while it works. A
+                morphing label takes the focused element off the screen -- already
+                the reason the mode switch is a radiogroup and not a Done toggle --
+                and it changes the button width under the pointer mid-click. The
+                icon spins instead, and the busy state is announced via aria-busy. */}
+            {canEdit && (
+              <button type="button" className={'btn btn-ghost rota-pdf-btn'
+                  + (pdfBusy ? ' spinning' : '')}
+                onClick={downloadAttendancePDF}
+                disabled={!data || loading || pdfBusy || editing || pdfUnavailable}
+                title={editing ? t.rotaPdfLockedWhileEditing
+                  : pdfUnavailable ? t.rotaDownloadPdfUnavailable
+                  : t.rotaDownloadPdfTitle}
+                aria-busy={pdfBusy || undefined}>
+                {Ic.download} <span>{t.rotaDownloadPdf}</span>
+              </button>
+            )}
           </div>
         </div>
+
+        {/* A failure the manager needs to keep seeing. It does not auto-dismiss,
+            because nothing here is going to fix itself: the server either has a
+            browser or it does not. */}
+        {pdfError && (
+          <div className="rota-notice" role="alert">
+            {Ic.info}
+            <span>{pdfError}</span>
+          </div>
+        )}
 
         {/* The premise, before the grid. Not a hint: it is the one fact that makes
             every cell in the table mean what a reader assumes it means. */}

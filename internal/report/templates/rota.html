@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<!--
+  The weekly attendance sheet, "Folha de Ponto/Turnos".
+
+  PORTUGUESE, deliberately. This is a Portuguese HR form, not a translation of an
+  English report, and the Excel twin of it is written in Portuguese. The button that
+  downloads this document is bilingual; the artefact is not.
+
+  Grid: NINE columns, one cell per member-day, showing "22:00-06:00" on a single
+  baseline. The obvious alternative is the Excel layout -- an Entrada and a Saida
+  column under each of the seven days -- which needs 14 narrow time columns on A4.
+  It does not fit: at the 7pt floor a signed document can use, fourteen columns
+  leave about 37mm for Nome, and a name column that cannot hold a Portuguese full
+  name is worse than useless on a sheet a manager signs. Shift.Label() already
+  defines how a shift reads in a cell, so the hyphen between the two times is that
+  definition reused rather than a second one written here.
+
+  Colgroup widths sum to 186mm, which is the A4 portrait content width
+  (210 - 12 - 12) declared by @page in base.css. table-layout:fixed in base.css
+  makes them authoritative.
+-->
+<html lang="pt">
+<head>
+<meta charset="UTF-8" />
+<title>Folha de Ponto/Turnos — {{.WeekLabel}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+{{BASE_CSS}}
+
+/* ── Attendance-sheet-specific rules ────────────────────────────────────────
+   Everything grammatical (page geometry, bands, table borders, the palette)
+   lives in base.css and is shared with the other two reports. Only the
+   proportions below are this document own: a nine-column grid, a form-field
+   header row, and a footer that puts the key beside the signature. */
+
+/* The header fields are ruled form fields, not a bordered table. A solid rule with
+   nothing on it reads as a value that failed to load; a dotted one reads as
+   somewhere for a person to write. That is the same idiom as .empty in base.css,
+   one step quieter, and it is what makes the two fields the application cannot
+   fill -- Departamento and Data Entrega -- look like a form to complete rather
+   than a bug. The two that ARE filled get solid rules, which is exactly what
+   makes the dotted pair read as pending rather than missing. */
+.meta-row {
+  display: grid;
+  grid-template-columns: 62mm 32mm 44mm 48mm;
+  margin-bottom: 5mm;
+}
+.meta-label {
+  font-size: 7pt; font-weight: 600; letter-spacing: 0.35pt;
+  text-transform: uppercase; color: var(--gray-400);
+}
+.meta-value {
+  font-size: 8.5pt; font-weight: 600; color: var(--gray-900);
+  border-bottom: 0.3mm solid var(--gray-300);
+  padding: 0.9mm 0 1.4mm;
+  min-height: 6mm;
+}
+.meta-value.is-blank {
+  border-bottom: 0.3mm dotted var(--gray-300);
+}
+
+/* ── The grid ─────────────────────────────────────────────────────────────── */
+
+.c-name { text-align: left; vertical-align: middle; }
+.c-time { text-align: center; vertical-align: middle; }
+
+/* Tighter than base.css defaults, for a measured reason: the name cell carries two
+   lines (name + hours) and at the default 1.8mm vertical padding each row came out
+   near 10.6mm, which put twenty members on a second page. At these values the same
+   sheet fits, and a twenty-row grid is dense in a way that reads correctly -- it is
+   a week, not a report to be skimmed. The day cell is 7pt because it is the densest
+   content on the sheet and monospace at 7pt still clears print legibility; 7pt is
+   the floor and nothing here goes below it. */
+.rota-doc td { padding: 1.2mm 1.5mm; }
+.rota-doc td.c-time {
+  font-family: 'DM Mono', ui-monospace, Consolas, monospace;
+  font-size: 7pt; white-space: nowrap;
+  color: var(--gray-900); text-align: center; vertical-align: middle;
+}
+
+/* A deactivated account is still a row -- the rota keeps it on purpose, so a later
+   reactivation cannot silently resurrect a row a manager thought they had tidied.
+   It is greyed by COLOUR, not by opacity: opacity is a compositing effect and it
+   greys out unpredictably through a print pipeline. */
+.rota-doc tr.inactive .c-name .nm { color: var(--gray-600); font-weight: 500; }
+
+/* Names wrap; they are never truncated. An ellipsis is a screen affordance that
+   exists because a horizontal scroller needs a stable column -- in print there is
+   no scroller, so it is just a name with its tail amputated on a signed document. */
+.nm { font-size: 8pt; font-weight: 600; line-height: 1.15; }
+.nm-sub { font-size: 6.5pt; font-weight: 400; line-height: 1.2; color: var(--gray-400); margin-top: 0.4mm; }
+
+/* "Folga" is the resting state and the quietest thing on the sheet. A week where
+   four people are off is an ordinary week; tinting it would turn a normal rota
+   into an incident report. Grey and italic, no fill beyond the existing zebra. */
+.c-off {
+  color: var(--gray-400); font-style: italic;
+  text-align: center; vertical-align: middle;
+}
+
+/* An absence is italic AND tinted. Italic is the cue that survives greyscale
+   printing, which is how a signed sheet usually ends up filed; a tint and a grey
+   collapse to the same value. The inset ring keeps the cell bounded where the
+   tint is palest and the page has been photocopied.
+   The `tbody tr.` prefix is required: the zebra rule in base.css is equally
+   specific and would otherwise win on even-numbered rows. */
+tbody tr td.c-away {
+  background: var(--abs-wash);
+  color: var(--ink);
+  font-style: italic; font-weight: 600;
+  text-align: center; vertical-align: middle;
+  box-shadow: inset 0 0 0 0.25mm var(--ink);
+}
+td.c-away.vacation  { --ink: var(--violet); }
+td.c-away.sick      { --ink: var(--teal); }
+td.c-away.training  { --ink: var(--green); }
+td.c-away.other     { --ink: var(--gray-600); }
+
+/* "Away all week" and "not on this rota" produce an identical grid -- seven word
+   cells and no times -- so the difference has to live in the name cell, exactly as
+   it does on screen. The rail down the leading edge repeats the recipe and its
+   specificity trap already documented in base.css for the false-alarm row. */
+tbody tr.away-all td.c-name {
+  box-shadow: inset 0.9mm 0 0 var(--violet);
+}
+.nm-sub.is-away { color: var(--violet); font-weight: 600; }
+
+/* ── Footer: the key beside the signature ─────────────────────────────────── */
+
+/* The Excel leaves a thick-bordered empty block for the signature. On paper a heavy
+   empty box reads as a rendering error, prints as a black bar, and detaches the
+   signature from the table it attests to. What the Excel spends that space on is
+   wasted anyway, so the key moves here -- it is dead space on the sheet and it
+   buys back about 11mm of page budget. */
+.footrow {
+  display: grid;
+  grid-template-columns: 96mm 90mm;
+  margin-top: 7mm;
+  break-inside: avoid;
+}
+.legend {
+  max-width: 58mm;
+}
+.legend-h {
+  font-size: 7pt; font-weight: 600; letter-spacing: 0.35pt;
+  text-transform: uppercase; color: var(--gray-400);
+  margin: 2.4mm 0 1.2mm;
+}
+.legend-h:first-child { margin-top: 0; }
+.legend-row {
+  display: flex; align-items: baseline; gap: 2mm;
+  font-size: 7.5pt; padding: 0.35mm 0;
+}
+.legend-name { color: var(--gray-900); font-weight: 500; }
+.legend-time, .legend-count {
+  font-family: 'DM Mono', ui-monospace, Consolas, monospace;
+  color: var(--gray-600);
+}
+.legend-count { margin-left: auto; color: var(--gray-400); }
+.legend-dot {
+  width: 2.2mm; height: 2.2mm; border-radius: 0.6mm; flex-shrink: 0;
+  display: inline-block;
+}
+.footnote {
+  font-size: 6.5pt; color: var(--gray-400); margin-top: 2.4mm;
+}
+
+.signblock-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+}
+.signblock-date { font-size: 7pt; color: var(--gray-600); }
+.rule-dotted {
+  display: inline-block; width: 22mm;
+  border-bottom: 0.3mm dotted var(--gray-300);
+}
+/* Heavier than the 0.3mm fill-in rules on purpose: this is the one line on the
+   document that carries weight, so it should not read as another blank. */
+.signblock-rule {
+  margin-top: 1.6mm;
+  border-bottom: 0.4mm solid var(--gray-900);
+  height: 18mm;
+}
+</style>
+</head>
+<body>
+
+<div class="band-top">
+  <div class="logo-mark">L</div>
+  <div style="margin-left:3.5mm">
+    <div class="title">Folha de Ponto/Turnos</div>
+    <div class="subtitle">LIRA — Llana IT Reporting &amp; Alerts</div>
+  </div>
+  <div class="right" style="margin-left:auto">
+    <div class="date">{{.RangeLabel}}</div>
+    <div class="gen">Gerado em {{.GeneratedAt}}</div>
+  </div>
+</div>
+
+<div class="sheet">
+  <div class="meta-row">
+    <div>
+      <div class="meta-label">Departamento</div>
+      <div class="meta-value is-blank">&nbsp;</div>
+    </div>
+    <div>
+      <div class="meta-label">Mês</div>
+      <div class="meta-value">{{.MonthLabel}}</div>
+    </div>
+    <div>
+      <div class="meta-label">Semana</div>
+      <div class="meta-value">{{.WeekLabel}}</div>
+    </div>
+    <div>
+      <div class="meta-label">Data Entrega</div>
+      <div class="meta-value is-blank">&nbsp;</div>
+    </div>
+  </div>
+
+  {{if .Empty}}
+    <div class="empty">Sem membros na rota nesta semana.</div>
+  {{else}}
+  <table class="rota-doc">
+    <colgroup>
+      <col style="width:36mm" />
+      <col style="width:18mm" /><col style="width:18mm" /><col style="width:18mm" />
+      <col style="width:18mm" /><col style="width:18mm" /><col style="width:18mm" />
+      <col style="width:18mm" />
+      <col style="width:24mm" />
+    </colgroup>
+    <thead>
+      <tr>
+        <th rowspan="2">Nome</th>
+        {{range .Days}}<th>{{.Name}}</th>{{end}}
+        <th rowspan="2">Observação</th>
+      </tr>
+      <tr class="rownum">
+        {{range .Days}}<th>{{.Date}}</th>{{end}}
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="{{if .Inactive}}inactive{{end}} {{if .AwayAll}}away-all{{end}}">
+        <td class="c-name">
+          <div class="nm">{{.Name}}</div>
+          {{if .AwayAll}}
+            <div class="nm-sub is-away">{{.AwayWord}}</div>
+          {{else if .NotOnRota}}
+            <div class="nm-sub">Sem turnos nesta semana</div>
+          {{else}}
+            <div class="nm-sub">{{.Hours}}</div>
+          {{end}}
+        </td>
+        {{range .Cells}}
+          {{if .Times}}
+            {{/* No "+1" marker in the cell. Measured: at 7pt DM Mono the pair is
+                 16.3mm, "+1" adds 3mm, and with padding that is 22mm against a
+                 column budget of 19mm -- the marker did not fit and the cell
+                 overflowed into the next weekday, which is precisely the "is she
+                 on at 22:00 or does she finish at 06:00" question the sheet exists
+                 to answer. A finish earlier than the start is plainly next-day on a
+                 clock sheet, the key names Night with its times, and the footnote
+                 states the convention. The marker would have been decoration. */}}
+            <td class="c-time">{{.Times}}</td>
+          {{else}}
+            {{if eq .Status "Folga"}}
+              <td class="c-off">Folga</td>
+            {{else if eq .Status "Feria"}}
+              <td class="c-away vacation">Feria</td>
+            {{else if eq .Status "Falta"}}
+              <td class="c-away sick">Falta</td>
+            {{else if eq .Status "Formação"}}
+              <td class="c-away training">Formação</td>
+            {{else}}
+              <td class="c-away other">{{.Status}}</td>
+            {{end}}
+          {{end}}
+        {{end}}
+        <td class="c-obs"></td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{end}}
+
+  <div class="footrow">
+    <div class="legend">
+      {{if .Turnos}}
+      <div class="legend-h">Turnos</div>
+      {{range .Turnos}}
+      <div class="legend-row">
+        <span class="legend-name">{{.Label}}</span>
+        <span class="legend-time">{{.Times}}</span>
+        <span class="legend-count">{{.Count}}</span>
+      </div>
+      {{end}}
+      {{end}}
+      {{if .Motivos}}
+      <div class="legend-h">Motivos</div>
+      {{range .Motivos}}
+      <div class="legend-row">
+        <span class="legend-dot" style="background:{{.Hue}}"></span>
+        <span class="legend-name">{{.Label}}</span>
+        <span class="legend-count">{{.Count}}</span>
+      </div>
+      {{end}}
+      {{end}}
+      {{if .FootNote}}<div class="footnote">{{.FootNote}}</div>{{end}}
+    </div>
+
+    <div class="signblock">
+      <div class="signblock-head">
+        <span class="meta-label">Assinatura do Responsável</span>
+        <span class="signblock-date">Data <span class="rule-dotted"></span></span>
+      </div>
+      <div class="signblock-rule"></div>
+    </div>
+  </div>
+</div>
+
+<div class="band-bottom">
+  <span>{{.MonthLabel}} · {{.WeekLabel}}</span>
+  <span>LIRA</span>
+</div>
+
+</body>
+</html>

@@ -251,6 +251,17 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodGet, "/v1/reports/consumables/weekly", app.requireAuth(app.weeklyConsumablesReportHandler))
 	router.HandlerFunc(http.MethodGet, "/v1/reports/consumables/weekly.pdf", app.requireAuth(app.weeklyConsumablesPDFHandler))
 
+	// The attendance sheet. Manager-only, because it is a signed statement about
+	// hours worked and it carries absence kinds: see weeklyRotaPDFHandler.
+	//
+	// "rota/weekly" rather than "schedule/weekly" for the reason the comment above
+	// /v1/schedule gives -- a reports path should not read as part of the public
+	// grid API, which invites somebody to un-gate it one day. Three segments, the
+	// same shape as consumables/weekly.pdf, so it registers beside it without
+	// becoming a static child that would collide with a future /v1/reports/:kind.
+	router.HandlerFunc(http.MethodGet, "/v1/reports/rota/weekly", app.requireAuth(app.requireManager(app.weeklyRotaReportHandler)))
+	router.HandlerFunc(http.MethodGet, "/v1/reports/rota/weekly.pdf", app.requireAuth(app.requireManager(app.weeklyRotaPDFHandler)))
+
 	// Preventive maintenance on department printers and phones. Reading the
 	// queue and recording a check are open to any signed-in user, because the
 	// people doing the work are the technicians; only the configuration of what

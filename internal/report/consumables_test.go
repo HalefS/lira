@@ -325,7 +325,24 @@ func TestDateRangeLabel(t *testing.T) {
 // Both templates must carry the shared-stylesheet placeholder, and it must
 // resolve -- a template that silently lost it would render unstyled.
 func TestTemplatesShareTheBaseStylesheet(t *testing.T) {
-	for _, name := range []string{"templates/daily.html", "templates/consumables.html"} {
+	// Enumerated from the embedded FS rather than listed by hand. The hardcoded
+	// slice meant the newest template was silently never checked, so a template
+	// added without the placeholder would panic at init in production instead of
+	// failing here. base.css is a stylesheet, not a template, so it is excluded.
+	entries, err := templateFS.ReadDir("templates")
+	if err != nil {
+		t.Fatalf("reading templates dir: %v", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".html") {
+			names = append(names, "templates/"+e.Name())
+		}
+	}
+	if len(names) < 3 {
+		t.Fatalf("expected at least three templates, found %d: %v", len(names), names)
+	}
+	for _, name := range names {
 		src := mustReadTemplate(name)
 		if !strings.Contains(src, baseCSSMarker) {
 			t.Errorf("%s is missing the %s placeholder", name, baseCSSMarker)
@@ -334,8 +351,9 @@ func TestTemplatesShareTheBaseStylesheet(t *testing.T) {
 			t.Errorf("%s must have a balanced <style> block", name)
 		}
 	}
-	// mustLoadTemplate panics on a missing placeholder, so simply loading both
+	// mustLoadTemplate panics on a missing placeholder, so simply loading them
 	// proves the substitution works.
 	_ = dailyTemplate
 	_ = consumablesTemplate
+	_ = attendanceTemplate
 }

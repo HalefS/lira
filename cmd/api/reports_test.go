@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/HalefS/lira/internal/data"
 	"github.com/HalefS/lira/internal/report"
 )
 
@@ -149,5 +150,112 @@ func TestDailyReportPDFReportsBadConfiguredBrowser(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "configured pdf report browser") {
 		t.Errorf("body = %q, want it to blame the configured path", w.Body.String())
+	}
+}
+
+// ── The attendance sheet ────────────────────────────────────────────────────
+//
+// The gate is the interesting part. The rota grid itself is PUBLIC, and the
+// attendance sheet carries absence kinds on top of it, so a mistake in the
+// middleware chain here would publish sick leave. Both refusal paths are asserted
+// against a zero-value application, because requireManager answers before any
+// query runs.
+func TestRotaAttendancePDFRequiresAManager(t *testing.T) {
+	app := &application{browserErr: report.ErrNoBrowser}
+	endpoint := "/v1/reports/rota/weekly.pdf?week=2026-10-05"
+
+	// Anonymous: the sentinel optionalAuthentication installs for a missing or
+	// unparseable token. It has to go in the context explicitly, because
+	// contextGetUser panics rather than returning nil -- the real chain always
+	// populates it first.
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, endpoint, nil)
+	r = app.contextSetUser(r, data.AnonymousUser)
+	app.requireAuth(app.requireManager(app.weeklyRotaPDFHandler))(w, r)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("anonymous: status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+
+	// Authenticated but not a manager. This is the one that would have leaked.
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, endpoint, nil)
+	r = app.contextSetUser(r, &data.User{Role: "technician"})
+	app.requireAuth(app.requireManager(app.weeklyRotaPDFHandler))(w, r)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("technician: status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+// The JSON twin carries the same absences, so it takes the same gate.
+func TestRotaAttendanceReportRequiresAManager(t *testing.T) {
+	app := &application{}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/reports/rota/weekly?week=2026-10-05", nil)
+	r = app.contextSetUser(r, &data.User{Role: "technician"})
+	app.requireAuth(app.requireManager(app.weeklyRotaReportHandler))(w, r)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+// A malformed week anchor is refused before the browser check, so it can be
+// exercised without a database.
+func TestRotaAttendanceRejectsMalformedWeek(t *testing.T) {
+	app := &application{browserErr: report.ErrNoBrowser}
+
+	for _, endpoint := range []string{
+		"/v1/reports/rota/weekly?week=nope",
+		"/v1/reports/rota/weekly.pdf?week=2026-13-45",
+	} {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, endpoint, nil)
+
+		if strings.HasSuffix(endpoint, ".pdf?week=2026-13-45") {
+			app.weeklyRotaPDFHandler(w, r)
+		} else {
+			app.weeklyRotaReportHandler(w, r)
+		}
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want %d", endpoint, w.Code, http.StatusBadRequest)
+		}
+		if !strings.Contains(w.Body.String(), "YYYY-MM-DD") {
+			t.Errorf("%s: body = %q, want it to name the expected date format", endpoint, w.Body.String())
+		}
+	}
+}
+
+// A missing browser is a deployment problem and must not be a 500.
+func TestRotaAttendancePDFReportsMissingBrowser(t *testing.T) {
+	app := &application{browserErr: report.ErrNoBrowser}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/reports/rota/weekly.pdf?week=2026-10-05", nil)
+	app.weeklyRotaPDFHandler(w, r)
+
+	if w.Code != http.StatusNotImplemented {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+	}
+	if !strings.Contains(w.Body.String(), "chromium") {
+		t.Errorf("body = %q, want it to explain that no browser was found", w.Body.String())
+	}
+}
+
+// httprouter PANICS at construction time when a static segment sits beside a
+// wildcard in the same method tree -- which is why /v1/rota/members exists instead
+// of /v1/schedule/roster, per the comment in routes.go. The failure mode is a crash
+// at boot, not a bad response, so the only place it can be caught cheaply is a test
+// that builds the router.
+func TestRoutesBuildWithoutPanicking(t *testing.T) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			t.Fatalf("building the router panicked: %v", rec)
+		}
+	}()
+	app := &application{}
+	if r := app.routes(); r == nil {
+		t.Error("routes() returned nil")
 	}
 }

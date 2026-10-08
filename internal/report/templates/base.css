@@ -49,6 +49,22 @@
   --gray-400: #5F6A78;
   --gray-600: #4B5563;
   --gray-900: #17202A;
+
+  /* Absence hues. These mirror the application :root (cmd/api/ui/src/index.html)
+     which the header comment above says must be changed in all three places. The
+     attendance sheet tints an absent day by kind, and hardcoding the hex here
+     would break that contract the next time --violet moves. */
+  --violet:   #6D28D9;
+  --abs-wash: #DFDBF1;
+
+  /* Red. The application already defines --red and --red-light, and this file had
+     three reds for one concept: the pair below, the literal #D94B4B on .cicon
+     below, and #D94B4B again as colRed in internal/report/daily.go. The literal
+     is the OLD value -- --red was moved to #C13A3A because --red-light measures
+     3.57:1 against white -- so the tone-red chip below has been printing the
+     pre-fix red at 7pt. One token, used by both. */
+  --red:       #C13A3A;
+  --red-light: #FBEAEA;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -222,6 +238,16 @@ th {
 th:first-child { border-top-left-radius: 1.2mm; }
 th:last-child  { border-top-right-radius: 1.2mm; }
 
+/* A two-row header needs the second row to read as subordinate. Two identical blue
+   bands give the eye no way to tell which row carries the meaning, so the second
+   drops to the light tint on the same blue at a smaller size and normal weight.
+   Used by the attendance sheet, whose second head row is the dates. */
+thead tr.rownum th {
+  background: var(--blue-lt); color: var(--blue);
+  font-size: 6.5pt; font-weight: 400; letter-spacing: 0;
+  padding: 1mm 2mm;
+}
+
 td {
   font-size: 8pt; padding: 1.8mm 2mm;
   border-bottom: 0.25mm solid var(--gray-200);
@@ -298,7 +324,7 @@ tbody tr.fp td:first-child { box-shadow: inset 0.8mm 0 0 var(--amber); }
 .cicon.tone-teal  { background: var(--teal-lt);  color: var(--teal); }
 .cicon.tone-amber { background: var(--amber-lt); color: var(--amber); }
 .cicon.tone-green { background: var(--green-lt); color: var(--green); }
-.cicon.tone-red   { background: #FBEAEA;         color: #D94B4B; }
+.cicon.tone-red   { background: var(--red-light);   color: var(--red); }
 .cicon.tone-gray  { background: var(--gray-200); color: var(--gray-600); }
 
 .item-cell { display: flex; align-items: center; gap: 2mm; }

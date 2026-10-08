@@ -167,6 +167,92 @@ func (app *application) weeklyConsumablesPDFHandler(w http.ResponseWriter, r *ht
 	w.Write(pdf)
 }
 
+// GET /v1/reports/rota/weekly?week=YYYY-MM-DD
+//
+// The weekly attendance sheet as JSON. It exists so the rota page can learn the
+// week it is about to print without re-deriving the calendar client-side, which is
+// the reason both existing PDF endpoints have a JSON twin.
+func (app *application) weeklyRotaReportHandler(w http.ResponseWriter, r *http.Request) {
+	anchor, ok := app.scheduleWeekAnchor(w, r)
+	if !ok {
+		return
+	}
+
+	week, err := app.models.Schedule.Week(anchor)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.writeJSON(w, http.StatusOK, envelope{"week": week}, nil)
+}
+
+// GET /v1/reports/rota/weekly.pdf?week=YYYY-MM-DD
+//
+// The weekly attendance sheet, printed: the "Folha de Ponto/Turnos" document.
+//
+// MANAGER ONLY, and that is the document own nature rather than a precaution. The
+// sheet ends in "Assinatura do Responsavel", so it is a statement by a named manager
+// about hours worked; a technician cannot author that. It also carries absence
+// kinds, and PublicKind exists precisely because publishing the word SICK next to a
+// named colleague is publishing health information about them -- so the unredacted
+// kinds must not reach the public noticeboard that /v1/schedule serves.
+//
+// A PDF leaves the browser the moment it is downloaded, so the gate has to be the
+// one appropriate to the document rather than the one that is convenient at the
+// button. Every already-downloadable artefact here has the same property; what
+// differs is who is entitled to hold this one.
+func (app *application) weeklyRotaPDFHandler(w http.ResponseWriter, r *http.Request) {
+	anchor, ok := app.scheduleWeekAnchor(w, r)
+	if !ok {
+		return
+	}
+
+	// Checked before the query, like the two handlers above: a missing Chromium is
+	// a deployment problem and answering 501 without touching the database keeps
+	// that case cheap and distinguishable from a broken rota.
+	if app.browser == nil {
+		reason := "no chromium-based browser was found on this server"
+		if app.browserErr != nil && !errors.Is(app.browserErr, report.ErrNoBrowser) {
+			reason = "the configured pdf report browser could not be used: " + app.browserErr.Error()
+		}
+		app.errorResponse(w, r, http.StatusNotImplemented, "pdf reports are unavailable: "+reason)
+		return
+	}
+
+	week, err := app.models.Schedule.Week(anchor)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	html, err := report.RenderAttendanceHTML(week)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// The request context bounds the browser run, so a client that gives up
+	// does not leave a Chrome process behind.
+	pdf, err := app.browser.Render(r.Context(), html)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", contentDisposition("attachment",
+		fmt.Sprintf("LIRA-Attendance-Sheet-%s-to-%s.pdf",
+			week.Week.Start.Time().Format(time.DateOnly),
+			week.Week.End.Time().Format(time.DateOnly))))
+	// Generated per request from a week a manager can step through, and carrying
+	// absence kinds, so it must never sit in a shared cache.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Length", strconv.Itoa(len(pdf)))
+	w.WriteHeader(http.StatusOK)
+	w.Write(pdf)
+}
+
 // reportWeekAnchor reads and validates the ?week= anchor shared by both
 // consumables report endpoints. An absent anchor means the current week.
 //
