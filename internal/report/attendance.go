@@ -3,6 +3,7 @@ package report
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/HalefS/lira/internal/data"
@@ -91,6 +92,31 @@ type attendanceCell struct {
 	Status    string // "Folga" / "Feria" / "Falta" / "Formação" / "Indisponível"
 	Overnight bool
 	Tint      string
+}
+
+// Label is the cell as one string, which is how a rota cell reads. It follows
+// Shift.Label in leaving the overnight case undecorated: on screen and on paper
+// alike, "22:00-06:00" is what every rota in the world writes, and Overnight is
+// there for code that needs to know rather than for the label.
+func (c attendanceCell) Label() string {
+	if c.Status != "" {
+		return c.Status
+	}
+	return c.Times
+}
+
+// Start and End split the one string back into its two clock times, for the
+// spreadsheet, which prints one under each of the Entrada and Saida headings.
+// Splitting on the hyphen is safe here because these are the server's own times,
+// written "HH:MM" with a single hyphen between them.
+func (c attendanceCell) Split() (string, string) {
+	if c.Status != "" {
+		return "", ""
+	}
+	if i := strings.IndexByte(c.Times, '-'); i >= 0 {
+		return c.Times[:i], c.Times[i+1:]
+	}
+	return c.Times, ""
 }
 
 // attendanceRow is one member.

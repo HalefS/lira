@@ -261,6 +261,8 @@ func (app *application) routes() http.Handler {
 	// becoming a static child that would collide with a future /v1/reports/:kind.
 	router.HandlerFunc(http.MethodGet, "/v1/reports/rota/weekly", app.requireAuth(app.requireManager(app.weeklyRotaReportHandler)))
 	router.HandlerFunc(http.MethodGet, "/v1/reports/rota/weekly.pdf", app.requireAuth(app.requireManager(app.weeklyRotaPDFHandler)))
+	// No browser guard on this one: a workbook is not a print artefact.
+	router.HandlerFunc(http.MethodGet, "/v1/reports/rota/weekly.xlsx", app.requireAuth(app.requireManager(app.weeklyRotaXLSXHandler)))
 
 	// Preventive maintenance on department printers and phones. Reading the
 	// queue and recording a check are open to any signed-in user, because the

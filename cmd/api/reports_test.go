@@ -243,6 +243,91 @@ func TestRotaAttendancePDFReportsMissingBrowser(t *testing.T) {
 	}
 }
 
+// The workbook carries absence kinds too, so it takes the same manager-only gate.
+//
+// This endpoint has no browser check, which makes it the one report here where a
+// misordered wrapper would not short-circuit anywhere: it would go straight to the
+// database and hand out a workbook. That is precisely why it is worth asserting.
+func TestRotaAttendanceXLSXRequiresAManager(t *testing.T) {
+	app := &application{}
+	endpoint := "/v1/reports/rota/weekly.xlsx?week=2026-10-05"
+	guarded := app.requireAuth(app.requireManager(app.weeklyRotaXLSXHandler))
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, endpoint, nil)
+	r = app.contextSetUser(r, data.AnonymousUser)
+	guarded(w, r)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("anonymous: status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, endpoint, nil)
+	r = app.contextSetUser(r, &data.User{Role: "technician"})
+	guarded(w, r)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("technician: status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+// A malformed week is refused before the model is touched, so this runs without a
+// database -- and it must NOT be a 501, which is what a misplaced browser check
+// would produce on a machine that happens to lack Chromium.
+func TestRotaAttendanceXLSXRejectsMalformedWeek(t *testing.T) {
+	app := &application{browserErr: report.ErrNoBrowser}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/reports/rota/weekly.xlsx?week=not-a-week", nil)
+	app.weeklyRotaXLSXHandler(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	if !strings.Contains(w.Body.String(), "YYYY-MM-DD") {
+		t.Errorf("body = %q, want it to name the expected date format", w.Body.String())
+	}
+}
+
+// The workbook must be downloadable on a server with no browser at all. That is the
+// whole reason this endpoint exists separately from the PDF one, so the asymmetry is
+// pinned rather than left as a comment.
+//
+// A zero-value application has nil models, so a handler that gets as far as the
+// query panics -- and that panic IS the proof, because it means the browser gate did
+// not fire. What must never happen is a 501, so the status is asserted on the
+// recorder with the panic recovered.
+func TestRotaAttendanceXLSXNeedsNoBrowser(t *testing.T) {
+	app := &application{browserErr: report.ErrNoBrowser}
+
+	w := httptest.NewRecorder()
+	func() {
+		defer func() { _ = recover() }()
+		app.weeklyRotaXLSXHandler(w, httptest.NewRequest(http.MethodGet,
+			"/v1/reports/rota/weekly.xlsx?week=2026-10-05", nil))
+	}()
+
+	if w.Code == http.StatusNotImplemented {
+		t.Error("the workbook endpoint must not require a browser; it returned 501")
+	}
+}
+
+// The PDF endpoint, given the same missing browser and the same valid week, does
+// stop at 501. Asserting both halves is what makes the asymmetry above meaningful:
+// without this, "the workbook does not return 501" could just mean the test never got
+// far enough to tell.
+func TestRotaAttendancePDFDoesStopAt501(t *testing.T) {
+	app := &application{browserErr: report.ErrNoBrowser}
+
+	w := httptest.NewRecorder()
+	app.weeklyRotaPDFHandler(w, httptest.NewRequest(http.MethodGet,
+		"/v1/reports/rota/weekly.pdf?week=2026-10-05", nil))
+
+	if w.Code != http.StatusNotImplemented {
+		t.Errorf("the PDF endpoint returned %d, want %d -- the contrast the other test relies on is gone",
+			w.Code, http.StatusNotImplemented)
+	}
+}
+
 // httprouter PANICS at construction time when a static segment sits beside a
 // wildcard in the same method tree -- which is why /v1/rota/members exists instead
 // of /v1/schedule/roster, per the comment in routes.go. The failure mode is a crash

@@ -20,7 +20,7 @@ import (
 	"github.com/HalefS/lira/internal/data"
 )
 
-//go:embed templates/base.css templates/consumables.html templates/daily.html templates/rota.html
+//go:embed templates/base.css templates/consumables.html templates/daily.html templates/rota.html templates/attendance.xlsx
 var templateFS embed.FS
 
 // baseCSSMarker is where each report template puts its shared stylesheet.

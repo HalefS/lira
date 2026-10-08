@@ -1,2 +1,12 @@
 .envrc
 bin/
+
+# The attendance workbook the rota is EXPORTED to, and the working copy it is built
+# from. Deliberately not tracked: it carries real staff names, and the application
+# does not read it at all.
+#
+# What the binary embeds is internal/report/templates/attendance.xlsx, a template
+# with every date, time and person name stripped. Nothing at runtime touches this
+# folder, so tracking it would put a roster of real people into the repository for
+# no benefit.
+rota/

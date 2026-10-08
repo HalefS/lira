@@ -253,6 +253,53 @@ func (app *application) weeklyRotaPDFHandler(w http.ResponseWriter, r *http.Requ
 	w.Write(pdf)
 }
 
+// GET /v1/reports/rota/weekly.xlsx?week=YYYY-MM-DD
+//
+// The same attendance sheet, as a workbook.
+//
+// Manager-only for the same reason as the PDF: it carries absence kinds, and a
+// technician gets 403 rather than a redacted sheet. See weeklyRotaPDFHandler.
+//
+// NO browser check, which is the one thing that makes this endpoint different from
+// its two siblings. Those end in a PDF because they are meant to be printed; this
+// one is meant to be opened in a spreadsheet and filled in by hand. Going through
+// the print pipeline would add a Chromium dependency, and with it a 501, to a
+// download that needs none -- so a server with no browser installed can still hand
+// out the workbook.
+//
+// The bytes come from the template EMBEDDED in the binary and filled per request.
+// There is no file on disk to deploy and no file that can drift from the rota.
+func (app *application) weeklyRotaXLSXHandler(w http.ResponseWriter, r *http.Request) {
+	anchor, ok := app.scheduleWeekAnchor(w, r)
+	if !ok {
+		return
+	}
+
+	week, err := app.models.Schedule.Week(anchor)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	book, err := report.RenderAttendanceXLSX(week)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", contentDisposition("attachment",
+		fmt.Sprintf("LIRA-Folha-de-Ponto-%s-a-%s.xlsx",
+			week.Week.Start.Time().Format("02-01-2006"),
+			week.Week.End.Time().Format("02-01-2006"))))
+	// Generated per request from a week a manager can step through, and carrying
+	// absence kinds, so it must never sit in a shared cache.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Length", strconv.Itoa(len(book)))
+	w.WriteHeader(http.StatusOK)
+	w.Write(book)
+}
+
 // reportWeekAnchor reads and validates the ?week= anchor shared by both
 // consumables report endpoints. An absent anchor means the current week.
 //

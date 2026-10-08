@@ -1490,7 +1490,10 @@ html.dark .rota-dirty { background: var(--gray-50); }
 /* The attendance-sheet download. It sits last in .table-actions and owns the right
    edge with margin-left:auto, so the week controls stay grouped on the left with
    the mode switch rather than being shoved apart by a growing spacer. */
+/* Only the first of the two owns the auto margin. On both, the first
+   would grow into a spacer and shove the week controls apart. */
 .rota-pdf-btn { margin-left: auto; }
+.rota-pdf-btn + .btn-ghost { margin-left: 0; }
 .rota-pdf-btn svg { transition: transform 0.15s ease; }
 .rota-pdf-btn.spinning svg { animation: sysSpin 0.7s linear infinite; }
 /* .btn-ghost has no :disabled rule, so a disabled ghost button otherwise keeps its
@@ -3692,6 +3695,7 @@ const T = {
     // is downloaded and this button whole job is to name the artefact.
     rotaDownloadPdf: 'Attendance sheet (PDF)',
     rotaDownloadPdfTitle: 'Download the weekly attendance sheet as a PDF',
+    rotaDownloadXlsx: 'Spreadsheet',
     // The button is dead while editing, and the reason is worth saying: the server
     // holds the SAVED week while the screen shows the draft, so a download
     // mid-edit prints a sheet that does not match what the manager is looking at.
@@ -4502,6 +4506,7 @@ const T = {
     rotaManageRoster: 'Equipa na escala',
     rotaDownloadPdf: 'Folha de ponto (PDF)',
     rotaDownloadPdfTitle: 'Transferir a folha de ponto semanal em PDF',
+    rotaDownloadXlsx: 'Folha de cálculo',
     rotaPdfLockedWhileEditing: 'Guarde ou cancele as alterações primeiro — a folha impressa é a semana guardada.',
     rotaDownloadPdfUnavailable: 'Os relatórios em PDF não estão disponíveis neste servidor. O administrador pode ativá-los instalando o Chromium.',
     rosterTitle: 'Quem está na escala',
@@ -13208,12 +13213,23 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
        - 501 is mapped to a message for the person who pressed the button, never
          to the server's raw wording, which names a chromium binary for an
          operator. The raw body goes to the console instead. */
-  async function downloadAttendancePDF() {
+  /* Download the attendance sheet. Both formats come from the same view of the
+     same rota, so there is nothing to keep in step between them -- and the
+     spreadsheet needs no browser on the server, which is why it is offered at all
+     rather than being left as a server-side script.
+
+     One busy flag for both: two downloads racing would mean two Chrome runs and
+     two workbook fills at once, for a button nobody asked to double-click.
+
+     The server names its own filename in Content-Disposition and the browser
+     honours it on a blob download, so the date range in the name is the server
+     fact and not a second calendar computed here. */
+  async function downloadAttendanceSheet(ext) {
     if (pdfBusy || pdfUnavailable) return;
     setPdfBusy(true);
     setPdfError('');
     try {
-      const res = await fetch(`${API}/reports/rota/weekly.pdf?week=${weekISO}`, {
+      const res = await fetch(`${API}/reports/rota/weekly.${ext}?week=${weekISO}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -13229,7 +13245,7 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
           setPdfUnavailable(true);
           setPdfError(t.rotaDownloadPdfUnavailable);
           setToast(t.rotaDownloadPdfUnavailable);
-          console.warn('attendance pdf unavailable:', msg);
+          console.warn('attendance sheet unavailable:', msg);
         } else {
           setPdfError(msg);
           setToast(msg);
@@ -13252,6 +13268,7 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
       setPdfBusy(false);
     }
   }
+
 
   // From the cell picker: "mark this person away on this date", with the kind the
   // manager already chose. The date comes from the cell rather than from today,
@@ -13699,13 +13716,27 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
             {canEdit && (
               <button type="button" className={'btn btn-ghost rota-pdf-btn'
                   + (pdfBusy ? ' spinning' : '')}
-                onClick={downloadAttendancePDF}
+                onClick={() => downloadAttendanceSheet('pdf')}
                 disabled={!data || loading || pdfBusy || editing || pdfUnavailable}
                 title={editing ? t.rotaPdfLockedWhileEditing
                   : pdfUnavailable ? t.rotaDownloadPdfUnavailable
                   : t.rotaDownloadPdfTitle}
                 aria-busy={pdfBusy || undefined}>
                 {Ic.download} <span>{t.rotaDownloadPdf}</span>
+              </button>
+            )}
+            {/* The spreadsheet sibling. Ghost like the PDF button and sharing its
+                busy state, so neither can be pressed while the other is running.
+                It carries no separate "unavailable" state because it needs no
+                browser: it works on a server where the PDF cannot be produced at
+                all, which is exactly when somebody wants it. */}
+            {canEdit && (
+              <button type="button" className="btn btn-ghost"
+                onClick={() => downloadAttendanceSheet('xlsx')}
+                disabled={!data || loading || pdfBusy || pdfUnavailable}
+                title={editing ? t.rotaPdfLockedWhileEditing : t.rotaDownloadPdfTitle}
+                aria-busy={pdfBusy || undefined}>
+                {Ic.download} <span>{t.rotaDownloadXlsx}</span>
               </button>
             )}
           </div>
