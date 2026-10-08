@@ -238,55 +238,51 @@ type absenceKey struct {
 
 func newAttendanceView(w *data.ScheduleWeek) attendanceView {
 	abs := absenceIndex(w.Absences)
-	start := w.Week.Start.Time()
-	end := w.Week.End.Time()
 
-	delivery := mondayOf(start).AddDate(0, 0, 7)
+	// ONE anchor for the whole document.
+	//
+	// Snapped to Monday, so a caller anchoring on any other day still gets a
+	// Monday-to-Sunday sheet rather than one that starts on whatever day it was
+	// handed. Every date, name and lookup below comes from this value and nothing
+	// else.
+	mon := mondayOf(w.Week.Start.Time())
+	end := mon.AddDate(0, 0, 6)
+	delivery := mon.AddDate(0, 0, 7)
+
 	v := attendanceView{
-		MonthLabel:    attendanceMonths[int(start.Month())-1] + " " + start.Format("2006"),
-		WeekLabel:     start.Format("02-01") + " a " + end.Format("02-01"),
+		MonthLabel:    attendanceMonths[int(mon.Month())-1] + " " + mon.Format("2006"),
+		WeekLabel:     mon.Format("02-01") + " a " + end.Format("02-01"),
 		DeliveryLabel: delivery.Format("02-01-06"),
-		FromDate:      start.Format(time.DateOnly),
+		FromDate:      mon.Format(time.DateOnly),
 		ToDate:        end.Format(time.DateOnly),
-		RangeLabel:    start.Format("02-01-2006") + " a " + end.Format("02-01-2006"),
+		RangeLabel:    mon.Format("02-01-2006") + " a " + end.Format("02-01-2006"),
 		GeneratedAt:   time.Now().Format("02/01/2006 15:04"),
 		HasOvernight:  false,
 	}
-	_ = delivery
 
-	// The seven column heads come from Week.Days, which is already Monday-anchored
-	// and already carries the weekday labels. The calendar is NOT recomputed here:
-	// a second implementation of the week's dates is exactly the kind of drift this
-	// report package exists to avoid, and a week off by one column looks correct.
+	// The seven column heads are COUNTED OFF THE ANCHOR, not read out of the
+	// payload. Week.Days is consulted for exactly one thing, IsToday, and it is
+	// looked up BY DATE rather than by position, so a payload whose day rows are
+	// offset cannot shift a column.
+	//
+	// The weekday NAME is the index into the Portuguese table and never the payload
+	// own label: WeekDay.Label is the server short label and it is ENGLISH -- the
+	// live payload carries "Mon", "Tue", "Wed" -- so preferring it printed an English
+	// day head on a Portuguese document.
+	todayByDate := map[string]bool{}
 	for _, d := range w.Week.Days {
-		dt := d.Date.Time()
-		// The weekday NUMBER picks the name, not WeekDay.Label. Label is the
-		// server's own short label and it is ENGLISH -- the live payload carries
-		// "Mon", "Tue", "Wed" -- so preferring it printed an English day head on a
-		// Portuguese document, which is how MON and TUE ended up above Segunda and
-		// Terca. The number is the ISO weekday and the same in both, so it is the
-		// reliable key; Label is only a fallback for a weekday outside 1..7, where
-		// there is nothing better to print.
-		name := ""
-		if d.Weekday >= 1 && d.Weekday <= 7 {
-			name = attendanceWeekdays[d.Weekday-1]
-		} else {
-			name = d.Label
-		}
+		todayByDate[d.Date.Time().Format(time.DateOnly)] = d.IsToday
+	}
+	v.Days = make([]attendanceDayColumn, 0, 7)
+	for i := 0; i < 7; i++ {
+		d := mon.AddDate(0, 0, i)
 		v.Days = append(v.Days, attendanceDayColumn{
-			Name:    name,
-			Date:    dt.Format("02-01"),
-			Weekday: d.Weekday,
-			IsToday: d.IsToday,
+			Name:    attendanceWeekdays[i],
+			Date:    d.Format("02-01"),
+			Weekday: i + 1,
+			IsToday: todayByDate[d.Format(time.DateOnly)],
 		})
 	}
-	// Exactly seven columns, always. A missing column must be visibly absent rather
-	// than silently short, which is the same rule the consumables day chart follows.
-	for len(v.Days) < 7 {
-		i := len(v.Days)
-		v.Days = append(v.Days, attendanceDayColumn{Name: attendanceWeekdays[i], Date: ""})
-	}
-	v.Days = v.Days[:7]
 
 	shiftPeople := map[string]int{}
 	shiftTimes := map[string]string{}
@@ -309,10 +305,10 @@ func newAttendanceView(w *data.ScheduleWeek) attendanceView {
 		awayDays := 0
 		for i := 0; i < 7; i++ {
 			cell := attendanceCell{}
-			date := ""
-			if i < len(w.Week.Days) {
-				date = w.Week.Days[i].Date.Time().Format(time.DateOnly)
-			}
+			// The same anchor as the columns above. Reading this from Week.Days was
+			// the third place the week's dates came from, and the second that could
+			// disagree with the label printed above the table.
+			date := mon.AddDate(0, 0, i).Format(time.DateOnly)
 
 			kind, isAbsent := abs[absenceKey{m.UserID, date}]
 			switch {
