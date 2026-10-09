@@ -1360,10 +1360,16 @@ html.dark .rota-picker-panel { background: var(--gray-50); border-color: var(--g
 .roster-list + .roster-section { border-top: 1px solid var(--gray-200); }
 
 .roster-row {
-  position: relative;              /* the hidden input is absolutely placed */
+  /* Still positioned: the drop indicator and the moved-row flash both need a containing
+     block. The HIDDEN INPUT does not -- that moved to .roster-pick below. */
+  position: relative;
   display: flex; align-items: center; gap: 10px;
   padding: 9px 6px; border-radius: var(--radius-md);
-  cursor: pointer;
+  /* default, not pointer: the row now carries a grip and two arrow buttons that are
+     their own targets, so the pointer cursor moved onto .roster-pick, which is the part
+     that actually toggles. A pointer cursor across the arrows would be a lie about what
+     a click does. */
+  cursor: default;
 }
 .roster-row:hover { background: var(--gray-100); }
 html.dark .roster-row:hover { background: var(--gray-200); }
@@ -1376,8 +1382,12 @@ html.dark .roster-row:hover { background: var(--gray-200); }
   margin: 0; opacity: 0; cursor: pointer;
 }
 /* :focus-within, not :focus-visible on the input: a zero-opacity input cannot draw a ring
-   of its own. .rota-abs-kind and .rota-tint already do exactly this. */
-.roster-row:focus-within { outline: 2px solid var(--blue); outline-offset: -2px; }
+   of its own. .rota-abs-kind and .rota-tint already do exactly this.
+   The selector is .roster-pick rather than .roster-row because the row is no longer the
+   thing the checkbox lives in -- the arrows and the grip are siblings of the label now,
+   and a ring around a row that contains three other controls says "this whole strip is
+   the checkbox", which stopped being true when they arrived. */
+.roster-pick:focus-within { outline: 2px solid var(--blue); outline-offset: -2px; }
 
 .roster-tick {
   flex: 0 0 auto;
@@ -1401,7 +1411,7 @@ html.dark .roster-tick { color: var(--gray-700); }
 .roster-box:checked ~ .roster-tick { background: var(--blue); border-color: var(--blue); }
 /* Checked, the border is the fill, so it is not a separate contrast question -- but the
    FOCUS ring still has to clear 3:1 against whatever it lands on. */
-.roster-row:focus-within .roster-tick { border-color: var(--blue); }
+.roster-pick:focus-within .roster-tick { border-color: var(--blue); }
 
 /* min-width: 0 so a long name TRUNCATES instead of pushing the badges off the row --
    the .set-group-label failure verbatim, and a 34-character Portuguese name will hit it.
@@ -1442,6 +1452,123 @@ html.dark .roster-role { background: var(--gray-200); color: var(--gray-600); }
 .roster-offlist-name {
   flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 500; color: var(--gray-900);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* -- Rota ordering ------------------------------------------------------------
+   Three things this block is opinionated about.
+
+   1. NO MOTION, AND THEREFORE NO prefers-reduced-motion RULE. The rows jump, and the
+      moved row's background is set instantly and cleared by a timer. There is nothing
+      here to reduce. The rule is absent on purpose and this sentence is here so the
+      next person looking for it finds a reason rather than an oversight.
+
+   2. --blue INVERTS between themes, so every --blue/--blue-light pairing below is
+      correct in both with no dark override. Nothing here pairs a hue with a grey
+      SURFACE, which is the trap that inversion exists to warn about.
+
+   3. The rank is INK, not a chip. .roster-tick is already the only bordered box in the
+      row, and a second one 8px to its left turns the row's left edge into two competing
+      affordances while the numeral starts reading as a control. A number is
+      information; a box is a target. */
+
+/* The ordinal. Same family as .roster-count so the card has ONE set of numerals.
+   --gray-400 measures 5.5:1 light and 5.33:1 dark on this row -- the figure the tick's
+   border was measured against -- so it clears 4.5:1 for text in both themes and needs
+   no dark rule of its own. */
+.roster-rank {
+  flex: 0 0 auto; min-width: 22px; text-align: center;
+  font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 600;
+  letter-spacing: 0; font-variant-numeric: tabular-nums;
+  color: var(--gray-400);
+}
+/* min-width and not width, deliberately: one-digit and two-digit rows are BOTH 22px, so
+   the gutter stays aligned while somebody is moved between them. A hypothetical
+   three-digit row at 100+ people grows the box by about 6px rather than clipping. The
+   cap is 200 and the real ceiling is a hotel's headcount, so that is not a design
+   problem worth solving -- but a min-width solves it for free anyway. */
+
+/* The grip. Ic.brackets, sized DOWN from .icon-btn's 14px: it was drawn for an 11px
+   grid cell and at 14px it closes up into a filled blob. */
+.roster-grip {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 26px; border: none; border-radius: var(--radius-sm);
+  background: none; color: var(--gray-400); cursor: grab;
+  /* touch-action, not a passive event handler: without it a touch drag is a page scroll
+     and onPointerMove never fires at all, which is why the grip is pointer-only below. */
+  touch-action: none;
+}
+.roster-grip:hover { background: var(--gray-100); color: var(--gray-600); }
+html.dark .roster-grip:hover { background: var(--gray-200); color: var(--gray-600); }
+.roster-grip svg { width: 12px; height: 12px; pointer-events: none; }
+.roster-row.is-dragging .roster-grip { cursor: grabbing; color: var(--blue); }
+
+/* The pickable region. It is a label now rather than the row, which is what puts the
+   arrows outside the label's activation behaviour -- a button inside a label fires the
+   label on Space and Enter, which would toggle MEMBERSHIP from a REORDER button.
+
+   position: relative so .roster-box's inset: 0 resolves HERE rather than against the
+   whole row. That is a correctness fix, not tidiness: the invisible checkbox covers the
+   area it is placed in, and left on the row it would sit on top of the grip and both
+   arrows, swallowing clicks aimed at them. */
+.roster-pick {
+  position: relative;
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 10px;
+  cursor: pointer;
+}
+
+.roster-moves { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; }
+/* Rotated rather than mirrored, so the chevron points the way the person travels -- the
+   same reasoning .rota-week-prev and .set-group-chev give. */
+.roster-move.is-up svg   { transform: rotate(-90deg); }
+.roster-move.is-down svg { transform: rotate(90deg); }
+.roster-move:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+/* DIMMED, NOT REMOVED, so the two-arrow block keeps a constant width and the gutter
+   does not jog every time somebody reaches the top. 1.4.3 exempts inactive controls
+   from the contrast minimum, which is what makes .25 legal here -- and that is the
+   difference between this and .roster-tick's --gray-300, which was a real bug. */
+.roster-move:disabled { opacity: 0.25; cursor: default; }
+
+/* Drag states. Background and opacity only -- no transform anywhere, so nothing reflows
+   and nothing animates. */
+.roster-row.is-dragging { background: var(--blue-light); }
+.roster-row.is-dragging .roster-tick,
+.roster-row.is-dragging .roster-name,
+.roster-row.is-dragging .roster-rank { opacity: .5; }
+html.dark .roster-row.is-dragging { background: var(--gray-200); }
+
+/* The insertion point, drawn OUTSIDE the box with a negative spread so it costs zero
+   layout. An inset ring would have had to out-shout the hover fill and the focus ring
+   these rows already carry, and the point of an insertion line is that it is a line. */
+.roster-row.drop-before { box-shadow: 0 -2px 0 -1px var(--blue); }
+.roster-row.drop-after  { box-shadow: 0  2px 0 -1px var(--blue); }
+
+/* The flash after a move committed by arrow, key or drop. Set by the handler, cleared by
+   a timer -- no transition, so reduced-motion behaviour is identical by construction. */
+.roster-row.is-moved { background: var(--blue-light); }
+html.dark .roster-row.is-moved { background: var(--gray-200); }
+
+/* .rota-note carries margin: 0 18px 14px because it was written for a .table-card,
+   which pads its content by 18px. cat-members is level={1}, so .set-group--sub's inner
+   padding is 0 0 18px and the note already sits 18px right of the section headings it
+   belongs to. Zeroed HERE rather than in .rota-note, whose margins are correct
+   everywhere else in the file. */
+.roster .rota-note { margin-left: 0; margin-right: 0; }
+
+/* The two-line dirty sentence. */
+.roster-dirty { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+/* Coarse pointers. The grip GOES -- a finger cannot aim at an 18px strip, and the drag
+   threshold it needs would turn every scroll into a reorder -- and the arrows take the
+   size the rota's own edit cells take, for the same reason: on touch these are the
+   primary targets of this card, so the settings card and the rota grid agree about what
+   a finger-sized control is. */
+@media (hover: none), (pointer: coarse) {
+  .roster-grip { display: none; }
+  .roster-move { width: 44px; height: 44px; }
+  .roster-move svg { width: 16px; height: 16px; }
+  .roster-moves { gap: 4px; }
+  .roster-row { min-height: 44px; }
 }
 
 /* The quiet link from the rota page into Settings. It sits with the week controls rather
@@ -3704,7 +3831,7 @@ const T = {
     // an operator; this is for the person who pressed the button.
     rotaDownloadPdfUnavailable: 'PDF reports are not available on this server. Your administrator can enable them by installing Chromium.',
     rosterTitle: 'Who is on the rota',
-    rosterTitleSub: 'Choose which people appear on the team rota. Their shifts are kept if they are removed.',
+    rosterTitleSub: 'Choose who appears on the team rota, and in what order. Their shifts are kept if they are removed.',
     // The one sentence that keeps two orthogonal concepts apart. Deactivating changes
     // the ACCOUNT; unticking changes the BOARD. Both make a row change, which is exactly
     // why a manager has to be told which gesture does what.
@@ -3720,6 +3847,33 @@ const T = {
     rosterEveryoneOn: 'Every account is on the rota.',
     rosterReadOnly: 'Only a manager can change who is on the rota.',
     rosterLoaded: '{count} people on the rota.',
+    // -- Rota ordering -----------------------------------------------------------
+    // The order the grid prints and the attendance workbook rows in. A SEPARATE
+    // endpoint from membership on purpose: re-stamping rota_members.updated_at on every
+    // reorder would destroy the audit trail that table exists to keep, so the two are
+    // two requests and two dirty flags.
+    //
+    // Said ONCE, above the section, and only while somebody is unplaced. Once every row
+    // carries a number the dash has nothing left to explain and the note would be noise.
+    rosterOrderNote: 'People marked — keep the order they have always had. Move anyone to fix it.',
+    rosterOrderUp: 'Move up',
+    rosterOrderDown: 'Move down',
+    // Named, not bare. "Move up" twenty times in a row is a screen reader saying the
+    // same two words with nothing to attach them to.
+    rosterOrderUpOf: '{name}, move up',
+    rosterOrderDownOf: '{name}, move down',
+    // The grip is pointer-only and tabIndex -1, so this is a tooltip and never an
+    // accessible name. The arrow buttons carry every name a screen reader needs.
+    rosterOrderGrip: '{name}, drag to reorder',
+    // Who, where, out of how many. Fewer than all three and it is not an announcement.
+    rosterOrderMoved: '{name} moved to {place} of {total}',
+    rosterOrderFirst: '{name} is already first',
+    rosterOrderLast: '{name} is already last',
+    rosterOrderReset: 'Order put back as it was',
+    rosterOrderUnsavedOne: 'One person has moved.',
+    rosterOrderUnsaved: '{count} people have moved.',
+    rosterOrderSaved: 'Order saved',
+    rosterOrderFailed: 'The order could not be saved',
     rosterUnsavedOne: 'One person has an unsaved change.',
     rosterUnsaved: '{count} people have unsaved changes.',
     rosterSave: 'Save team',
@@ -3729,7 +3883,7 @@ const T = {
     // can check against the five boxes they just ticked.
     rosterOffTitle: 'Take {count} people off the rota?',
     rosterOffTitleOne: 'Take one person off the rota?',
-    rosterOffBody: 'Their name comes off the rota. The shifts already assigned are kept, and come back untouched if they are added again.',
+    rosterOffBody: 'Their name comes off the rota. The shifts already assigned are kept, and come back untouched if they are added again. Their place in the order is kept too.',
     rosterOffYes: 'Take them off',
     rosterEmptyTitle: 'Put nobody on the rota?',
     rosterEmptyBody: 'The rota will still be here. Every row disappears from it until somebody is added back.',
@@ -4510,7 +4664,7 @@ const T = {
     rotaPdfLockedWhileEditing: 'Guarde ou cancele as alterações primeiro — a folha impressa é a semana guardada.',
     rotaDownloadPdfUnavailable: 'Os relatórios em PDF não estão disponíveis neste servidor. O administrador pode ativá-los instalando o Chromium.',
     rosterTitle: 'Quem está na escala',
-    rosterTitleSub: 'Escolha quem aparece na escala da equipa. Os turnos mantêm-se se alguém for removido.',
+    rosterTitleSub: 'Escolha quem aparece na escala da equipa e em que ordem. Os turnos mantêm-se se alguém for removido.',
     // A frase que mantém separados dois conceitos ortogonais. Desativar muda a CONTA;
     // desmarcar muda a ESCALA.
     rosterExcludeNote: 'Isto não é o mesmo que desativar uma conta. Ao desmarcar alguém aqui, o nome sai da escala e os turnos ficam escondidos. O login continua a funcionar. Para impedir que alguém entre, desative a conta na página da Equipa.',
@@ -4525,13 +4679,28 @@ const T = {
     rosterEveryoneOn: 'Todas as contas estão na escala.',
     rosterReadOnly: 'Só um gestor pode alterar quem está na escala.',
     rosterLoaded: '{count} pessoas na escala.',
+    // -- Ordem da escala ----------------------------------------------------------
+    rosterOrderNote: 'As pessoas marcadas com — mantêm a ordem de sempre. Mova quem quiser corrigir.',
+    rosterOrderUp: 'Subir',
+    rosterOrderDown: 'Descer',
+    rosterOrderUpOf: '{name}, subir',
+    rosterOrderDownOf: '{name}, descer',
+    rosterOrderGrip: '{name}, arrastar para reordenar',
+    rosterOrderMoved: '{name} passou para {place} de {total}',
+    rosterOrderFirst: '{name} já está em primeiro lugar',
+    rosterOrderLast: '{name} já está em último lugar',
+    rosterOrderReset: 'Ordem reposta como estava',
+    rosterOrderUnsavedOne: 'Uma pessoa mudou de lugar.',
+    rosterOrderUnsaved: '{count} pessoas mudaram de lugar.',
+    rosterOrderSaved: 'Ordem guardada',
+    rosterOrderFailed: 'Não foi possível guardar a ordem',
     rosterUnsavedOne: 'Uma pessoa tem uma alteração por guardar.',
     rosterUnsaved: '{count} pessoas têm alterações por guardar.',
     rosterSave: 'Guardar equipa',
     rosterSaved: 'Equipa da escala atualizada',
     rosterOffTitle: 'Retirar {count} pessoas da escala?',
     rosterOffTitleOne: 'Retirar uma pessoa da escala?',
-    rosterOffBody: 'O nome sai da escala. Os turnos já atribuídos são mantidos e voltam intactos se a pessoa voltar a ser adicionada.',
+    rosterOffBody: 'O nome sai da escala. Os turnos já atribuídos são mantidos e voltam intactos se a pessoa voltar a ser adicionada. O lugar na ordem também é mantido.',
     rosterOffYes: 'Retirar',
     rosterEmptyTitle: 'Não pôr ninguém na escala?',
     rosterEmptyBody: 'A escala continua a existir. Todas as linhas desaparecem dela até alguém voltar a ser adicionado.',
@@ -12211,53 +12380,155 @@ function ShiftTintButton({ t, shift, onPick }) {
    membership change sharing that state would read as cell edits and the rota's save bar
    would count people who edited nothing. */
 
+/* The roster's ids in the SERVER's order.
+   Module level rather than a local, because three places need it -- load, reset and the
+   move count -- and each of them re-deriving it is each of them getting a chance to
+   disagree about what "the order" means. */
+function onRotaIDs(rows) {
+  return (rows || []).filter(m => m.on_rota).map(m => m.user_id);
+}
+
 /* One row of the picker.
    label > input, visually hidden, tick drawn on a span -- the same shape as
    .rota-abs-kind and .rota-tint, so the file now has three multi-select-style controls
    and one implementation of it.
 
-   The label WRAPS the whole row, which is what puts the badges and the kept-shifts count
-   into the accessible name for free: a screen reader announces "Marco Silva, 3 shifts
-   kept" rather than just the name. */
-function RosterRow({ t, m, checked, onToggle, showCells }) {
+   The label is NOT the row. It used to be, and that is exactly why reordering could not
+   live here: a button inside a label is inside the label's activation behaviour, so
+   pressing Space or Enter on a "move up" arrow would fire the label's default action
+   and TOGGLE MEMBERSHIP. The same goes for the click the browser synthesises from a
+   pointerdown-and-release on the arrow.
+
+   So the label is now ONE of the row's three children, alongside the rank, the grip and
+   the arrows, and it still wraps everything it used to. That keeps the property the
+   original comment below describes -- the badges and the kept-shifts count reach the
+   accessible name for free -- and removes the hazard at its source rather than papering
+   over it with stopPropagation on every handler. */
+function RosterRow({ t, m, checked, onToggle, showCells,
+                      orderable, index, last, isRoving,
+                      dragging, flashed, dropBefore, dropAfter,
+                      onMove, onMoveKey, onGripDown, onGripMove, onGripUp,
+                      btnRef, gripRef }) {
+  const cls = 'roster-row'
+    + (m.active ? '' : ' is-inactive')
+    // is-unset marks "no manager has an opinion about where this person goes". It is a
+    // styling hook only -- the visual difference is the dash, which is always drawn for
+    // an unset row whether or not a rule uses this.
+    + (orderable && !m.rota_position ? ' is-unset' : '')
+    // Background and opacity only. No transform anywhere in these three states, so
+    // nothing reflows and nothing animates -- which is why the ordering CSS block has
+    // no prefers-reduced-motion rule to reduce.
+    + (dragging ? ' is-dragging' : '')
+    + (flashed ? ' is-moved' : '')
+    + (dropBefore ? ' drop-before' : '')
+    + (dropAfter ? ' drop-after' : '');
+
   return (
-    <label className={'roster-row' + (m.active ? '' : ' is-inactive')}>
-      <input type="checkbox" className="roster-box"
-        checked={!!checked}
-        onChange={() => onToggle(m.user_id)}/>
-      <span className="roster-tick" aria-hidden="true">{checked ? Ic.check : null}</span>
+    <div className={cls}
+      /* Hit-testing during a drag needs the row's own identity, which is the same data
+         attribute the rota grid puts on its cells. */
+      data-rota-u={orderable ? m.user_id : undefined}>
+      {orderable && (
+        /* The DISPLAY index, never the stored position. rota_position is an
+           implementation detail: it can be null, it can be stale, and it can collide
+           after somebody is excluded and re-added -- so printing it would show a number
+           the grid is not actually honouring.
 
-      <Avatar name={m.name} idx={m.avatar_idx} size="sm"/>
+           aria-hidden because the numeral's job is a positional cue for a sighted
+           reader. The accessible name is the label's, the reorder buttons name their
+           target explicitly, and the live region announces the RESULT of a move. */
+        <span className="roster-rank" aria-hidden="true">{m.rota_position ? index + 1 : '—'}</span>
+      )}
 
-      <span className="roster-id">
-        <span className="roster-name">{m.name}</span>
-        {/* Role is a fact about the ACCOUNT, not about rota membership, so it is a
-            badge and never a reason to be excluded. */}
-        {m.role === 'manager' && <span className="roster-role">{t.rosterRoleManager}</span>}
-        {/* Deactivated is a different concept from excluded and gets its own badge.
-            t.inactive is reused verbatim so one concept has one name across the app --
-            it is the same string the Team page shows. */}
-        {m.active === false && <span className="roster-inactive">{t.inactive}</span>}
-      </span>
+      {orderable && (
+        /* POINTER ONLY. tabIndex -1 keeps it out of the tab order; the title documents
+           the affordance for the mouse user who can see it, and the arrow buttons carry
+           every name a screen reader needs. The whole point of the arrows is that they
+           are the complete interface and this is an extra. */
+        <button type="button" className="roster-grip"
+          tabIndex={-1}
+          ref={gripRef}
+          onPointerDown={onGripDown}
+          onPointerMove={onGripMove}
+          onPointerUp={onGripUp}
+          onPointerCancel={onGripUp}
+          title={t.rosterOrderGrip.replace('{name}', m.name)}>
+          {Ic.brackets}
+        </button>
+      )}
 
-      {/* The "nothing is lost" sentence, and the only place it can live.
+      <label className="roster-pick">
+        <input type="checkbox" className="roster-box"
+          checked={!!checked}
+          onChange={() => onToggle(m.user_id)}/>
+        <span className="roster-tick" aria-hidden="true">{checked ? Ic.check : null}</span>
 
-          Shown in the OFF-rota section only. On the rota it is redundant -- an included
-          person with cells is just a working rota, which the grid already shows -- while
-          off the rota it is the entire difference between a reversible board change and
-          something that reads as erasure. That asymmetry is also why the picker needs
-          two sections rather than one.
+        <Avatar name={m.name} idx={m.avatar_idx} size="sm"/>
 
-          Grey, reusing .rota-free, because nothing here is an alarm. A row of "you are
-          about to lose 12 shifts" would be arithmetically true, operationally
-          irrelevant and emotionally decisive in exactly the wrong direction. */}
-      {showCells && m.assigned_cells > 0 && (
-        <span className="rota-free is-away">
-          {Ic.slash}
-          {t.rosterKeepsCells.replace('{count}', m.assigned_cells)}
+        <span className="roster-id">
+          <span className="roster-name">{m.name}</span>
+          {/* Role is a fact about the ACCOUNT, not about rota membership, so it is a
+              badge and never a reason to be excluded. */}
+          {m.role === 'manager' && <span className="roster-role">{t.rosterRoleManager}</span>}
+          {/* Deactivated is a different concept from excluded and gets its own badge.
+              t.inactive is reused verbatim so one concept has one name across the app --
+              it is the same string the Team page shows. */}
+          {m.active === false && <span className="roster-inactive">{t.inactive}</span>}
+        </span>
+
+        {/* The "nothing is lost" sentence, and the only place it can live.
+
+            Shown in the OFF-rota section only. On the rota it is redundant -- an included
+            person with cells is just a working rota, which the grid already shows -- while
+            off the rota it is the entire difference between a reversible board change and
+            something that reads as erasure. That asymmetry is also why the picker needs
+            two sections rather than one.
+
+            Grey, reusing .rota-free, because nothing here is an alarm. A row of "you are
+            about to lose 12 shifts" would be arithmetically true, operationally
+            irrelevant and emotionally decisive in exactly the wrong direction. */}
+        {showCells && m.assigned_cells > 0 && (
+          <span className="rota-free is-away">
+            {Ic.slash}
+            {t.rosterKeepsCells.replace('{count}', m.assigned_cells)}
+          </span>
+        )}
+      </label>
+
+      {orderable && (
+        /* ROVING TABINDEX: two tab stops for the entire control set, whatever the team
+           size. Without it twenty people costs forty tab stops.
+
+           Rows are keyed by user_id, not by index, so React MOVES the DOM node on a
+           reorder instead of recreating it and focus survives the move for free. An
+           index key would remount the button and drop focus to <body> on every press --
+           which is why the list below keys on m.user_id and must keep doing so. */
+        <span className="roster-moves">
+          <button type="button"
+            className="roster-move icon-btn is-up"
+            tabIndex={isRoving ? 0 : -1}
+            ref={el => btnRef('up', el)}
+            disabled={index === 0}
+            onKeyDown={e => onMoveKey(e, 'up')}
+            onClick={() => onMove(-1)}
+            title={t.rosterOrderUp}
+            aria-label={t.rosterOrderUpOf.replace('{name}', m.name)}>
+            {Ic.chevron}
+          </button>
+          <button type="button"
+            className="roster-move icon-btn is-down"
+            tabIndex={isRoving ? 0 : -1}
+            ref={el => btnRef('down', el)}
+            disabled={index === last}
+            onKeyDown={e => onMoveKey(e, 'down')}
+            onClick={() => onMove(+1)}
+            title={t.rosterOrderDown}
+            aria-label={t.rosterOrderDownOf.replace('{name}', m.name)}>
+            {Ic.chevron}
+          </button>
         </span>
       )}
-    </label>
+    </div>
   );
 }
 
@@ -12278,9 +12549,49 @@ function RosterCard({ token, setToast }) {
   const [picked, setPicked] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  // The ORDER draft, and it is a different thing from `picked` on purpose.
+  //
+  // An ARRAY of user_ids, because this is an ORDER and position is the data. A Set would
+  // throw away exactly the thing the control edits.
+  //
+  // It is NEVER fed into `picked`, and that is load-bearing rather than tidiness. The
+  // roster PUT is order-insensitive -- Set writes `user_id = ANY($1)` -- so leaking the
+  // permuted sequence into member_ids would be silently harmless today and silently
+  // wrong the day somebody adds validation to the roster write. `picked` is iterated as
+  // `[...picked]` to build member_ids, and that insertion order is the SERVER's order,
+  // set once at load and only ever mutated by add/delete.
+  const [order, setOrder] = useState(null);
+  // A separate error strip from `err`, because the two requests can half-succeed and a
+  // single strip would have to lie about one of them. See the catch block in write().
+  const [orderErr, setOrderErr] = useState('');
   const [announce, setAnnounce] = useState('');
   const [confirmOff, setConfirmOff] = useState(null);
   const [confirmEmpty, setConfirmEmpty] = useState(false);
+
+  // Which row's arrows are in the tab order. A user_id, not an index, so it survives a
+  // reorder -- an index would point at a different person after the row it named moved.
+  const [roving, setRoving] = useState(null);
+  // The row under the pointer mid-drag, and which half of it. Null when no drag.
+  const [drag, setDrag] = useState(null);
+  // The row that just moved, flashed and then cleared. A timer rather than a
+  // transition, so there is no motion to reduce -- see the ordering CSS block.
+  const [flash, setFlash] = useState(null);
+
+  // Refs for the reorder buttons, keyed by user_id and direction, so Shift+Arrow and
+  // Home/End can move DOM FOCUS and not merely the roving index. Focus does not follow
+  // a tabIndex change on its own: the element stays focused and simply becomes -1, which
+  // leaves the keyboard user stranded on the row they just left.
+  const btnRefs = useRef({});
+  const gripRefs = useRef({});
+  // The drag lives in a REF, mirrored into state only for rendering.
+  //
+  // Reading the drop target out of state would be a bug: a pointerup can arrive before
+  // React has flushed the last setDrag, so the target would be one move stale and the
+  // row would land somewhere the pointer was rather than somewhere it is. A ref is
+  // written synchronously and read synchronously, which is the only ordering guarantee
+  // a pointer sequence gives us.
+  const dragRef = useRef(null);
+  const flashTimer = useRef(null);
 
   // Rebuild `picked` from the PAYLOAD on every load, never from what this client last
   // sent. The roster's truth is the server's answer, and a rejected write must not be
@@ -12290,7 +12601,11 @@ function RosterCard({ token, setToast }) {
       const rows = res.members || [];
       setData({ members: rows, canEdit: !!res.can_edit });
       setPicked(new Set(rows.filter(m => m.on_rota).map(m => m.user_id)));
+      // The order draft starts as the SERVER's order, so "moved" is false on load and
+      // stays false until somebody actually reorders.
+      setOrder(onRotaIDs(rows));
       setErr('');
+      setOrderErr('');
       setAnnounce('');
       const n = rows.filter(m => m.on_rota).length;
       setTimeout(() => setAnnounce(t.rosterLoaded.replace('{count}', n)), 30);
@@ -12305,11 +12620,38 @@ function RosterCard({ token, setToast }) {
   const onRota  = (data && data.members || []).filter(m =>  m.on_rota);
   const offRota = (data && data.members || []).filter(m => !m.on_rota);
 
+  // The on-rota section IN DRAFT ORDER. Sorted by the draft's index rather than by the
+  // payload's position, with unranked rows last so a person added since load cannot
+  // disappear off the end of the list.
+  const rank = {};
+  (order || []).forEach((id, i) => { rank[id] = i; });
+  const onRotaOrdered = onRota.slice().sort((a, b) => {
+    const ra = rank[a.user_id] === undefined ? 1e9 : rank[a.user_id];
+    const rb = rank[b.user_id] === undefined ? 1e9 : rank[b.user_id];
+    return ra - rb;
+  });
+
   // How many people's membership differs from what is stored. Added and removed together,
   // matching the "N people, M shifts" grammar the rota subtitle already uses.
   const changed = (picked && data)
     ? data.members.filter(m => picked.has(m.user_id) !== !!m.on_rota).length
     : 0;
+
+  // How many PEOPLE changed PLACE, which is a different count from `changed` and a
+  // different fact. Counting positions rather than rows is deliberate: [A,B,C] -> [B,A,C]
+  // moves two people, and the sentence should say so.
+  const moved = (order && data)
+    ? order.reduce((n, id, i) => {
+        const saved = onRotaIDs(data.members);
+        return saved[i] !== id ? n + 1 : n;
+      }, 0)
+    : 0;
+
+  // Whether the dash needs explaining. True while ANY on-rota person is unplaced, and
+  // false the moment the first order is saved, because that write gives every listed
+  // person a position. So the note has exactly one lifetime: from "somebody has never
+  // been moved" to "everybody has".
+  const hasUnplaced = onRota.some(m => !m.rota_position);
 
   // Who is about to LOSE cells: currently on the rota, has some, and now unticked.
   // Computed from `picked` rather than after the fact, because it is what the
@@ -12324,8 +12666,209 @@ function RosterCard({ token, setToast }) {
     return next;
   });
 
-  const reset = () => setPicked(new Set(
-    data.members.filter(m => m.on_rota).map(m => m.user_id)));
+  // Cancel puts BOTH drafts back. One button, one meaning: "undo what I did here", and
+  // a button that undid only the boxes while leaving a rearranged list on screen would
+  // be two meanings wearing one label.
+  function reset() {
+    setPicked(new Set(data.members.filter(m => m.on_rota).map(m => m.user_id)));
+    setOrder(onRotaIDs(data.members));
+    setOrderErr('');
+  }
+
+  // -- The ordering controls ------------------------------------------------------
+
+  const nameOf = id => {
+    const m = (data && data.members || []).find(x => x.user_id === id);
+    return m ? m.name : '';
+  };
+
+  // The repeated-string trick: an identical message set twice in a row is announced
+  // once, so a 30ms delay is what makes "already first" speak every time it is pressed.
+  function say(msg) { setTimeout(() => setAnnounce(msg), 30); }
+
+  function flashRow(id) {
+    setFlash(id);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), 600);
+  }
+
+  function commitMove(next, movedId, place) {
+    setOrder(next);
+    setRoving(movedId);
+    flashRow(movedId);
+    // Who, where, out of how many. Fewer than all three and it is not an announcement.
+    say(t.rosterOrderMoved
+      .replace('{name}', nameOf(movedId))
+      .replace('{place}', String(place + 1))
+      .replace('{total}', String(next.length)));
+  }
+
+  // Move one place. dir is -1 or +1.
+  function moveBy(id, dir) {
+    if (!order) return;
+    const i = order.indexOf(id);
+    if (i < 0) return;
+    const j = i + dir;
+    // Saying so beats silently doing nothing: the button is DIMMED rather than removed,
+    // so it is still there to be pressed, and a press that does nothing needs a reason.
+    if (j < 0) { say(t.rosterOrderFirst.replace('{name}', nameOf(id))); return; }
+    if (j >= order.length) { say(t.rosterOrderLast.replace('{name}', nameOf(id))); return; }
+    const next = order.slice();
+    next.splice(j, 0, next.splice(i, 1)[0]);
+    commitMove(next, id, j);
+  }
+
+  /* THE KEYBOARD MODEL.
+
+       Enter / Space   the button's own activation -> move one place
+       ArrowUp/Down    MOVE this person one place
+       Shift+Arrow     move FOCUS to the neighbouring row, no reorder
+       Home / End      focus the first / last row
+       Escape          put the order draft back as it was
+
+     The shift modifier is the whole collision story. Bare arrows are left FREE and the
+     modifier is what means "I'm navigating" -- which is the discipline onDayKeyDown uses
+     for the rota grid, and the standard modified-vs-unmodified idiom, so it is not a
+     house invention. Every arrow is preventDefault'd, because without it the page
+     scrolls on every reorder: on a twenty-row list that is nineteen page-scrolls.
+
+     Every path -- mouse, touch, keyboard, switch access -- goes through moveBy. Drag is
+     an EXTRA, not an alternative, and the arrow buttons are the complete interface. */
+  function orderKey(e, id, dir) {
+    if (!order) return;
+    const k = e.key;
+    const i = order.indexOf(id);
+    if (i < 0) return;
+
+    if (k === 'ArrowUp' || k === 'ArrowDown') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        const ni = k === 'ArrowUp' ? i - 1 : i + 1;
+        if (ni >= 0 && ni < order.length) {
+          setRoving(order[ni]);
+          // Focus the SAME arrow direction in the row we landed on, so the control the
+          // key is acting on stays under the same finger. tabIndex -1 elements are
+          // focusable programmatically, so this works before the re-render too.
+          const el = btnRefs.current[order[ni] + dir];
+          if (el) el.focus();
+        }
+      } else {
+        moveBy(id, k === 'ArrowUp' ? -1 : +1);
+      }
+      return;
+    }
+    if (k === 'Home' || k === 'End') {
+      e.preventDefault();
+      const target = k === 'Home' ? order[0] : order[order.length - 1];
+      setRoving(target);
+      const el = btnRefs.current[target + dir];
+      if (el) el.focus();
+      return;
+    }
+    if (k === 'Escape') {
+      e.preventDefault();
+      reset();
+      say(t.rosterOrderReset);
+    }
+  }
+
+  /* THE DRAG. Pointer-only, off the grip, and additive.
+
+     It starts on the GRIP rather than on the row, because a row-wide pointerdown would
+     turn every text selection in a name into a reorder attempt. It lives entirely on the
+     grip's pointer events with a pointer capture, so a drag that leaves the row still
+     reports, and the rows are hit-tested with elementFromPoint + closest -- the same
+     data-attribute approach the rota grid uses for its own cells. */
+  function gripDown(e, id) {
+    if (!canEditNow() || !order) return;
+    e.preventDefault();
+    dragRef.current = { id, at: null };
+    setDrag({ from: id, at: null });
+    setRoving(id);
+    // Capture on THE GRIP THAT WAS PRESSED, so a drag that wanders off the row keeps
+    // reporting. Capturing on some other element -- or not at all -- means a pointerup
+    // outside the row is never seen and the card is left stuck mid-drag.
+    const el = gripRefs.current[id];
+    if (el && el.setPointerCapture) {
+      try { el.setPointerCapture(e.pointerId); } catch (ex) { /* capture is an optimisation, not a requirement */ }
+    }
+  }
+
+  function gripMove(e) {
+    const held = dragRef.current;
+    if (!held) return;
+    const at = dropTarget(e);
+    held.at = at;
+    setDrag({ from: held.id, at });
+  }
+
+  function gripUp() {
+    const held = dragRef.current;
+    dragRef.current = null;
+    setDrag(null);
+    // A drop on the row's own half it is already in is a no-op, and applyDrop says so
+    // by comparing the result. Releasing with no target -- off the list, or after a
+    // pointercancel -- is simply nothing.
+    if (held && held.at && held.at.id !== held.id) applyDrop(held.id, held.at);
+  }
+
+  // Which row is the pointer over, and which half of it. The vertical midpoint is the
+  // test because the rows are a single column and a horizontal one has no answer.
+  function dropTarget(e) {
+    const el = (typeof document.elementFromPoint === 'function')
+      ? document.elementFromPoint(e.clientX, e.clientY) : null;
+    const row = el && el.closest ? el.closest('.roster-row[data-rota-u]') : null;
+    if (!row || !row.getAttribute('data-rota-u')) return null;
+    const r = row.getBoundingClientRect();
+    return { id: Number(row.getAttribute('data-rota-u')), before: e.clientY < r.top + r.height / 2 };
+  }
+
+  function applyDrop(fromId, target) {
+    const rest = order.filter(x => x !== fromId);
+    let j = rest.indexOf(target.id);
+    if (j < 0) return;
+    if (!target.before) j += 1;
+    const next = rest.slice();
+    next.splice(j, 0, fromId);
+    if (next.join() === order.join()) return;
+    commitMove(next, fromId, j);
+  }
+
+  // Dropped mid-drag on its own row, or on a neighbour with no actual displacement.
+  const drop = (drag && drag.at) || null;
+  const dragging = (drag && drag.from) || null;
+
+  // Which row's arrows are the two tab stops. Null until load, and falling back to the
+  // first row so the set is always reachable.
+  const rovingId = (roving && order && order.indexOf(roving) !== -1)
+    ? roving : (order && order[0] !== undefined ? order[0] : null);
+
+  // -- The writes ------------------------------------------------------------------
+
+  const canEditNow = () => !!(data && data.canEdit);
+
+  /* Sends ONE order and returns the refreshed rows. It throws rather than setting state,
+     because two callers need different reactions to a failure and neither of them is
+     "report it and carry on". */
+  async function sendOrder(ids) {
+    const res = await apiFetch('/rota/members/order', {
+      method: 'PUT', token, body: { user_ids: ids },
+    });
+    return res.members || [];
+  }
+
+  /* Reconciles the draft to a membership.
+
+     Keeps the manager's order for whoever survived, drops whoever left, and appends
+     newcomers in the SERVER's order at the end. Called after the roster write, because
+     that write can add or remove people the draft knows nothing about -- and skipping
+     this would leave an id in the draft that is no longer on the rota, which would then
+     be sent as an order entry for somebody who is not on the board. */
+  function reconcile(prev, ids) {
+    const keep = (prev || []).filter(id => ids.indexOf(id) !== -1);
+    const added = ids.filter(id => keep.indexOf(id) === -1);
+    return keep.concat(added);
+  }
 
   // Both writes go through here, so the confirm-then-send path and the straight path
   // cannot drift apart. `confirmEmpty` is the server's acknowledge-the-empty-case flag,
@@ -12333,8 +12876,10 @@ function RosterCard({ token, setToast }) {
   // client keeps the reason next to the button that caused it rather than in a toast
   // afterwards.
   async function write(ids, confirmedEmpty) {
+    const pending = moved > 0 ? reconcile(order, ids) : null;
     setBusy(true);
     setErr('');
+    setOrderErr('');
     try {
       const res = await apiFetch('/rota/members', {
         method: 'PUT', token,
@@ -12348,27 +12893,72 @@ function RosterCard({ token, setToast }) {
       setPicked(new Set(rows.filter(m => m.on_rota).map(m => m.user_id)));
       setConfirmOff(null);
       setConfirmEmpty(false);
-      setAnnounce('');
-      setTimeout(() => setAnnounce(t.rosterSaved), 30);
-      if (setToast) setToast(t.rosterSaved);
+      setOrder(reconcile(order, onRotaIDs(rows)));
+
+      if (!pending) {
+        say(t.rosterSaved);
+        if (setToast) setToast(t.rosterSaved);
+        return;
+      }
+
+      // The roster was accepted, so the order draft was computed against a board that
+      // now exists and it is safe to seat people on it. Sent second and never first: the
+      // draft names people the refused roster may have just removed.
+      try {
+        const rows2 = await sendOrder(pending);
+        setData({ members: rows2, canEdit: !!res.can_edit });
+        setOrder(onRotaIDs(rows2));
+        say(t.rosterOrderSaved);
+        if (setToast) setToast(t.rosterSaved);
+      } catch (ex2) {
+        /* HALF SUCCESS, and this is the case that gets told wrong most often.
+
+           The membership genuinely saved. Saying "failed" would be a lie; saying
+           "saved" with nothing on screen would be a different lie. So the toast reports
+           the half that worked, the strip below the list reports the half that did not,
+           and the order draft STAYS DIRTY so the retry is one click rather than a
+           reconstruction. */
+        setOrderErr((ex2 && ex2.message) || t.rosterOrderFailed);
+        say(t.rosterSaved);
+        if (setToast) setToast(t.rosterSaved);
+      }
     } catch (ex) {
       setErr((ex && ex.message) || 'Request failed');
+      // BOTH drafts stay dirty and NEITHER is cleared. The order was computed against a
+      // roster the server just refused, so sending it could seat somebody who is about
+      // to be taken off the board.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Order-only save: nothing ticked changed, so the roster PUT is skipped entirely.
+  // Two requests where one is warranted would be two failure modes for one intent.
+  async function writeOrderOnly() {
+    setBusy(true);
+    setOrderErr('');
+    try {
+      const rows = await sendOrder(reconcile(order, onRotaIDs(data.members)));
+      setData({ members: rows, canEdit: !!data.canEdit });
+      setOrder(onRotaIDs(rows));
+      say(t.rosterOrderSaved);
+      if (setToast) setToast(t.rosterOrderSaved);
+    } catch (ex) {
+      setOrderErr((ex && ex.message) || t.rosterOrderFailed);
     } finally {
       setBusy(false);
     }
   }
 
   function save() {
+    if (changed === 0) { if (moved > 0) writeOrderOnly(); return; }
     const ids = [...picked];
     // The empty case gets its own short dialog rather than a longer version of the same
     // one: it is a different decision, not a bigger version of it.
     if (ids.length === 0) { setConfirmEmpty(true); return; }
     // Confirm BEFORE writing, not after. A confirmation that arrives once the change has
     // already happened cannot prevent it.
-    if (losing.length > 0) {
-      setConfirmOff({ ids, people: losing });
-      return;
-    }
+    if (losing.length > 0) { setConfirmOff({ ids, people: losing }); return; }
     write(ids, false);
   }
 
@@ -12379,10 +12969,14 @@ function RosterCard({ token, setToast }) {
 
   return (
     <div className="roster">
-      {/* One polite live region for the whole picker. Set on load and on save and on
-          NOTHING else: the checkbox state is native and the count is visible in the
-          save bar, so announcing every tick would turn a five-box operation into a
-          stream of chatter. */}
+      {/* One polite live region for the whole picker. Set on load and on save, and --
+          as one documented exception -- on every MOVE.
+
+          Rows swapping places is invisible to a screen reader: nothing in the DOM says
+          "Ana is now above Marco", the ordinal is aria-hidden, and a reorder is not a
+          native control that speaks for itself. So this is the one event that must
+          speak. Ticking a box still does not, because the checkbox is native and already
+          announces itself, and the save bar's counts are visible to everybody else. */}
       <div className="sr-only" role="status" aria-live="polite">{announce}</div>
 
       {/* The sentence that keeps two orthogonal concepts apart, said once and here
@@ -12397,6 +12991,16 @@ function RosterCard({ token, setToast }) {
         </div>
       )}
 
+      {/* The same idea about the DASH, and only while a dash exists. Once every row
+          carries a number there is nothing here to explain, and a note explaining a
+          thing that is no longer on screen is noise that outlives its cause. */}
+      {canEdit && hasUnplaced && (
+        <div className="rota-note">
+          {Ic.info}
+          <span>{t.rosterOrderNote}</span>
+        </div>
+      )}
+
       {canEdit && (
         <>
           <div className="roster-section">
@@ -12406,9 +13010,28 @@ function RosterCard({ token, setToast }) {
           <div className="roster-list">
             {onRota.length === 0
               ? <p className="set-empty">{t.rosterNoneOn}</p>
-              : onRota.map(m => (
+              : onRotaOrdered.map((m, i) => (
                   <RosterRow key={m.user_id} t={t} m={m}
-                    checked={picked.has(m.user_id)} onToggle={toggle} showCells={false}/>
+                    checked={picked.has(m.user_id)} onToggle={toggle} showCells={false}
+                    orderable index={i} last={onRotaOrdered.length - 1}
+                    isRoving={rovingId === m.user_id}
+                    dragging={dragging === m.user_id}
+                    flashed={flash === m.user_id}
+                    dropBefore={!!drop && drop.id === m.user_id && drop.before}
+                    dropAfter={!!drop && drop.id === m.user_id && !drop.before}
+                    onMove={d => moveBy(m.user_id, d)}
+                    onMoveKey={(e, dir) => orderKey(e, m.user_id, dir)}
+                    btnRef={(dir, el) => {
+                      const k = m.user_id + dir;
+                      if (el) btnRefs.current[k] = el; else delete btnRefs.current[k];
+                    }}
+                    gripRef={el => {
+                      if (el) gripRefs.current[m.user_id] = el;
+                      else delete gripRefs.current[m.user_id];
+                    }}
+                    onGripDown={e => gripDown(e, m.user_id)}
+                    onGripMove={gripMove}
+                    onGripUp={gripUp}/>
                 ))}
           </div>
 
@@ -12435,14 +13058,33 @@ function RosterCard({ token, setToast }) {
 
       {err && <div className="auth-error">{err}</div>}
 
+      {/* The order's OWN failure, directly above the save bar so it sits next to the thing
+          that failed. It is a separate strip from the membership error because the two
+          requests can half-succeed, and one strip would have to lie about one of them. */}
+      {orderErr && <div className="auth-error">{orderErr}</div>}
+
       {/* Reusing .rota-savebar verbatim rather than inventing a second one. It sits
           after the list in the DOM, so Tab out of the last row lands on Cancel and then
           Save with no key handling at all -- the same reason the rota's own save bar
-          lives there, and its comment says so. */}
-      {canEdit && changed > 0 && (
+          lives there, and its comment says so.
+
+          ONE bar for BOTH drafts, not two. A manager adding two people in a particular
+          place does it in one visit; two bars force two clicks for one intent and put two
+          Cancel buttons on screen that nobody can tell apart. The bar renders on either
+          draft being dirty, and its sentence enumerates both. */}
+      {canEdit && (changed > 0 || moved > 0) && (
         <div className="rota-savebar">
           {Ic.info}
-          <span>{changed === 1 ? t.rosterUnsavedOne : t.rosterUnsaved.replace('{count}', changed)}</span>
+          <span className="roster-dirty">
+            {changed > 0 && (
+              <span>{changed === 1
+                ? t.rosterUnsavedOne : t.rosterUnsaved.replace('{count}', changed)}</span>
+            )}
+            {moved > 0 && (
+              <span>{moved === 1
+                ? t.rosterOrderUnsavedOne : t.rosterOrderUnsaved.replace('{count}', moved)}</span>
+            )}
+          </span>
           <span className="rota-savebar-spacer" />
           <button type="button" className="btn btn-ghost" onClick={reset} disabled={busy}>
             {t.rotaCancel}
