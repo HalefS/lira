@@ -1,0 +1,24 @@
+-- Drops the hand-placed rota order.
+--
+-- Constraint first, because it is defined in terms of the column.
+--
+-- What this loses is every order a manager ever chose, and nothing else. That is a
+-- sharper statement than it sounds, so compare it with the migration it is the
+-- mirror of:
+--
+--   000032's down migration loses the EXCLUSIONS. Re-running the up migration puts
+--   everybody back on the rota, so a rollback there produces a FULL board rather
+--   than an empty one -- it prints every account in the installation to anybody who
+--   loads the public page. Before running it, note who was excluded.
+--
+--   This one loses only the ORDER. rota_members is not touched, so the same people
+--   stay on the same rota; they simply return to the historical sort (active
+--   first, then account age, then id). Nobody appears who was not there before and
+--   nobody disappears, so there is no list to write down first.
+--
+-- The loss is total and unrecoverable, because an order is configuration rather
+-- than a record of anything. That is the same bargain 000030's down migration
+-- makes for the shift tint, and it is why the column is nullable rather than NOT
+-- NULL DEFAULT: an installation that has never ordered anybody needs no backfill.
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_rota_position_positive;
+ALTER TABLE users DROP COLUMN IF EXISTS rota_position;

@@ -159,6 +159,90 @@ func (app *application) setRotaMembersHandler(w http.ResponseWriter, r *http.Req
 	}, nil)
 }
 
+// rotaOrderInput is the body of an order write.
+//
+// A bare ordered list and nothing else. There is no confirm_empty counterpart to
+// rosterInput's, and the asymmetry is deliberate: an empty ROSTER means "nobody is on
+// the rota", which is a decision with a visible consequence on a public board and is
+// worth one acknowledgement before it is sent. An empty ORDER means "no opinion about
+// anybody", which is the state a fresh installation is already in -- it is a no-op,
+// not a decision, and asking about it would train managers to click through a
+// dialog that never means anything.
+//
+// No version field, for the reason the roster PUT carries none: this is a whole-list
+// replace, so there is no partial row for a second manager to interleave with.
+// data.RotaRosterModel.SetOrder's comment sets out why last-write-wins is an
+// acceptable settling point here when it would not be for the roster write.
+type rotaOrderInput struct {
+	UserIDs []int64 `json:"user_ids"`
+}
+
+// setRotaMembersOrderHandler records the order a manager placed the team in.
+//
+// NOT FOLDED INTO setRotaMembersHandler, on purpose. rota_members carries
+// updated_at and updated_by as the audit trail of a deliberate exclusion, and
+// migration 000032 retains false rows forever so that trail survives. Writing order
+// through the roster endpoint would re-stamp both on every drag, so "when did the
+// board change and who changed it" would decay into "when did anybody last move a
+// row". The re-read at the end is the same one the roster handler does, and for the
+// same reason: what is on screen after a save has to be what the database says it is.
+func (app *application) setRotaMembersOrderHandler(w http.ResponseWriter, r *http.Request) {
+	var in rotaOrderInput
+	if err := app.readJSON(w, r, &in); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	// Shape before existence, for the reason setRotaMembersHandler gives: a nil
+	// user_ids is a malformed field and deserves a 422 naming it, and checking
+	// existence first would leave ValidateRosterOrder's nil rule unreachable over
+	// HTTP. A rule no request can exercise is a rule nobody maintains.
+	v := validator.New()
+	data.ValidateRosterOrder(v, in.UserIDs)
+	if !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	// Same one-query existence check as the roster write, and for the same reason: one
+	// Users.Get per id is the N+1 shape this codebase has already unpicked twice, and a
+	// bad id should arrive as a 422 a manager can act on rather than as an FK problem
+	// raised from inside a write.
+	//
+	// Note that unknown ids are simply not written -- SetOrder's UPDATE matches on
+	// u.id = o.id, so a name that does not exist is a silent no-op rather than an
+	// error. That is exactly why this check is here and not left to the database.
+	found, err := app.models.Users.ExistingIDs(ctx, in.UserIDs)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	if missing := missingMemberIDs(in.UserIDs, found); len(missing) > 0 {
+		v.AddError("user_ids", fmt.Sprintf("no such member: %s", joinIDs(missing)))
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	if err := app.models.RotaMembers.SetOrder(ctx, in.UserIDs); err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	members, err := app.models.RotaMembers.List(ctx)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	app.writeJSON(w, http.StatusOK, envelope{
+		"members":     members,
+		"can_edit":    app.canEditSchedule(r),
+		"max_members": data.MaxRotaMembers,
+	}, nil)
+}
+
 // missingMemberIDs returns the ids that were named but are not accounts, in the order
 // they were sent.
 //

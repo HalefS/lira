@@ -1,0 +1,97 @@
+-- A manager's hand-placed order for the team rota.
+--
+-- The rota prints its members in an order nobody has ever had a say over: active
+-- first, then by when the account was created, then by id. That is a reasonable
+-- default and it is not a choice anybody makes, so it cannot be corrected. This
+-- column is how a manager says "Marco, then Ana, then Rui" and means it, and it
+-- drives BOTH the public grid's row order and the row order of the attendance
+-- workbook, because the workbook reads the same payload the grid renders.
+--
+--
+-- WHY IT IS ON users AND NOT ON rota_members
+--
+-- rota_members has one defining rule, argued at length in 000032: A MISSING ROW
+-- MEANS THE MEMBER IS ON THE ROTA. That rule is the reason 000032 inserts nothing
+-- and the reason there must never be a backfill -- a backfill would obligate account
+-- creation to write a row forever, and the next person to sign up would silently
+-- fail to appear on a public noticeboard.
+--
+-- A position column on rota_members collides with that in two ways, and both are
+-- structural rather than stylistic:
+--
+--   1. To hold a position you need a ROW. So the first manager to order anybody
+--      turns the table from "the small subset of accounts a manager has excluded"
+--      into one row per account, and 000032's partial index stops being the small
+--      subset it exists to be. The index is what keeps the grid's NOT EXISTS
+--      probe cheap; growing it to cover the whole user table is how a public
+--      read gets slow.
+--
+--   2. It reintroduces the backfill by the back door. Either everybody is given a
+--      row (forbidden, and for the reason above) or the column is nullable and you
+--      are back to two tiers in the sort for people nobody has placed.
+--
+-- On users the column is nullable, ships with no rows, and INSERT NOTHING is still
+-- true of every table in this schema. An installation that has never ordered
+-- anybody reads exactly as it read before this migration.
+--
+--
+-- WHY NULL IS A REAL ANSWER AND NOT A GAP
+--
+-- NULL means "no manager has an opinion about where this person goes", and such a
+-- person falls back to the historical order. The client renders that as a dash in
+-- the gutter (index.html) rather than as a number, because a number there would be
+-- a claim the grid is not actually honouring. This is the same grammar the rota
+-- grid already uses for a day off -- .rota-cell.is-off draws a centred dash rather
+-- than leaving the cell empty, because a blank in a bordered grid reads as
+-- loading and a rota that looks like it is loading looks broken.
+--
+--
+-- WHY IT OUTRANKS users.active
+--
+-- Week() has always ordered u.active DESC so leavers sink to the bottom, and that
+-- was right when the order was derived: it meant a reactivation could not resurrect
+-- a position. That reasoning stops at the moment a manager places somebody BY
+-- HAND. From then on the placement is the deliberate act and deactivation is
+-- incidental -- so a placed leaver keeps their slot and renders muted, and only
+-- people nobody has placed keep the sinking behaviour.
+--
+-- The precedence, stated once so it is not re-derived:
+--
+--     (rota_position IS NULL)   placed people first, unplaced people after
+--     rota_position             the order the manager chose
+--     u.active DESC             deactivation sinks you, if you have no placement
+--     u.created_at ASC          the historical default, for everyone else
+--     u.id ASC                  makes the sort TOTAL
+--
+--
+-- 1-BASED, AND NOT NECESSARILY DENSE
+--
+-- A write sends the submitted members as 1..N. Someone excluded keeps whatever
+-- position they held, so the stored set can contain gaps and can contain a
+-- retained position that a later submission reuses for a different person. That is
+-- accepted, not overlooked:
+--
+--   - Order is all this column is ever used for, and the sort only ever compares
+--     values against each other, so a gap costs nothing.
+--   - A collision resolves on the u.id tiebreak, which is why the sort above
+--     carries one. It is deterministic, which is the only property that matters.
+--   - Densifying would renumber the retained positions of people who are NOT on
+--     the rota, which is the exact thing "their place is kept" means not to do.
+--
+--
+-- WHAT A ROLLBACK LOSES
+--
+-- Every order a manager ever chose, and nothing else. Unlike 000032's down
+-- migration this does not un-exclude anybody: rota_members is untouched, so the
+-- board still shows the same people in the same membership, in the default order
+-- again. That is the same bargain 000030 makes for the shift tint -- configuration
+-- rather than a record of anything -- and it is why the column is nullable.
+ALTER TABLE users ADD COLUMN rota_position integer;
+
+-- A position is an ordinal, and ordinals start at one. The constraint exists for
+-- the same reason ValidateRoster's member-id check does: reachable through the API,
+-- so a client bug must not be able to write a row nothing can then sort sensibly.
+-- NULL is excluded by the IS NULL arm, so "no opinion" stays expressible.
+ALTER TABLE users
+	ADD CONSTRAINT users_rota_position_positive
+	CHECK (rota_position IS NULL OR rota_position > 0);

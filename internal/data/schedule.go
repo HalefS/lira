@@ -628,6 +628,17 @@ func (m ScheduleModel) Week(ref time.Time) (*ScheduleWeek, error) {
 	// Deactivated members are still INCLUDED here. Membership and deactivation are
 	// orthogonal -- see rota_roster.go -- so a leaver stays on the board and renders
 	// muted unless a manager also unticks them.
+	// ORDER BY is rotaMemberOrder, the same constant RotaRosterModel.List sorts by,
+	// because the order of these rows is not only the grid's: internal/report walks
+	// w.Members in this order to build the attendance workbook, so this clause IS the
+	// spreadsheet's row order. A second copy of it here would be a document whose rows
+	// had quietly stopped matching the board it was exported from.
+	//
+	// rota_position outranks u.active, which is a change in behaviour worth stating:
+	// this clause has always sunk leavers to the bottom, and it still does for anyone
+	// a manager has not placed by hand. Once somebody HAS been placed, the placement
+	// is the deliberate act and deactivation is incidental, so a placed leaver keeps
+	// their slot and renders muted. Migration 000033 argues it in full.
 	rows, err := m.DB.QueryContext(ctx, `
 		SELECT u.id, u.name, u.avatar_idx, u.role, u.active
 		FROM users u
@@ -635,7 +646,7 @@ func (m ScheduleModel) Week(ref time.Time) (*ScheduleWeek, error) {
 			SELECT 1 FROM rota_members rm
 			WHERE rm.user_id = u.id AND NOT rm.included
 		)
-		ORDER BY u.active DESC, u.created_at ASC, u.id ASC`)
+		ORDER BY `+rotaMemberOrder)
 	if err != nil {
 		return nil, err
 	}

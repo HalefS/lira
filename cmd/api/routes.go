@@ -232,6 +232,18 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodGet, "/v1/rota/members", app.requireAuth(app.listRotaMembersHandler))
 	router.HandlerFunc(http.MethodPut, "/v1/rota/members", app.requireAuth(app.requireManager(app.setRotaMembersHandler)))
 
+	// The team's hand-placed ORDER, as a sibling of the roster rather than a field on
+	// it, and for the reason cmd/api/rota_members.go argues at length: writing order
+	// through the roster PUT would re-stamp rota_members.updated_at on every drag and
+	// so destroy the audit trail of a deliberate exclusion. It changes what the PUBLIC
+	// grid and the attendance workbook print in row order, so it is manager-only even
+	// though the resulting order is of course readable by anybody.
+	//
+	// Reads are not gated here: there is nothing to read. GET /v1/rota/members already
+	// returns rota_position for every account, and one GET per thing is the rule the
+	// picker already follows.
+	router.HandlerFunc(http.MethodPut, "/v1/rota/members/order", app.requireAuth(app.requireManager(app.setRotaMembersOrderHandler)))
+
 	// Melia Connecta Agents — list for all authenticated users; mutate for managers only
 	router.HandlerFunc(http.MethodGet, "/v1/connecta-agents", app.requireAuth(app.listConnectaAgentsHandler))
 	router.HandlerFunc(http.MethodPost, "/v1/connecta-agents", app.requireAuth(app.requireManager(app.createConnectaAgentHandler)))
