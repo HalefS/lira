@@ -16,6 +16,12 @@
 --   first, then account age, then id). Nobody appears who was not there before and
 --   nobody disappears, so there is no list to write down first.
 --
+--   It also loses the only route BACK. SetOrder is a whole-list replace, so the way
+--   to un-order the board is an empty submit -- which writes rota_position = NULL
+--   through a column this migration is about to drop. Re-run the up migration and
+--   the board is default-ordered again, so the loss is recoverable by redeploying,
+--   but not through the app while the column is absent.
+--
 -- The loss is total and unrecoverable, because an order is configuration rather
 -- than a record of anything. That is the same bargain 000030's down migration
 -- makes for the shift tint, and it is why the column is nullable rather than NOT

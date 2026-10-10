@@ -1,8 +1,12 @@
 package data
 
 import (
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
-	"regexp"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -259,61 +263,189 @@ func TestValidateRosterAndRosterOrderAgreeOnShape(t *testing.T) {
 
 // -- The shared ORDER BY ------------------------------------------------------
 
-// stripGoLineComments removes // comments so a source assertion cannot be satisfied --
-// or defeated -- by the word appearing in prose. Every Go file in this package uses
-// line comments only, which is what makes the cheap regex sufficient here; a file that
-// grew a block comment would need this to be smarter, and the test would tell it.
-var lineComment = regexp.MustCompile(`//[^\n]*`)
-
-func goCode(t *testing.T, path string) string {
-	t.Helper()
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	return lineComment.ReplaceAllString(string(raw), "")
-}
-
-// THE ORDER BY DRIFT GUARD, and the reason rotaMemberOrder is a constant at all.
+// The ORDER BY DRIFT GUARD, and the reason rotaMemberOrder is a constant at all.
 //
 // internal/report/attendance.go builds the attendance workbook's rows by iterating
 // w.Members in slice order, so this clause is not only the public grid's row order --
-// it is the spreadsheet's. A second hand-written copy in either query would be an
-// exported document whose rows had quietly stopped matching the board they came from,
-// which is invisible in the app and glaring in the thing a manager hands to payroll.
+// it is the spreadsheet's. A second hand-written copy would be an exported document
+// whose rows had quietly stopped matching the board they came from: invisible in the
+// app, glaring in the thing a manager hands to payroll.
 //
-// There is no database in the test suite to compare the two against, so the guarantee
-// is made structurally instead: both queries must name the constant, and the literal
-// clause must appear EXACTLY ONCE in the package -- once, in the constant's own
-// definition. If somebody hand-rolls a third query with its own copy, the count goes to
-// two and this fails rather than letting the order drift.
+// There is no database in the test suite to compare the two queries against, so the
+// guarantee is made structurally instead. Both queries must name the constant, and the
+// literal clause must appear EXACTLY ONCE across the package -- once, in the constant's
+// own definition.
+//
+// WHOLE PACKAGE, NOT TWO FILES. The first version of this test globbed nothing and
+// opened rota_roster.go and schedule.go by name while its comment promised "exactly
+// once in the package". So the failure it exists to catch passed: a third query in
+// internal/data/rota_export.go with its own copy of the clause was invisible to it.
+// A drift guard that cannot see the file the drift lands in is worse than none,
+// because it is reported as covered.
+//
+// PARSED, NOT GREPPED. Stripping // comments with a regex has two failure modes, and
+// the second is the dangerous one. A /* */ block mentioning the clause is not stripped
+// and produces a spurious failure -- annoying but safe. A // inside a raw string query
+// -- a URL, say -- truncates the rest of that line and UNDER-COUNTS, which would let a
+// genuine duplicate through. Walking the AST for string literals sidesteps both: only
+// literals are considered, which is exactly where SQL lives.
 func TestRotaMemberOrderIsTheOnlyMemberSort(t *testing.T) {
-	// rota_roster.go holds the constant, so the one permitted occurrence is its
-	// definition. schedule.go must not have any at all.
-	for path, want := range map[string]int{
-		"rota_roster.go": 1,
-		"schedule.go":    0,
-	} {
-		code := goCode(t, path)
-		if !strings.Contains(code, "rotaMemberOrder") {
+	found := memberSortLiterals(t)
+	if len(found) != 1 {
+		t.Errorf("the literal member sort clause appears %d times across the package, "+
+			"want 1 (the definition of rotaMemberOrder): %v\n"+
+			"every query that sorts rota members must use the constant, or the public "+
+			"grid and the exported workbook will drift apart", len(found), found)
+		return
+	}
+	// The one permitted occurrence has to be the definition, not some query that
+	// happens to be the only copy because the other two were already changed.
+	if !strings.HasPrefix(found[0], "rota_roster.go:") {
+		t.Errorf("the clause is defined in %s; it belongs to rotaMemberOrder in "+
+			"rota_roster.go", found[0])
+	}
+
+	// Both queries have to actually USE it. A constant nobody references is worse than
+	// no constant, because it looks like the guard is in place.
+	for _, path := range []string{"rota_roster.go", "schedule.go"} {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if !strings.Contains(string(src), "rotaMemberOrder") {
 			t.Errorf("%s does not sort members by rotaMemberOrder", path)
 		}
-		if got := strings.Count(code, "u.created_at ASC"); got != want {
-			t.Errorf("%s contains the literal member sort clause %d times, want %d; "+
-				"every member query must order by rotaMemberOrder so the grid and the "+
-				"exported workbook cannot drift apart", path, got, want)
+	}
+}
+
+// memberSortLiterals returns "file:line" for every string literal in the package that
+// contains the literal member sort clause.
+//
+// _test.go files are skipped, and not as a convenience: this file names the clause in
+// order to search for it, so counting test files would count the search.
+func memberSortLiterals(t *testing.T) []string {
+	t.Helper()
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatalf("glob package: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no Go files found; the test is not running in the package directory")
+	}
+
+	var found []string
+	for _, path := range files {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			if strings.Contains(lit.Value, "u.created_at ASC") {
+				found = append(found,
+					fmt.Sprintf("%s:%d", path, fset.Position(lit.Pos()).Line))
+			}
+			return true
+		})
+	}
+	return found
+}
+
+// THE PARTIAL-REPLACE REGRESSION GUARD.
+//
+// SetOrder was originally a single UPDATE touching only the ids it was given, on the
+// argument that one statement cannot interleave with another. That argument was sound
+// about the statement and wrong about the operation, and it cost more than a comment:
+// two SEQUENTIAL orders with different id lists produced three accounts sharing each
+// position, with no concurrency involved. The store now clears every unnamed position
+// first, which is what makes it a whole-list replace and what makes a shared position
+// structurally impossible.
+//
+// So the clearing statement is load-bearing behaviour, and this test is here so that
+// "simplifying" SetOrder back to one UPDATE -- which is exactly what it looks like --
+// fails instead of silently reintroducing the bug. There is no database in this suite,
+// so as with the ORDER BY guard the guarantee is structural rather than behavioural.
+//
+// It also pins the transaction, because without it the two statements interleave and
+// the guarantee above evaporates even though both statements are still present.
+func TestSetOrderIsAWholeListReplaceNotAPartialOne(t *testing.T) {
+	src, err := os.ReadFile("rota_roster.go")
+	if err != nil {
+		t.Fatalf("read rota_roster.go: %v", err)
+	}
+	body := setOrderBody(t, string(src))
+
+	if !strings.Contains(body, "rota_position = NULL") {
+		t.Error("SetOrder never clears a position; it is a PARTIAL replace, so two " +
+			"sequential orders with different id lists collide and no manager chose " +
+			"the result. Unnamed members must go back to NULL")
+	}
+	if !strings.Contains(body, "NOT (id = ANY($1))") {
+		t.Error("the clearing statement must skip the submitted ids; clearing " +
+			"everybody and then reassigning is not a whole-list replace either, it " +
+			"is just wasteful, and the WHERE is what makes the two statements " +
+			"composable")
+	}
+	// The guard on the clearing statement: without it an ordinary save rewrites every
+	// row in the user table rather than the handful that actually moved.
+	if !strings.Contains(body, "rota_position IS NOT NULL") {
+		t.Error("the clearing statement must be guarded by `rota_position IS NOT " +
+			"NULL`, or every reorder writes a row per account on the public grid's " +
+			"read path")
+	}
+	for _, want := range []string{"BeginTx", "LOCK TABLE users", "tx.Commit()"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("SetOrder is missing %q; the clear and the assign are two "+
+				"statements and interleave under READ COMMITTED without a "+
+				"transaction and a lock", want)
 		}
 	}
+	if !strings.Contains(body, "RowsAffected()") {
+		t.Error("SetOrder does not check RowsAffected; an account deleted between the " +
+			"handler's existence check and this write returns 200 with an order that " +
+			"is quietly missing somebody")
+	}
+}
+
+// setOrderBody returns the source of SetOrder, so the assertions above cannot be
+// satisfied by a match somewhere else in the file -- including in SetOrder's own
+// comments, which describe the clearing statement at length and would otherwise
+// satisfy every one of these checks on their own.
+func setOrderBody(t *testing.T, src string) string {
+	t.Helper()
+	start := strings.Index(src, "func (m RotaRosterModel) SetOrder(")
+	if start < 0 {
+		t.Fatal("SetOrder not found in rota_roster.go")
+	}
+	// The body ends at the first line that is exactly "}" -- the method's closing
+	// brace. Inner braces are indented, so this cannot stop early.
+	rest := src[start:]
+	if end := strings.Index(rest, "\n}\n"); end >= 0 {
+		return rest[:end]
+	}
+	return rest
 }
 
 // rotaMemberOrder carries two properties that are load-bearing and invisible: it is
 // TOTAL, and placement OUTRANKS deactivation.
 //
-// Both are pinned here against the constant's own text rather than against a database,
-// because there is no database in the suite. The last clause being the unique id is
-// what makes the sort deterministic at all -- rota_position is deliberately not dense
-// (migration 000033), so two placed members can carry the same value, and without
-// this clause their relative order would be whatever the planner felt like.
+// This test pins them against the constant's own TEXT, and it is important to be honest
+// about how far that goes. It catches a mid-clause reorder and a dropped final key.
+// It does NOT verify totality in the mathematical sense -- that is a property of the
+// clause AND the schema, because totality needs a unique final key, and this test
+// cannot see users.id's primary key. If the schema ever loses that, this still passes
+// and the grid goes non-deterministic.
+//
+// It is kept anyway: it is a cheap change-detector for the two ways this constant is
+// most likely to be broken by accident, and a change-detector that is honestly labelled
+// is worth having where a misleading one would not be.
 func TestRotaMemberOrderIsTotalAndPlacesBeatsDeactivation(t *testing.T) {
 	clauses := strings.Split(rotaMemberOrder, ",")
 	if len(clauses) < 2 {
@@ -323,14 +455,15 @@ func TestRotaMemberOrderIsTotalAndPlacesBeatsDeactivation(t *testing.T) {
 	last := strings.TrimSpace(clauses[len(clauses)-1])
 	if last != "u.id ASC" {
 		t.Errorf("the last sort clause is %q, want u.id ASC; without a unique final "+
-			"key the sort is not total and equal-positioned members can swap between "+
-			"identical requests", last)
+			"key the sort is not total and rows tying on every earlier clause come "+
+			"back in planner order", last)
 	}
 
 	// Placement must be decided BEFORE deactivation, or a leaver a manager placed by
 	// hand sinks to the bottom and their arrangement is quietly undone by a
 	// deactivation they did not ask for.
-	posAt, activeAt := clauseIndex(clauses, "u.rota_position"), clauseIndex(clauses, "u.active DESC")
+	posAt := clauseFor(clauses, "u.rota_position")
+	activeAt := clauseFor(clauses, "u.active")
 	if posAt < 0 {
 		t.Error("rotaMemberOrder does not sort by rota_position at all")
 	}
@@ -343,16 +476,26 @@ func TestRotaMemberOrderIsTotalAndPlacesBeatsDeactivation(t *testing.T) {
 	}
 
 	// The NULL tier has to lead, or unplaced members would interleave with placed ones
-	// and a NULL would sort wherever the column default happened to put it.
+	// and a NULL would sort wherever the column default happened to put it. It is
+	// redundant -- Postgres puts NULLs last under ASC anyway -- and kept on purpose: it
+	// survives somebody later flipping the clause to DESC while the comment still reads
+	// "placed first". That is a real hazard and this is cheaper than the bug.
 	if first := strings.TrimSpace(clauses[0]); !strings.Contains(first, "rota_position IS NULL") {
 		t.Errorf("the first sort clause is %q, want the rota_position IS NULL tier; "+
 			"without it unplaced members interleave with placed ones", first)
 	}
 }
 
-func clauseIndex(clauses []string, want string) int {
+// clauseFor finds a clause by PREFIX rather than by equality.
+//
+// The first version compared whole strings, so the semantically identical
+// "u.rota_position ASC" failed with "does not sort by rota_position at all" -- a test
+// that punishes the most natural edit to the thing it guards is a test that gets
+// deleted rather than fixed. The direction matters most: a prefix match still fails on
+// a clause that dropped the column, which is the failure worth catching.
+func clauseFor(clauses []string, prefix string) int {
 	for i, c := range clauses {
-		if strings.TrimSpace(c) == want {
+		if strings.HasPrefix(strings.TrimSpace(c), prefix) {
 			return i
 		}
 	}

@@ -162,17 +162,24 @@ func (app *application) setRotaMembersHandler(w http.ResponseWriter, r *http.Req
 // rotaOrderInput is the body of an order write.
 //
 // A bare ordered list and nothing else. There is no confirm_empty counterpart to
-// rosterInput's, and the asymmetry is deliberate: an empty ROSTER means "nobody is on
-// the rota", which is a decision with a visible consequence on a public board and is
-// worth one acknowledgement before it is sent. An empty ORDER means "no opinion about
-// anybody", which is the state a fresh installation is already in -- it is a no-op,
-// not a decision, and asking about it would train managers to click through a
-// dialog that never means anything.
+// rosterInput's, and the asymmetry is deliberate but not for the reason it first
+// appears: an empty ROSTER blanks a public board, so it is worth one acknowledgement,
+// while an empty ORDER is the undo -- SetOrder replaces the whole order, so an empty
+// list puts every position back to NULL and returns the grid to the default sort.
+// That is what a manager reverting a rearrangement expects to happen, and a dialog
+// asking "are you sure you want to remove everyone's place?" in front of that is
+// noise. Confirm it at the roster dialog if it needs confirming at all.
+//
+// The list is the COMPLETE set, not a partial update. That is the whole reason SetOrder
+// can guarantee two members never share a position, and the reason the semantics read
+// the way they do: everybody you do not name goes back to having no place. Migration
+// 000033 explains what that costs -- excluding somebody clears their slot -- and why
+// that is the right trade.
 //
 // No version field, for the reason the roster PUT carries none: this is a whole-list
 // replace, so there is no partial row for a second manager to interleave with.
-// data.RotaRosterModel.SetOrder's comment sets out why last-write-wins is an
-// acceptable settling point here when it would not be for the roster write.
+// data.RotaRosterModel.SetOrder's comment sets out why it takes a lock when the
+// earlier single-statement version did not.
 type rotaOrderInput struct {
 	UserIDs []int64 `json:"user_ids"`
 }

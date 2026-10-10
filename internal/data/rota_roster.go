@@ -78,12 +78,24 @@ const MaxRotaMembers = 200
 //	u.created_at ASC           the historical default, for everyone unplaced.
 //	u.id ASC                   makes the sort TOTAL.
 //
-// The last clause is load-bearing, not decoration. rota_position is deliberately
-// NOT DENSE (000033 explains why), so two placed members can carry the same value
-// -- a re-used ordinal and a retained one. Without the id tiebreak the order of
-// those two rows would be whatever the planner felt like, which would make the
-// workbook's row order unstable across identical requests. ids are unique, so
-// adding this clause is what turns "almost always deterministic" into "always".
+// The last clause is load-bearing, not decoration, and NOT for the reason it used to be.
+//
+// It was originally justified as protection against two placed members carrying the same
+// rota_position. That state was reachable -- SetOrder was a partial replace, so two
+// sequential writes could collide -- and it is now structurally impossible, because
+// SetOrder clears every unnamed position before assigning 1..N in one transaction. So
+// the clause no longer earns its keep from rota_position at all.
+//
+// It earns it from the other four clauses. users.created_at is timestamp(0), so two
+// accounts registered in the same second tie, and every one of them has rota_position
+// NULL and the same active flag. Without a unique final key those rows would come back
+// in whatever order the planner produced, which would make the PUBLIC grid's row order
+// -- and therefore the exported workbook's -- unstable across identical requests. ids
+// are unique, so appending this clause is what turns "almost always deterministic" into
+// "always".
+//
+// Keep it even if a future migration makes rota_position NOT NULL, and say why here
+// rather than deleting a clause that looks redundant to whoever reads it next.
 const rotaMemberOrder = `(u.rota_position IS NULL), u.rota_position, ` +
 	`u.active DESC, u.created_at ASC, u.id ASC`
 
@@ -276,62 +288,166 @@ func (m RotaRosterModel) Set(ctx context.Context, memberIDs []int64, by *int64) 
 	return tx.Commit()
 }
 
-// SetOrder records the order a manager placed members in, in the order given.
+// SetOrder replaces the whole rota order with exactly userIDs, in the order given, and
+// fails if any named member does not exist.
+//
+// COLLECTION REPLACE, not a patch: the body IS the desired end state, and everybody not
+// named goes back to having no position. This is Set's own shape and for Set's own
+// reasons -- there is no partial row for a second manager to interleave with, so there
+// is no version guard to add.
 //
 // A SEPARATE WRITE FROM Set, and the separation is the point. Set's table carries
 // updated_at and updated_by as the audit trail of a deliberate EXCLUSION, and 000032
 // keeps false rows forever precisely so that trail survives. Folding order into the
-// roster write would re-stamp both on every drag of a row, so "when did we change
-// the board and who" would decay into "when did anybody last nudge a row", and the
-// exclusion history would be unrecoverable for want of a tidier table. Order is a
-// different fact about a different table, so it gets its own endpoint.
+// roster write would re-stamp both on every drag of a row, so "when did we change the
+// board and who" would decay into "when did anybody last nudge a row", and the exclusion
+// history would be unrecoverable for want of a tidier table. Order is a different fact
+// about a different table, so it gets its own endpoint.
 //
-// # WHY THERE IS NO LOCK HERE, WHERE Set TAKES ONE
+// # WHY THIS TAKES A LOCK, WHERE IT PREVIOUSLY TOOK NONE
 //
-// Set needs LOCK TABLE rota_members IN EXCLUSIVE MODE because it is a read-modify-
-// write spread over TWO statements: under READ COMMITTED two concurrent roster
-// writes interleave inside the transaction and settle on a roster neither manager
-// asked for. That method's comment writes the interleaving out step by step, and it
-// is a real hazard that deserves a lock.
+// It did not take one, on the argument that a single UPDATE cannot interleave with
+// another UPDATE. That argument was sound about the STATEMENT and wrong about the
+// OPERATION, because a partial replace is not a whole-list replace at all:
 //
-// This is ONE statement, and a single UPDATE cannot interleave with another UPDATE.
-// Two managers reordering at the same moment therefore settle on one manager's order
-// IN ITS ENTIRETY -- last-write-wins on a whole-list replace, which is exactly what
-// shift_assignments already settles such races with, and which is an answer at least
-// one of the two managers actually asked for.
+//	UPDATE ... WHERE u.id = o.id          -- touches only the rows you named
 //
-// A lock here would prevent nothing. A lock whose justification is "it seemed safer"
-// is worse than no lock at all, because it is a claim about correctness that nobody
-// has checked and that the next reader has to take on trust.
+// Two well-formed calls therefore do NOT settle on one manager's order. Run them in
+// sequence, with no concurrency of any kind:
 //
-// Members NOT NAMED are left exactly as they are. Their slot is held, not cleared,
-// and that is what "their place is kept" means: removing somebody from the rota must
-// not silently renumber everybody above them. See migration 000033 for why the stored
-// positions are consequently allowed to contain gaps and collisions -- the short
-// version being that order is the only thing this column is ever used for.
+//	PUT [1,2,3,87]   ->  1=1, 2=2, 3=3, 87=4
+//	PUT [87,89,90]   ->  87=1, 89=2, 90=3
+//
+// and three accounts now SHARE each position: {1,87} at 1, {2,89} at 2, {3,90} at 3.
+// The sort still returns a total order -- u.id breaks the tie, so nothing is
+// non-deterministic -- but no manager ever chose that order, and the next reorder
+// produces a different answer.
+//
+// Clearing first and assigning second makes this a genuine two-statement read-modify-
+// write, which is precisely the shape Set needs its lock for. Under READ COMMITTED two
+// of them interleave inside the transaction:
+//
+//  1. A clears every position
+//  2. B clears every position        -- a no-op by now, but it happened
+//  3. A assigns 1=1, 2=2
+//  4. B assigns 87=1
+//
+// and the board ends up holding BOTH managers' orders, because B's clear ran before A's
+// assign. That is not last-write-wins; it is an answer neither manager asked for, and
+// it is the same class of failure Set's EXCLUSIVE lock exists to prevent.
+//
+// SHARE ROW EXCLUSIVE rather than the EXCLUSIVE Set takes on rota_members: both block
+// other writers, neither blocks plain readers, so the public grid keeps serving while
+// two managers reorder. The weaker mode is chosen because this lock contends with
+// ordinary user-account writes, which are frequent, and blocking those for the length of
+// a two-statement transaction is a wider blast radius than the hazard needs.
 func (m RotaRosterModel) SetOrder(ctx context.Context, userIDs []int64) error {
-	// The empty-versus-nil belt to ValidateRosterOrder's braces, for the same reason:
-	// a nil slice binds as SQL NULL, unnest(NULL) yields no rows, and the write would
-	// report success having changed nothing. Here the failure is quieter than Set's,
-	// so it is worth saying out loud rather than relying on the handler alone.
+	tx, err := m.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+		return err
+	}
+
+	// The empty-versus-nil belt, and here it is LOAD-BEARING rather than decorative.
+	//
+	// `NOT (u.id = ANY($1))` is TRUE for every row when $1 is an empty array, so an empty
+	// submit clears everybody -- which is the documented meaning of an empty order. With
+	// $1 NULL the same expression is NULL, matches nothing, and the CLEAR silently does
+	// nothing; the assign then matches nothing either, and the write returns 200 having
+	// changed nothing at all.
+	//
+	// That is the third time this codebase has been bitten by NULL-versus-'{}'. The
+	// empty case now carries real meaning, which is what makes the difference between
+	// "put the whole board back to the default order" and "report success while doing
+	// nothing" the difference between a feature and a bug.
 	if userIDs == nil {
 		userIDs = []int64{}
 	}
 
-	// WITH ORDINALITY numbers the submitted list 1..N in the order it arrived, which
-	// is the whole of what "the order a manager chose" means on the wire. There is no
-	// client-side re-sort and no client-side numbering: the client sends a sequence of
-	// ids and the database decides what order means, once, here.
+	// 1. Everybody not named goes back to having no position.
 	//
-	// No transaction wrapper. A single statement is atomic on its own, and wrapping
-	// it would buy nothing but a second round trip.
-	_, err := m.DB.ExecContext(ctx, `
+	//    This is what makes the operation a whole-list replace rather than a partial one,
+	//    and what makes colliding positions STRUCTURALLY IMPOSSIBLE rather than merely
+	//    unlikely: after statement 2, every non-NULL position was written by this same
+	//    transaction from a 1..N ordinality, so no two of them can agree.
+	//
+	//    The `rota_position IS NOT NULL` guard keeps the UPDATE off rows already in their
+	//    desired state, which on an ordinary save is nearly all of them -- so this writes
+	//    a handful of tuples instead of the whole user table on every reorder.
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE users
+		SET rota_position = NULL
+		WHERE rota_position IS NOT NULL AND NOT (id = ANY($1))`,
+		pq.Array(userIDs)); err != nil {
+		return err
+	}
+
+	// 2. WITH ORDINALITY numbers the submitted list 1..N in the order it arrived, which
+	//    is the whole of what "the order a manager chose" means on the wire. No client-side
+	//    re-sort and no client-side numbering: the client sends a sequence of ids and the
+	//    database decides what order means, once, here.
+	//
+	//    ord is bigint and rota_position is integer, hence the cast. Postgres ERRORS on
+	//    an out-of-range narrowing rather than truncating silently, and it is unreachable
+	//    regardless -- ValidateRosterOrder bounds the list at MaxRotaMembers.
+	//
+	//    unnest DEDUPLICATES, incidentally: the same id submitted three times updates that
+	//    row once, to whichever ordinality wins, which is plan-dependent. That is why
+	//    ValidateRosterOrder refuses duplicates rather than trusting this to be harmless.
+	res, err := tx.ExecContext(ctx, `
 		UPDATE users u
 		SET rota_position = o.ord::integer
 		FROM unnest($1::bigint[]) WITH ORDINALITY AS o(id, ord)
 		WHERE u.id = o.id`, pq.Array(userIDs))
-	return err
+	if err != nil {
+		return err
+	}
+
+	// THE EXISTENCE CHECK, done where it cannot go stale. The handler already ran
+	// ExistingIDs, but that is a SEPARATE transaction, so an account deleted between the
+	// check and this write leaves statement 2 matching nothing for it -- and the request
+	// returns 200 carrying an order that is quietly missing somebody.
+	//
+	// RowsAffected is trustworthy here precisely because Postgres counts a row as updated
+	// even when the value written equals the value already there, so an unchanged row
+	// still counts. That was checked rather than assumed, because a guard that miscounts
+	// on the common path is worse than no guard at all.
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected != int64(len(userIDs)) {
+		return fmt.Errorf("rota order: %d of %d named members do not exist",
+			int64(len(userIDs))-affected, len(userIDs))
+	}
+
+	return tx.Commit()
 }
+
+// WHY THERE IS NO AUDIT TRAIL ON THE ORDER, WHICH IS A DECISION AND NOT AN OVERSIGHT
+//
+// rota_members keeps updated_at and updated_by forever so that "who took Marco off the
+// board, and when" survives. The order has neither, so "who put Marco first" is
+// unanswerable afterwards.
+//
+// That is deliberate, and it matches shift_assignments -- the other write in this
+// feature area, which also carries no revision history. The line being drawn is between
+// what a rota IS and how it is ARRANGED. Membership is a decision about a person with
+// consequences for their shifts; order is presentational. A payroll dispute is about
+// hours worked, which live in shift_assignments, and nobody disputes the order of a
+// list. If that judgement is ever wrong the fix is two nullable columns on users and one
+// more statement here -- no migration would be needed, which is the main reason for not
+// pre-building it.
+//
+// users.version is settled here too. Every other write to users bumps it behind an
+// optimistic guard, and this one deliberately does not: it writes a single column that
+// is not carried on the User struct, so no client can observe a stale value through the
+// API, and bumping it would make an unrelated concurrent account edit fail its version
+// guard for a change the caller did not make and cannot see.
 
 // ValidateRoster checks a submitted roster before anything is written.
 //
@@ -369,11 +485,15 @@ func ValidateRoster(v *validator.Validator, memberIDs []int64) {
 // unnest(NULL) produces no rows -- so the request would return 200 having changed
 // nothing at all.
 //
-// An EMPTY order is LEGAL, and unlike an empty roster it needs no confirmation from
-// the caller. Empty roster means "nobody is on the rota", which is a decision with a
-// visible consequence on a public board and is worth one acknowledgement. Empty order
-// means "I have no opinion about anybody", which is precisely the state a fresh
-// installation is already in, so it is a no-op rather than a decision.
+// An EMPTY order is LEGAL, and unlike an empty roster it needs no confirmation from the
+// caller -- because it is not the same kind of decision.
+//
+// An empty ROSTER means "nobody is on the rota": a visible change to a public board,
+// worth one acknowledgement before it is sent. An empty ORDER means "nobody has a
+// place", which is a real change with a real effect -- every position goes back to NULL
+// and the grid returns to the historical sort -- so confirming it is the roster
+// dialog's job, not this one's, and asking here would put an "are you sure" in front of
+// a revert that the manager has usually just been told is safe.
 func ValidateRosterOrder(v *validator.Validator, userIDs []int64) {
 	v.Check(userIDs != nil, "user_ids", "must be provided")
 	if userIDs == nil {

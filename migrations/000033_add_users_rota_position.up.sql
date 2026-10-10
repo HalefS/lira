@@ -16,19 +16,37 @@
 -- creation to write a row forever, and the next person to sign up would silently
 -- fail to appear on a public noticeboard.
 --
--- A position column on rota_members collides with that in two ways, and both are
--- structural rather than stylistic:
+-- A position column on rota_members collides with that rule. To hold a position you
+-- need a ROW, so ordering anybody at all obliges the table to carry a row per
+-- ordered person. From that moment the write which inserts an exclusion -- and which
+-- ALREADY inserts for every account not named, so already grows without bound -- is
+-- no longer writing "a decision somebody took" but "a slot for the whole staff". An
+-- order that has to be complete to be correct is a backfill wearing a different hat,
+-- and 000032's rule is precisely that this table must stay able to be EMPTY and still
+-- mean "everybody is on the rota".
 --
---   1. To hold a position you need a ROW. So the first manager to order anybody
---      turns the table from "the small subset of accounts a manager has excluded"
---      into one row per account, and 000032's partial index stops being the small
---      subset it exists to be. The index is what keeps the grid's NOT EXISTS
---      probe cheap; growing it to cover the whole user table is how a public
---      read gets slow.
+-- That is the whole argument, and it stands on the missing-row rule alone.
 --
---   2. It reintroduces the backfill by the back door. Either everybody is given a
---      row (forbidden, and for the reason above) or the column is nullable and you
---      are back to two tiers in the sort for people nobody has placed.
+-- An earlier draft of this file carried a second leg, claiming the index would be
+-- inflated from "the accounts somebody has excluded" to "one row per account" and
+-- that 000032's partial index is what keeps the grid's semi-join cheap. Both halves
+-- were wrong, and were checked against a real database before being removed:
+--
+--   - rota_members ALREADY carries a row for every account that has ever been
+--     excluded, so it already converges on the whole staff. The table is not
+--     "small", and a position column would not make it small.
+--
+--   - rota_members_included_idx is ON rota_members (user_id) WHERE included. It
+--     cannot contain included = false rows, so it structurally CANNOT serve a probe
+--     for NOT rm.included, and its key is the primary key's leading column, making it
+--     a strict subset of rota_members_pkey. EXPLAIN of Week()'s real query reaches
+--     for rota_members_pkey and filters, which is what it did before this migration
+--     too. 000032's own comment claiming the probe uses (user_id, included) is
+--     already wrong; this file must not build on top of it.
+--
+-- The conclusion was right. The leg that would have persuaded a reviewer was not, and
+-- it is left out rather than left in to sound thorough. (Dropping that index is worth
+-- doing, but it is not this migration's business.)
 --
 -- On users the column is nullable, ships with no rows, and INSERT NOTHING is still
 -- true of every table in this schema. An installation that has never ordered
@@ -53,7 +71,7 @@
 -- a position. That reasoning stops at the moment a manager places somebody BY
 -- HAND. From then on the placement is the deliberate act and deactivation is
 -- incidental -- so a placed leaver keeps their slot and renders muted, and only
--- people nobody has placed keep the sinking behaviour.
+-- people a manager has never placed keep the sinking behaviour.
 --
 -- The precedence, stated once so it is not re-derived:
 --
@@ -63,20 +81,48 @@
 --     u.created_at ASC          the historical default, for everyone else
 --     u.id ASC                  makes the sort TOTAL
 --
+-- The last clause is not decoration, and not because of this column. created_at is
+-- timestamp(0), so two accounts registered in the same second tie on every clause
+-- above it. ids are unique, so that clause is what makes the order -- and the
+-- exported workbook's row order, which is this order verbatim -- stable across
+-- identical requests rather than merely almost always stable.
 --
--- 1-BASED, AND NOT NECESSARILY DENSE
 --
--- A write sends the submitted members as 1..N. Someone excluded keeps whatever
--- position they held, so the stored set can contain gaps and can contain a
--- retained position that a later submission reuses for a different person. That is
--- accepted, not overlooked:
+-- NO POSITION EVER REPEATS, AND WHY THAT IS STRUCTURAL RATHER THAN LUCKY
 --
---   - Order is all this column is ever used for, and the sort only ever compares
---     values against each other, so a gap costs nothing.
---   - A collision resolves on the u.id tiebreak, which is why the sort above
---     carries one. It is deterministic, which is the only property that matters.
---   - Densifying would renumber the retained positions of people who are NOT on
---     the rota, which is the exact thing "their place is kept" means not to do.
+-- SetOrder is a whole-list replace: inside one transaction it clears every position
+-- it was not given, then assigns 1..N from the submitted list. Every non-NULL value
+-- was therefore written by the same transaction from the same 1..N ordinality, and no
+-- two of them can agree.
+--
+-- This file originally argued the opposite -- that gaps and collisions were
+-- acceptable, because order is all this column is ever used for and a collision still
+-- resolves deterministically. That was not merely tolerated, it was REACHABLE, and not
+-- only from a retained position for an excluded person as claimed. Two SEQUENTIAL
+-- orders whose id lists differ collide, with no concurrency of any kind, and differ
+-- is the normal case:
+--
+--     PUT [1,2,3,87]   ->  1=1, 2=2, 3=3, 87=4
+--     PUT [87,89,90]    ->  87=1, 89=2, 90=3
+--                          now {1,87} share 1, {2,89} share 2, {3,90} share 3
+--
+-- The sort still returned a total order and the grid still looked plausible, which is
+-- exactly why it survived review of the schema and only showed up when the write path
+-- was examined. A whole-list replace removes the question rather than arguing about it.
+--
+-- The consequence is that EXCLUDING somebody clears their place, because they are no
+-- longer in the submitted list. That is a change from the first draft, which promised
+-- to hold an excluded member's slot, and it is the right one on all three counts:
+--
+--   - It is honest. A slot nobody can see, for a person who is not on the board, is
+--     state that has to be explained to every later reader of the code.
+--   - It makes an EMPTY order mean something. With slots held, an empty submit was a
+--     silent no-op -- unnest('{}') matches nothing, so nothing cleared, and there was
+--     no statement anywhere that set rota_position = NULL. The feature could not be
+--     undone through the app at all. Now an empty list genuinely means "put the whole
+--     board back to the default order", which is what a manager reverting a
+--     rearrangement expects to happen.
+--   - It is what makes the guarantee above hold.
 --
 --
 -- WHAT A ROLLBACK LOSES
@@ -92,6 +138,12 @@ ALTER TABLE users ADD COLUMN rota_position integer;
 -- the same reason ValidateRoster's member-id check does: reachable through the API,
 -- so a client bug must not be able to write a row nothing can then sort sensibly.
 -- NULL is excluded by the IS NULL arm, so "no opinion" stays expressible.
+--
+-- It does NOT prevent two members from sharing a position, and no constraint here
+-- could: a UNIQUE index would have to be deferrable or partial to permit every NULL,
+-- and it would be defending against a state the write path above makes impossible
+-- while costing an index on the public grid's read. If a future change ever weakens
+-- the whole-list replace, this is the invariant to reach for first.
 ALTER TABLE users
 	ADD CONSTRAINT users_rota_position_positive
 	CHECK (rota_position IS NULL OR rota_position > 0);
