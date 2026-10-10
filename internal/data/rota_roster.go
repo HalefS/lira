@@ -153,7 +153,19 @@ func (m RotaRosterModel) List(ctx context.Context) ([]*RotaRosterEntry, error) {
 	rows, err := m.DB.QueryContext(ctx, `
 		SELECT u.id, u.name, u.avatar_idx, u.role, u.active,
 		       COALESCE(rm.included, true) AS on_rota,
-		       (SELECT COUNT(*) FROM shift_assignments sa WHERE sa.user_id = u.id),
+		       -- BOTH tables, since 000035. A member whose hours now live in
+		       -- shift_week_cells rather than in the standing pattern would otherwise
+		       -- read as "0 shifts" in the picker, which is the number the Settings
+		       -- dialog uses to say what clearing somebody will destroy -- and it would
+		       -- say zero about a person with a full year of recorded weeks.
+		       --
+		       -- A sum, not a count of DISTINCT weekdays: two people on the same
+		       -- Night are two things to lose, and a member with three recorded weeks
+		       -- has more to lose than one with a single week, which is true even
+		       -- though neither number is the number anybody is really asking about.
+		       ((SELECT COUNT(*) FROM shift_assignments sa WHERE sa.user_id = u.id)
+		        + (SELECT COUNT(*) FROM shift_week_cells wc
+		           WHERE wc.user_id = u.id AND wc.shift_id IS NOT NULL))::int,
 		       u.rota_position
 		FROM users u
 		LEFT JOIN rota_members rm ON rm.user_id = u.id

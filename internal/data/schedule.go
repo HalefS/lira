@@ -1108,23 +1108,6 @@ func (h *shiftHolder) shift() *Shift {
 	return s
 }
 
-// Today is the dashboard's "who is on right now": every rota member with a status
-// against the clock.
-//
-// TWO QUERIES, both constant in member count, shaped the way ScheduleModel.Week shapes
-// its reads rather than looping per member -- the N+1 this codebase has already
-// unpicked twice.
-//
-// The member query LEFT JOINs BOTH today's cell and YESTERDAY'S, because the rota is
-// RECURRING -- shift_assignments is keyed on (user_id, weekday) with no date -- so an
-// overnight shift's tail belongs to the previous weekday. Reading only today's cell
-// reports a night-shift member as "starting at 08:00" at one in the morning. See
-// ScheduleMember.StatusAt.
-//
-// The two weekdays are computed in GO, never in SQL. EXTRACT(ISODOW FROM CURRENT_DATE)
-// would use the DATABASE SESSION's timezone, which is not necessarily the Go process's,
-// and data.Today() exists precisely to keep that coupling out of everything that reads
-// a date.
 // WeekStatus is where a week sits relative to today.
 //
 // Three, not two, and the CURRENT one is the interesting case: a week is half elapsed, so
@@ -1235,6 +1218,34 @@ const weekShiftQuery = `
 	WHERE ` + resolvedShiftID + ` IS NOT NULL
 	ORDER BY u.id, d.weekday`
 
+// Today is the dashboard's "who is on right now": every rota member with a status
+// against the clock.
+//
+// ONE QUERY, constant in member count, shaped the way ScheduleModel.Week shapes its
+// reads rather than looping per member -- the N+1 this codebase has already unpicked
+// twice.
+//
+// THE MEMBER QUERY PROBES TWO DAYS, TODAY'S AND YESTERDAY'S, and it did so because
+// the rota RECURS, which it still is for any week with no cells of its own. An
+// overnight shift's tail belongs to the previous weekday, so reading only today's
+// cell reports a night-shift member as "starting at 08:00" at one in the morning.
+// See ScheduleMember.StatusAt.
+//
+// Since 000035 each probe resolves through a shift_week_cells row first and falls
+// back to the standing pattern, which is the same branch weekShiftQuery uses -- so
+// the dashboard agrees with the grid about who is on, rather than being the one
+// place that still believes the rota repeats forever.
+//
+// YESTERDAY'S PROBE MAY BE IN A DIFFERENT WEEK. On a Monday, yesterday is Sunday of
+// the week before, so that probe names THAT week's Monday. Reading this week's rows
+// for it would find nothing and quietly report a member on Sunday's night shift as
+// not working -- the exact bug the two-cell probe exists to prevent, reappearing on
+// Mondays only, which is the worst possible time for a rota to be wrong.
+//
+// The two weekdays are computed in GO, never in SQL. EXTRACT(ISODOW FROM CURRENT_DATE)
+// would use the DATABASE SESSION's timezone, which is not necessarily the Go process's,
+// and data.Today() exists precisely to keep that coupling out of everything that reads
+// a date.
 func (m ScheduleModel) Today(ref time.Time) (*ScheduleToday, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

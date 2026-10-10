@@ -13,16 +13,12 @@ import (
 
 // Per-date absences: the dated exceptions to the recurring rota.
 //
-// This file exists because shift_assignments cannot hold them, and that is not a
-// shortcoming of that table -- it is the whole point of it. The rota is a standing
-// pattern with no date on any row, so "Ana is on holiday the week of the 3rd" has
-// nowhere to live in it. Adding a date column would turn one question into two
-// answers and give the grid read a filter it must not have.
+// WHAT AN ABSENCE IS NOT, unchanged and still the reason this file exists:
 //
-// What an absence is NOT, and the distinction the UI leans on throughout:
-//
-//   - a day off is the ABSENCE of a row in shift_assignments. It recurs. It is
-//     nobody's business why, and it is not a record of anything.
+//   - a day off is a DECISION about the rota. In the standing pattern it is the
+//     ABSENCE of a row in shift_assignments, and since 000035 it may be an explicit
+//     NULL shift_id in a shift_week_cells row -- "off this week, on every other".
+//     Either way it is a plan, it recurs, and it is nobody's business why.
 //   - an absence here is a dated span somebody recorded, with a reason kind and a
 //     note. It exists once, for specific dates, and disappears from the board when
 //     those dates pass.
@@ -30,6 +26,25 @@ import (
 // Conflating the two is the failure this design is built to make impossible:
 // "Ana is off Monday" and "Ana is on holiday the 3rd to the 7th" are different
 // statements, and a board that renders them identically is lying to its readers.
+//
+// THE FIRST ARGUMENT FOR THIS FILE IS NOW OBSOLETE, and it is worth being exact
+// about which half.
+//
+// This header used to say absences exist because shift_assignments cannot hold a
+// dated exception. That was true, and 000035 made it false: a shift_week_cells row
+// carries a week_start and can say anything about any particular week. Nothing was
+// built from the claim being true, so nothing here needs changing -- but a comment
+// that argues from a constraint the schema has dropped is worse than no comment,
+// because the next reader will weigh it.
+//
+// The other half stands, and it is the half that actually matters. A per-week cell
+// is a SCHEDULING decision; an absence is something that HAPPENED to a person --
+// they were ill, they were on holiday, they were being trained. Recording a day as
+// an absence does not assert that the rota was wrong, and keeping a holiday out of
+// the rota's own history is what stops "why was Marco not on?" from becoming a
+// question the rota itself appears to answer. Excluding somebody from a rota is
+// not a statement that their holiday was wrong, and the redaction of `kind` on the
+// public board rests on exactly the same distinction.
 
 // The four kinds, and the set is closed because the four real cases are four real
 // cases. Must stay in step with absences_kind_check in migration 000031, the way
