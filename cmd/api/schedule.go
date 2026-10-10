@@ -49,6 +49,31 @@ func (app *application) scheduleWeekAnchor(w http.ResponseWriter, r *http.Reques
 	return anchor, true
 }
 
+// listTodayHandler is the dashboard's "who is on right now".
+//
+// PUBLIC, exactly as GET /v1/schedule, and for the same reason: it is a strict subset
+// of what that endpoint already publishes -- the same member rows, today's cell instead
+// of all seven. The `away` flag it adds publishes nothing the week view does not, since
+// that view already carries the absences its week covers.
+//
+// It is deliberately a DIFFERENT path from /v1/schedule/... . The wildcard :user_id
+// sits on a different method tree and would not actually collide -- verified against
+// httprouter v1.3.0, GET /v1/schedule/today registers cleanly -- but the comments above
+// /v1/schedule:user_id and /v1/rota/members are each about a DIFFERENT collision rule,
+// and a third reader should not have to re-derive either of them to see why this one is
+// named differently.
+func (app *application) listTodayHandler(w http.ResponseWriter, r *http.Request) {
+	today, err := app.models.Schedule.Today(time.Now())
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	if today.Members == nil {
+		today.Members = []*data.TodayMember{}
+	}
+	app.writeJSON(w, http.StatusOK, envelope{"today": today}, nil)
+}
+
 // canEditSchedule reports whether this caller may change the rota.
 //
 // Three answers, not two, and the middle one is why this is a function rather than a

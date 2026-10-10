@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -182,8 +183,182 @@ func (s *Shift) IsOvernight() bool {
 	return end > 0 && end < sh*60+sm
 }
 
-// DurationMinutes is how long the shift is, with an end earlier than the start read
-// as the following morning: 22:00 to 06:00 is 480 minutes, not -960.
+// localDay returns t's calendar date as a midnight in the PROCESS's own timezone.
+//
+// This exists because data.DateOnly is NOT the right thing to build a clock time from,
+// and using it that way put every shift an hour out. DateOnly stamps the local calendar
+// date at 00:00 UTC, which is exactly right for a value bound to a DATE column -- the
+// ::date cast reads the same day back -- and wrong for anything that reads the HOURS out
+// of it: a window built on DateOnly put this hotel's 16:00 shift at 16:00 UTC, which is
+// 15:00 here, so somebody was reported on shift from an hour before they started and
+// stayed on for an hour after they finished.
+//
+// The two uses are deliberately separate functions rather than one with a flag. DateOnly
+// goes to the database; localDay goes into arithmetic. Nothing else should have to know
+// which is which.
+func localDay(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.Local)
+}
+
+// Window returns the absolute interval this shift covers when it is placed on the
+// calendar day `day`.
+//
+// The end is built ON `day` first and moved to the following day only when it is not
+// already after the start. That single rule covers both shapes the schema allows, and
+// it is why IsOvernight cannot answer this question: IsOvernight says 16:00-00:00 is
+// NOT overnight -- correctly, its end is midnight, so `end > 0` is false -- yet that
+// shift's end instant really is the following midnight. Building the end on `day`
+// before comparing is what makes the two agree without a special case for either.
+//
+// Half-open [start, end): the reader is on at the start minute and off at the end
+// minute. So 15:59 on an 08:00-16:00 shift is on and 16:00 is not, and a 16:00-00:00
+// shift is off at midnight rather than on for another twenty-four hours.
+//
+// Built with time.Date rather than by adding minutes to midnight, for the reason
+// WeekOf gives: adding hours silently lengthens or shortens a day across a DST
+// transition, and a shift is a wall-clock window rather than a duration.
+//
+// A zero-length shift (start == end) is REFUSED rather than treated as 24 hours.
+// ValidateShift and the shifts_distinct_times CHECK both reject one, so reaching it
+// would mean the CHECK had been dropped -- and quietly answering "always on" would be
+// the worst possible reading of a corrupt row. ok=false means "this cell has no
+// window", which the callers read as no shift rather than as an all-day shift.
+func (s *Shift) Window(day time.Time) (start, end time.Time, ok bool) {
+	sh, sm, ok1 := parseClockTime(s.StartTime)
+	eh, em, ok2 := parseClockTime(s.EndTime)
+	if !ok1 || !ok2 {
+		return time.Time{}, time.Time{}, false
+	}
+	y, m, d := day.Date()
+	start = time.Date(y, m, d, sh, sm, 0, 0, day.Location())
+	end = time.Date(y, m, d, eh, em, 0, 0, day.Location())
+	if end.Equal(start) {
+		return time.Time{}, time.Time{}, false
+	}
+	if !end.After(start) {
+		end = end.AddDate(0, 0, 1)
+	}
+	return start, end, true
+}
+
+// OnShiftAt reports whether this shift covers the instant `now`, when placed on `day`.
+//
+// See Window for the half-open argument.
+func (s *Shift) OnShiftAt(now, day time.Time) bool {
+	start, end, ok := s.Window(day)
+	return ok && !now.Before(start) && now.Before(end)
+}
+
+// TodayStatus is where one member stands relative to the clock.
+type TodayStatus string
+
+const (
+	// TodayAway means an absence covers today. It beats every other status, for the
+	// reason the attendance workbook puts its absence case first: an absence is the
+	// dated EXCEPTION to the recurring pattern, so it overrides the cell. Showing
+	// somebody on confirmed sick leave as "working now" is a factual error about a
+	// colleague.
+	TodayAway TodayStatus = "away"
+	// TodayWorkingNow is on shift this instant -- see StatusAt, which reads TWO cells
+	// to decide it.
+	TodayWorkingNow TodayStatus = "working_now"
+	// TodayComingSoon has a shift today that has not started.
+	TodayComingSoon TodayStatus = "coming_soon"
+	// TodayFinished had a shift today that has ended. Present because a dashboard
+	// reading "0 active members" at 23:00 is misleading when people WERE on.
+	TodayFinished TodayStatus = "finished"
+	// TodayNotRostered is on the rota but has no shift today. Deliberately returned
+	// rather than omitted, so a client can choose; the dashboard chooses not to show
+	// it, because "how many people are configured" never changes through the day and
+	// makes the tile useless as a live indicator.
+	TodayNotRostered TodayStatus = "not_rostered"
+)
+
+// TodayMember is one member as the dashboard's "who is on now" tile needs them.
+type TodayMember struct {
+	UserID    int64       `json:"user_id"`
+	Name      string      `json:"name"`
+	AvatarIdx int         `json:"avatar_idx"`
+	Role      string      `json:"role"`
+	Active    bool        `json:"active"`
+	Status    TodayStatus `json:"status"`
+	// Shift is the cell the status came from: today's, except for a working_now
+	// inherited from the tail of last night. Null when the member has no shift today.
+	Shift *Shift `json:"shift"`
+	// FromYesterday is true when Status is working_now but the shift belongs to
+	// YESTERDAY's weekday. It is what stops a reader concluding somebody is on a
+	// shift the rota says they are not on today.
+	FromYesterday bool `json:"from_yesterday"`
+	// ShiftStart is the absolute start of the window Status was derived from, sent so
+	// the client can order and render times without re-deriving any of the above.
+	ShiftStart *time.Time `json:"shift_start,omitempty"`
+	// ShiftEnd likewise.
+	ShiftEnd *time.Time `json:"shift_end,omitempty"`
+}
+
+// ScheduleToday is the whole payload: the server's own date and instant, plus the
+// members.
+//
+// Both are the SERVER's, and the client must not recompute either. A laptop in a
+// different timezone from the server would otherwise be looking at a different day and
+// deciding a different answer about who is working.
+type ScheduleToday struct {
+	Date    JSONDate       `json:"date"`
+	Now     time.Time      `json:"now"`
+	Members []*TodayMember `json:"members"`
+}
+
+// StatusAt classifies one member against the clock.
+//
+// TWO CELLS ARE CONSULTED, NOT ONE, and that is the entire reason this cannot be a
+// filter on today's column. The rota is RECURRING -- shift_assignments is keyed on
+// (user_id, weekday) with no date at all -- so a member on a 22:00-06:00 shift assigned
+// to MONDAY is on the MONDAY cell at 01:00 on Tuesday. Their Tuesday cell may be a
+// Morning shift starting at 08:00, or nothing at all, and reading only today reports
+// them as off and about to start a shift they have been working for three hours.
+//
+// That is not hypothetical. Live row 1 of shift_assignments is exactly this: user 1 on
+// Night for weekday 1 and Morning for weekdays 2-5.
+//
+// away is a caller-supplied boolean rather than something looked up here, because
+// absences are DATED and this cell is not: there is no absence for a weekday, only for
+// a span of calendar dates.
+func (m *ScheduleMember) StatusAt(now time.Time, away bool) TodayStatus {
+	if away {
+		return TodayAway
+	}
+	// localDay, NOT DateOnly: the window below reads hours out of this, and DateOnly's
+	// midnight is stamped in UTC. See localDay.
+	today := localDay(now)
+
+	// ScheduleMember.Days is indexed by ISO weekday minus one, and time.Weekday is
+	// 0=Sunday..6=Saturday, so this is the same arithmetic ScheduleModel.Week uses.
+	// Yesterday's index WRAPS, and the wrap is the point: Monday's overnight tail
+	// belongs to Sunday's shift.
+	todayIdx := (int(now.Weekday()) + 6) % 7
+	yesterdayIdx := (todayIdx + 6) % 7
+
+	// Today first, so a member who is on both cells (a double-booked day) is reported
+	// against today's, which is the one the rota shows them.
+	for _, probe := range []struct {
+		idx int
+		day time.Time
+	}{{todayIdx, today}, {yesterdayIdx, today.AddDate(0, 0, -1)}} {
+		if cell := m.Days[probe.idx]; cell != nil && cell.OnShiftAt(now, probe.day) {
+			return TodayWorkingNow
+		}
+	}
+	if cell := m.Days[todayIdx]; cell != nil {
+		if start, _, ok := cell.Window(today); ok && now.Before(start) {
+			return TodayComingSoon
+		}
+		return TodayFinished
+	}
+	return TodayNotRostered
+}
+
+// DurationMinutes is how long the shift is, with an end earlier than the start read// as the following morning: 22:00 to 06:00 is 480 minutes, not -960.
 //
 // Delegates to ComputeDurationMinutes, the same rule the issue form's start/end
 // fields already use, so "how long was that shift" and "how long did that repair
@@ -771,6 +946,300 @@ func (m ScheduleModel) Week(ref time.Time) (*ScheduleWeek, error) {
 type DayAssignment struct {
 	Weekday int    `json:"weekday"`
 	ShiftID *int64 `json:"shift_id"`
+}
+
+// shiftColumnsAliased is shiftColumns rewritten for a differently-named alias.
+//
+// Derived rather than written out because the aliased list has to match shiftColumns
+// EXACTLY -- the scan reads twelve fields in shiftColumns' order, and a hand-copied
+// aliased list would drift the moment a column were added: in a query that compiles
+// perfectly and scans garbage. Substituting "s." is safe because the constant contains
+// no other occurrence of "s." -- shift_assignments and start_time have no dots.
+func shiftColumnsAliased(alias string) string {
+	return strings.ReplaceAll(shiftColumns, "s.", alias+".")
+}
+
+// shiftHolder is one shiftColumns block's destinations.
+//
+// It exists so ScheduleModel.Today can scan the member columns, TODAY's shift and
+// YESTERDAY's shift in a SINGLE rows.Scan. sql.Rows advances a cursor per call, so
+// three calls would read the second and third blocks from the FOLLOWING row -- which
+// compiles, runs, and returns plausible garbage rather than an error. scanShift cannot
+// be reused here because it takes only leading columns, not a trailing block.
+//
+// finalise applies exactly the rules scanShift applies, so a shift read by Today is
+// indistinguishable from one read by Week: a NULL tint leaves Color "", and Overnight
+// is derived rather than stored so the flag cannot disagree with the two times.
+// EVERY destination is nullable, and that is not defensive tidiness: the shift is
+// reached by a LEFT JOIN, so a member with no shift today hands SQL NULL for all twelve
+// of its columns. Scanning NULL into Shift.CreatedAt -- a plain time.Time -- is a hard
+// error rather than a zero, so a holder of mixed nullability fails on the first miss.
+// This draft got that wrong twice before it got it right: once by scanning 31
+// destinations for 29 columns, and once by making only the id nullable.
+type shiftHolder struct {
+	sID                      sql.NullInt64
+	createdAt, updatedAt     sql.NullTime
+	name, startTime, endTime sql.NullString
+	color                    sql.NullString
+	active                   sql.NullBool
+	createdBy, updatedBy     sql.NullInt64
+	version                  sql.NullInt64
+	count                    sql.NullInt64
+}
+
+func (h *shiftHolder) dest(lead ...any) []any {
+	return append(lead, &h.sID, &h.createdAt, &h.updatedAt, &h.name,
+		&h.startTime, &h.endTime, &h.color, &h.active,
+		&h.createdBy, &h.updatedBy, &h.version, &h.count)
+}
+
+// shift finalises the block, or returns nil when the LEFT JOIN found no shift at all.
+func (h *shiftHolder) shift() *Shift {
+	if !h.sID.Valid {
+		return nil
+	}
+	s := &Shift{ID: h.sID.Int64}
+	if h.createdAt.Valid {
+		s.CreatedAt = h.createdAt.Time
+	}
+	if h.updatedAt.Valid {
+		s.UpdatedAt = h.updatedAt.Time
+	}
+	if h.name.Valid {
+		s.Name = h.name.String
+	}
+	if h.startTime.Valid {
+		s.StartTime = h.startTime.String
+	}
+	if h.endTime.Valid {
+		s.EndTime = h.endTime.String
+	}
+	// A NULL tint leaves Color "", which is the "no tint" case every reader already
+	// handles, so an untinted shift is indistinguishable from one that predates
+	// migration 000030 -- which is exactly what it is.
+	if h.color.Valid {
+		s.Color = h.color.String
+	}
+	if h.active.Valid {
+		s.Active = h.active.Bool
+	}
+	if h.createdBy.Valid {
+		id := h.createdBy.Int64
+		s.CreatedBy = &id
+	}
+	if h.updatedBy.Valid {
+		id := h.updatedBy.Int64
+		s.UpdatedBy = &id
+	}
+	if h.version.Valid {
+		s.Version = int(h.version.Int64)
+	}
+	if h.count.Valid {
+		s.AssignmentCount = int(h.count.Int64)
+	}
+	// Derived rather than stored, so the flag cannot disagree with the two times.
+	s.Overnight = s.IsOvernight()
+	return s
+}
+
+// Today is the dashboard's "who is on right now": every rota member with a status
+// against the clock.
+//
+// TWO QUERIES, both constant in member count, shaped the way ScheduleModel.Week shapes
+// its reads rather than looping per member -- the N+1 this codebase has already
+// unpicked twice.
+//
+// The member query LEFT JOINs BOTH today's cell and YESTERDAY'S, because the rota is
+// RECURRING -- shift_assignments is keyed on (user_id, weekday) with no date -- so an
+// overnight shift's tail belongs to the previous weekday. Reading only today's cell
+// reports a night-shift member as "starting at 08:00" at one in the morning. See
+// ScheduleMember.StatusAt.
+//
+// The two weekdays are computed in GO, never in SQL. EXTRACT(ISODOW FROM CURRENT_DATE)
+// would use the DATABASE SESSION's timezone, which is not necessarily the Go process's,
+// and data.Today() exists precisely to keep that coupling out of everything that reads
+// a date.
+func (m ScheduleModel) Today(ref time.Time) (*ScheduleToday, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	today := DateOnly(ref)
+	// ISO weekday index, 0 = Monday, matching ScheduleMember.Days. Yesterday WRAPS, so
+	// Monday's index is 6 -- and that wrap is exactly what lets Sunday's overnight
+	// cover Monday at 01:00.
+	todayIdx := (int(today.Weekday()) + 6) % 7
+	yesterdayIdx := (todayIdx + 6) % 7
+
+	// The NOT EXISTS (... AND NOT rm.included) spelling is copied verbatim from Week
+	// and is load-bearing: rota_members' rule is that a MISSING row means included, so
+	// the test is for the presence of an exclusion, not of an inclusion.
+	rows, err := m.DB.QueryContext(ctx, `
+		SELECT u.id, u.name, u.avatar_idx, u.role, u.active,
+		       `+shiftColumnsAliased("td")+`,
+		       `+shiftColumnsAliased("yd")+`
+		FROM users u
+		LEFT JOIN shift_assignments tsa ON tsa.user_id = u.id AND tsa.weekday = $1
+		LEFT JOIN shifts td ON td.id = tsa.shift_id
+		LEFT JOIN shift_assignments ysa ON ysa.user_id = u.id AND ysa.weekday = $2
+		LEFT JOIN shifts yd ON yd.id = ysa.shift_id
+		WHERE NOT EXISTS (
+			SELECT 1 FROM rota_members rm
+			WHERE rm.user_id = u.id AND NOT rm.included
+		)
+		ORDER BY `+rotaMemberOrder,
+		todayIdx+1, yesterdayIdx+1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type memberRow struct {
+		u       TodayMember
+		today   *Shift
+		yest    *Shift
+		scratch ScheduleMember
+	}
+	found := []*memberRow{}
+
+	for rows.Next() {
+		var (
+			r  memberRow
+			td shiftHolder
+			yd shiftHolder
+		)
+		// ONE Scan for the whole row. Three would each advance the cursor and read the
+		// second and third blocks from the following member.
+		dest := []any{&r.u.UserID, &r.u.Name, &r.u.AvatarIdx, &r.u.Role, &r.u.Active}
+		dest = append(dest, td.dest()...)
+		dest = append(dest, yd.dest()...)
+		if err := rows.Scan(dest...); err != nil {
+			return nil, err
+		}
+
+		r.today, r.yest = td.shift(), yd.shift()
+		// A per-member scratch carrying ONLY today's and yesterday's cells, placed at
+		// the indices StatusAt will look in. StatusAt indexes Days by weekday, so the
+		// two slots have to sit at their real positions rather than in a two-element
+		// slice.
+		r.scratch = ScheduleMember{UserID: r.u.UserID}
+		if r.today != nil {
+			r.scratch.Days[todayIdx] = r.today
+		}
+		if r.yest != nil {
+			r.scratch.Days[yesterdayIdx] = r.yest
+		}
+		found = append(found, &r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Who is away today. Returns user_id ONLY, deliberately: the dashboard needs to
+	// know THAT somebody is away, not why, and shipping the kind would drag the
+	// absence redaction into a second call site that could disagree with the one the
+	// rota page uses.
+	//
+	// Bound as ::date, never via ::timestamptz -- see AbsenceModel.InWindow, which
+	// uses the same cast for the same reason: DateOnly stamps the local calendar date
+	// at 00:00 UTC, and casting that through timestamptz first renders it as the
+	// PREVIOUS day in a western offset.
+	away := map[int64]bool{}
+	awayRows, err := m.DB.QueryContext(ctx, `
+		SELECT DISTINCT a.user_id
+		FROM absences a
+		WHERE a.starts_on <= $1::date AND a.ends_on >= $1::date`,
+		DateOnly(today))
+	if err != nil {
+		return nil, err
+	}
+	for awayRows.Next() {
+		var id int64
+		if err := awayRows.Scan(&id); err != nil {
+			awayRows.Close()
+			return nil, err
+		}
+		away[id] = true
+	}
+	if err := awayRows.Err(); err != nil {
+		awayRows.Close()
+		return nil, err
+	}
+	awayRows.Close()
+
+	out := &ScheduleToday{Date: JSONDate(today), Now: ref, Members: []*TodayMember{}}
+	for _, r := range found {
+		m := r.u
+		m.Status = r.scratch.StatusAt(ref, away[r.u.UserID])
+
+		// Report the shift the status was DERIVED from, which is yesterday's cell when
+		// an overnight tail is what put them on. Reporting today's cell instead would
+		// show somebody on a shift the rota says they are not on.
+		//
+		// localDay, not DateOnly -- the window is read in hours from it.
+		cell, cellDay := r.today, localDay(ref)
+		if m.Status == TodayWorkingNow && !onShiftAt(r.today, cellDay, ref) &&
+			onShiftAt(r.yest, cellDay.AddDate(0, 0, -1), ref) {
+			cell, cellDay = r.yest, cellDay.AddDate(0, 0, -1)
+			m.FromYesterday = true
+		}
+		m.Shift = cell
+		if cell != nil {
+			if s, e, ok := cell.Window(cellDay); ok {
+				ps, pe := s, e
+				m.ShiftStart, m.ShiftEnd = &ps, &pe
+			}
+		}
+		out.Members = append(out.Members, &m)
+	}
+
+	sortTodayMembers(out.Members)
+	return out, nil
+}
+
+// onShiftAt is a nil-tolerant wrapper: a member with no shift on that day has no
+// window to be inside.
+func onShiftAt(s *Shift, day, now time.Time) bool {
+	return s != nil && s.OnShiftAt(now, day)
+}
+
+// todayStatusRank is the display order, and the reason for it: working-now answers the
+// page's question, coming-soon is the follow-up, finished is context. Away and
+// not_rostered rank last because neither is available and neither is upcoming -- the
+// client may still choose to render them.
+var todayStatusRank = map[TodayStatus]int{
+	TodayWorkingNow:  0,
+	TodayComingSoon:  1,
+	TodayFinished:    2,
+	TodayAway:        3,
+	TodayNotRostered: 4,
+}
+
+// sortTodayMembers orders for display, and the order is TOTAL.
+//
+// Within a group the shift start decides, so the day reads forward and whoever has been
+// on longest is first -- a working_now inherited from yesterday sorts by last night's
+// 22:00, which is right: they got there first. The UserID tail is what makes the order
+// total: users.created_at is timestamp(0), so same-second ties are the common case
+// rather than a theoretical one, which is the same argument rotaMemberOrder's comment
+// makes about its own u.id ASC.
+func sortTodayMembers(members []*TodayMember) {
+	sort.SliceStable(members, func(i, j int) bool {
+		a, b := members[i], members[j]
+		if a.Status != b.Status {
+			return todayStatusRank[a.Status] < todayStatusRank[b.Status]
+		}
+		as, bs := time.Time{}, time.Time{}
+		if a.ShiftStart != nil {
+			as = *a.ShiftStart
+		}
+		if b.ShiftStart != nil {
+			bs = *b.ShiftStart
+		}
+		if !as.Equal(bs) {
+			return as.Before(bs)
+		}
+		return a.UserID < b.UserID
+	})
 }
 
 // ValidateDayAssignments checks a submitted week before anything is written.

@@ -1571,6 +1571,133 @@ html.dark .roster-row.is-moved { background: var(--gray-200); }
   .roster-row { min-height: 44px; }
 }
 
+/* ── Dashboard: "who is on now" and "needs attention" ──
+   Two bands above the bar charts, in .mini-card so they inherit the dark surface and
+   border from the existing override at 2665 and need NO override of their own. That is
+   the whole reason they are not a new surface class: a new surface is the one way this
+   block could acquire a dark rule, and a block made of tokens needs none. */
+
+.now-band { margin-bottom: 20px; }
+.now-band-head {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+}
+.now-band-head .mini-card-title { margin-bottom: 0; }
+.now-band-head-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+
+.now-group + .now-group { margin-top: 14px; }
+.now-group-head {
+  display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;
+  font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--gray-400);
+}
+.now-group-count { font-family: 'DM Mono', monospace; letter-spacing: 0; color: var(--gray-400); }
+.now-group-empty { font-size: 12.5px; color: var(--gray-600); }
+
+/* The wrap is what makes this a dashboard rather than a roster: each group wraps
+   INDEPENDENTLY, so the cells just fit fewer per row as the page narrows and no media
+   query is needed. A vertical list has no such property and twenty people is 880px. */
+.now-people { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ONE PERSON. A wash on the cell, a coloured LEFT EDGE, and the name in body ink.
+   Colour on an edge rather than a ring because the rota page already uses an inset ring
+   for selection (.rota-cell.is-sel), and reusing it for status makes the two
+   indistinguishable. This is .rota-cell.is-night's arrangement, which is the app's
+   established state channel. */
+.rota-person {
+  position: relative;
+  display: flex; align-items: center; gap: 10px;
+  min-width: 200px; max-width: 280px; flex: 0 1 auto;
+  padding: 9px 12px 9px 14px;
+  border-radius: var(--radius-md);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  overflow: hidden;
+}
+/* The edge, drawn with a pseudo-element so it costs no layout and cannot be rounded off
+   by the container's overflow:hidden the way a border-left would be. */
+.rota-person::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--gray-300);
+}
+.rota-person.is-now   { background: var(--green-light);  border-color: var(--green); }
+.rota-person.is-now::before   { background: var(--green); }
+.rota-person.is-soon  { background: var(--orange-light); border-color: var(--orange); }
+.rota-person.is-soon::before  { background: var(--orange); }
+.rota-person.is-done  { background: var(--gray-100); border-color: var(--gray-200); }
+.rota-person.is-away  { background: var(--gray-50); border-color: var(--gray-200); }
+
+/* Two lines, not one. "Halef Spencer · Morning until 16:00" lets a long Portuguese name
+   push the time out of view, and the time is the decision-relevant half. */
+.rota-person-id { flex: 1 1 auto; min-width: 0; }
+.rota-person-name {
+  display: block; font-size: 13px; font-weight: 500; color: var(--gray-900);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rota-person-when {
+  display: block; font-size: 11.5px; color: var(--gray-600); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* DM Mono with tabular figures, so a row of times scans as a column while the names stay
+   quiet. The app's established face for figures: .rota-legend-hours, .cpick-stock. */
+.rota-person-time { font-family: 'DM Mono', monospace; color: var(--gray-900); }
+/* On an overnight tail the end time is tomorrow's, so "until 06:00" alone would read as
+   06:00 tonight. Reuses the rota page's own +1 mark verbatim. */
+.rota-person-plus1 { color: var(--orange); font-family: 'DM Mono', monospace; font-size: 11px; }
+.rota-person-mark { flex: 0 0 auto; display: inline-flex; }
+.rota-person-mark svg { width: 14px; height: 14px; }
+.rota-person.is-now .rota-person-mark  { color: var(--green); }
+.rota-person.is-soon .rota-person-mark { color: var(--orange); }
+.rota-person.is-done .rota-person-mark { color: var(--gray-300); }
+.rota-person.is-away .rota-person-mark { color: var(--gray-400); }
+
+/* A DEACTIVATED member keeps their row, muted, exactly as the rota grid renders them --
+   dropping it would make a reactivated account reappear here, and would contradict the
+   grid it sits beside. */
+.rota-person.is-inactive .rota-person-name { color: var(--gray-600); font-weight: 400; }
+.rota-person.is-inactive .rota-person-mark  { color: var(--gray-300); }
+
+.now-note { margin-top: 12px; font-size: 11.5px; color: var(--gray-400); }
+
+/* The "as of" line. Reuses .sys-live / .sys-live-dot VERBATIM -- same pulse, same .stale
+   grey -- because that is already the app's liveness mark. What differs is the TEXT:
+   System says "updated Ns ago", a live countdown. This says "as of 14:22", formatted
+   once from the server's own instant, because the reader's question is WHEN THIS WAS
+   TRUE rather than how old this is, and a one-second counter churning on a dashboard
+   nobody is watching is exactly the cost useIdleSignOut exists to avoid. */
+.now-asof { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--gray-400); }
+
+/* Needs attention: a legend-style chip wrap rather than a table. Eleven table rows in a
+   band sitting beside a three-row rota block makes the page ragged, and these items are
+   four fields wide rather than a column. The flex declaration is copied from
+   .rota-legend, which also carries a border-top and a --gray-50 background it should
+   not bring along, hence a name of its own. */
+.attn-chips { display: flex; flex-wrap: wrap; gap: 8px 10px; }
+.attn-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 11px; border-radius: var(--radius-md);
+  background: var(--orange-light); border: 1px solid var(--orange);
+}
+.attn-chip.is-over { background: var(--red-light); border-color: var(--red-mid); }
+.attn-chip.is-all { background: none; border-color: var(--gray-200); }
+/* --orange, NOT --amber: the file already established at length that amber is too close
+   to white to carry 13px text (2.54:1 on --amber-light), which is why .badge-soon
+   exists. --orange on its own wash measures 4.88:1. */
+.attn-name { font-size: 12.5px; font-weight: 500; color: var(--gray-900); }
+.attn-stock { font-family: 'DM Mono', monospace; font-size: 12.5px; color: var(--orange); }
+.attn-chip.is-over .attn-stock { color: var(--red); }
+.attn-more { font-size: 12px; color: var(--gray-400); align-self: center; }
+.attn-allgood { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--gray-600); }
+.attn-allgood svg { width: 14px; height: 14px; color: var(--green); }
+
+/* Status changes on a refresh. Reuses statusHighlightPulse -- already the app's "that
+   landed" moment, used by .rota-cell.just-saved and .status-highlight -- rather than a
+   fourth keyframe for "a figure changed". */
+.now-person-changed { animation: statusHighlightPulse 700ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .now-person-changed { animation: none; }
+}
+
 /* The quiet link from the rota page into Settings. It sits with the week controls rather
    than near the grid, because it navigates rather than acts on what is below it. */
 .rota-rosterlink {
@@ -3304,6 +3431,41 @@ const T = {
     avgTime: 'Avg. resolution time',
     acrossAll: 'Across all issues',
     activeUsers: 'Active users',
+    // -- Dashboard: who is on now, and what needs reordering ---------------
+    // Both blocks answer a question the four stat tiles do not: not "what happened"
+    // but "what is true at this moment". Group headings, not labels -- they are what
+    // a reader scans past, so they carry no terminal punctuation, like a .chip.
+    todayTeam: 'Team today',
+    todayWorking: 'On now',
+    todayComing: 'Starting later',
+    todayFinished: 'Finished',
+    todayAway: 'Away',
+    todayOnShift: 'On shift now',
+    todayNoneWorking: 'Nobody is on shift right now.',
+    // {name} and {time} so pt-PT prepositions ("às", "a partir das") live inside the
+    // string. They are not derivable in English and must not be guessed at in Portuguese.
+    todayNext: 'next: {name} at {time}',
+    todayUntil: 'until {time}',
+    todayFrom: 'from {time}',
+    // Formatted from the SERVER's now, once. See the Dashboard band comment: the
+    // reader's question is "when was this true", not "how old is this".
+    todayAsOf: 'as of {time}',
+    todayStale: 'could not refresh',
+    // The sr-only and tooltip text for a +1 marker. "+1" alone reads aloud as "plus
+    // one", which means nothing; this is what makes it say something.
+    todayOvernightTitle: "{name} started on yesterday's shift",
+    todayOvernightNote: 'Started on last night’s shift — the rota shows no shift for them today.',
+    attentionTitle: 'Needs attention',
+    attentionOpen: 'Open inventory',
+    // Quiet ink and a small check, NOT a green wash: this is the ABSENCE of a
+    // conclusion rather than a conclusion, and a green card would announce good news
+    // on a dashboard whose job is triage.
+    attentionAllGood: 'Everything is in stock.',
+    // A plain count and not a button: the block already has one link to the same
+    // destination, and the sort puts the LEAST urgent items in the hidden tail.
+    attentionAndMore: 'and {count} more',
+    attentionEmpty: 'empty',
+    attentionAtLevel: 'reorder at {n}',
     workload: 'Workload by user',
     noUsers: 'No users yet.',
     byType: 'Issues by type',
@@ -4647,6 +4809,30 @@ const T = {
     lcuReconditionedOne: '1 leitor adicionado ao pool recondicionado',
     lcuReconditionedMany: '{count} leitores adicionados ao pool recondicionado',
     lcuDeleteBlocked: 'Este leitor está no pool recondicionado e não pode ser removido.',
+    // -- Painel: quem está em turno agora, e o que precisa de reposição --------
+    // "Pool" e "stock" já têm dono noutros sítios (consumíveis, leitores), por isso
+    // "A repor" nomeia a ACÇÃO e não a emoção -- num bloco cujo propósito é triagem,
+    // dizer o que fazer é mais útil do que dizer como se sentir.
+    todayTeam: 'Equipa hoje',
+    todayWorking: 'Em turno',
+    todayComing: 'A seguir',
+    todayFinished: 'Já acabaram',
+    todayAway: 'Ausentes',
+    todayOnShift: 'Em turno agora',
+    todayNoneWorking: 'Não está ninguém em turno agora.',
+    todayNext: 'a seguir: {name} às {time}',
+    todayUntil: 'até às {time}',
+    todayFrom: 'a partir das {time}',
+    todayAsOf: 'às {time}',
+    todayStale: 'não foi possível atualizar',
+    todayOvernightTitle: '{name} começou no turno de ontem',
+    todayOvernightNote: 'Começou no turno de ontem — a escala não lhe mostra turno para hoje.',
+    attentionTitle: 'A repor',
+    attentionOpen: 'Abrir o inventário',
+    attentionAllGood: 'Está tudo em stock.',
+    attentionAndMore: 'e mais {count}',
+    attentionEmpty: 'esgotado',
+    attentionAtLevel: 'reordenar em {n}',
     signInBtn: 'Iniciar sessão',
     // Self-service reset. The code comes from a manager, not from an email:
     // this is the path for someone who cannot remember their password at all.
@@ -7050,7 +7236,267 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
 }
 
 /* ════════════════ DASHBOARD ════════════════ */
-function Dashboard({ users, stats }) {
+/* One person in the "team today" band.
+   The shift's own text times are printed rather than the instants from the payload:
+   `shift.end_time` is already "16:00" as the hotel writes it, so formatting it is a
+   no-op, while re-deriving an hour from a timestamp is exactly the mistake the server
+   side spent this change fixing. */
+function TodayPerson({ t, m, changed }) {
+  const tone = m.status === 'working_now' ? 'is-now'
+    : m.status === 'coming_soon' ? 'is-soon'
+    : m.status === 'finished'   ? 'is-done'
+    : 'is-away';
+  const mark = m.status === 'working_now' ? Ic.check
+    : m.status === 'coming_soon' ? Ic.clock
+    : m.status === 'away'       ? Ic.slash
+    : Ic.check;
+
+  // Only working_now and coming_soon have a useful time, and they want DIFFERENT ones:
+  // "until 16:00" is how long you have them, "from 19:00" is when they arrive. For
+  // somebody who left at 09:00, "until 16:00" would be noise.
+  const when = (() => {
+    if (!m.shift) return '';
+    if (m.status === 'working_now') {
+      return t.todayUntil.replace('{time}', m.shift.end_time)
+        + (m.from_yesterday ? '' : '');
+    }
+    if (m.status === 'coming_soon') return t.todayFrom.replace('{time}', m.shift.start_time);
+    return m.shift.start_time + ' – ' + m.shift.end_time;
+  })();
+
+  return (
+    <div className={`rota-person ${tone}${m.active ? '' : ' is-inactive'}${changed ? ' now-person-changed' : ''}`}>
+      <Avatar name={m.name} idx={m.avatar_idx}/>
+      <span className="rota-person-id">
+        <span className="rota-person-name">
+          {m.name}
+          {/* The overnight tail. Without this, a member on until 06:00 reads as 06:00
+              TONIGHT. Reuses the rota page's own mark and key verbatim. */}
+          {m.from_yesterday && (
+            <span className="rota-person-plus1"
+              title={t.todayOvernightTitle.replace('{name}', m.name)}>
+              {t.rotaPlusOne}
+            </span>
+          )}
+        </span>
+        <span className="rota-person-when">
+          {m.shift ? <>{m.shift.name} · <span className="rota-person-time">{when}</span></> : ''}
+        </span>
+        {/* "+1" reads aloud as "plus one", which means nothing, so the same sentence
+            that is in the tooltip is also in the accessible name. The cell is not a
+            control, so aria-label cannot carry it. */}
+        <span className="sr-only">
+          {m.from_yesterday ? t.todayOvernightTitle.replace('{name}', m.name) : ''}
+        </span>
+      </span>
+      <span className="rota-person-mark" aria-hidden="true">{mark}</span>
+    </div>
+  );
+}
+
+/* "Who is on now", and the staleness rules that make it honest.
+   A dashboard left open from 07:00 must not show a frozen 07:00. */
+function useTodayRota() {
+  const [data, setData] = useState(null);
+  const [stale, setStale] = useState(false);
+  const [shown, setShown] = useState({});   // status keyed by user_id, for the pulse
+  const dayRef = useRef('');
+
+  const load = useCallback(() => {
+    // No token: /v1/today is PUBLIC, like /v1/schedule, because it is a strict subset of
+    // what that already publishes.
+    return apiFetch('/today')
+      .then(res => {
+        const d = res.today;
+        if (!d) return;
+        // The DAY ROLLED OVER while the tab sat open. The statuses were computed for
+        // yesterday, so they are all wrong -- a stale flag alone would be a lie, since
+        // the numbers look current.
+        const rolled = dayRef.current !== '' && dayRef.current !== d.date;
+        dayRef.current = d.date;
+        setShown(prev => {
+          const next = {};
+          for (const m of d.members || []) next[m.user_id] = m.status;
+          if (rolled) return {};
+          for (const id in prev) if (!(id in next) || prev[id] !== next[id]) next['~' + id] = true;
+          return next;
+        });
+        setData(d);
+        setStale(false);
+      })
+      // Keep the LAST GOOD members and mark the dot stale. A dashboard that empties
+      // itself on a network blip is strictly worse than one showing a slightly old
+      // answer -- usePagedList documents the same rows-vs-error rule.
+      .catch(() => setStale(true));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const id = setInterval(load, 60000);
+    // visibilitychange is the one that MATTERS: setInterval is throttled hard in a
+    // background tab, so the interval alone is not trustworthy.
+    const onVis = () => { if (!document.hidden) load(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVis); };
+  }, [load]);
+
+  return { data, stale, load, changed: shown };
+}
+
+function TodayBand({ t, lang, rota, onGoToPage }) {
+  const { data, stale, changed } = rota;
+  const members = (data && data.members) || [];
+
+  const groups = [
+    { key: 'working_now',  label: t.todayWorking, cls: 'is-now',  cap: 10 },
+    { key: 'coming_soon',  label: t.todayComing,  cls: 'is-soon', cap: 10 },
+    { key: 'finished',     label: t.todayFinished, cls: 'is-done', cap: 4 },
+    { key: 'away',         label: t.todayAway,    cls: 'is-away', cap: 4 },
+  ];
+
+  const asOf = data && data.now
+    ? new Date(data.now).toLocaleTimeString(lang === 'pt' ? 'pt-PT' : 'en-GB',
+        { hour: '2-digit', minute: '2-digit' })
+    : '';
+
+  return (
+    <div className="mini-card now-band">
+      <div className="now-band-head">
+        <span className="mini-card-title">{t.todayTeam}</span>
+        {data && (
+          <span className="now-band-head-right">
+            {/* Reuses .sys-live and its dot VERBATIM -- same pulse, same .stale grey --
+                because that is already the app's liveness mark. The TEXT differs: System
+                says "updated Ns ago", a live countdown. This says "as of 14:22", once,
+                from the SERVER's instant, because the question is WHEN THIS WAS TRUE and
+                not how old this is. */}
+            <span className="now-asof">
+              <span className={'sys-live-dot' + (stale ? ' stale' : '')}/>
+              {stale ? t.todayStale : t.todayAsOf.replace('{time}', asOf)}
+            </span>
+            <button type="button" className="btn btn-ghost"
+              onClick={() => onGoToPage('schedule')}>
+              {t.rotaTitle} {Ic.chevron}
+            </button>
+          </span>
+        )}
+      </div>
+
+      {!data && <p className="now-group-empty">{t.analyticsLoading}</p>}
+
+      {data && members.length === 0 && (
+        <p className="now-group-empty">{t.todayNoneWorking}</p>
+      )}
+
+      {groups.map(g => {
+        const rows = members.filter(m => m.status === g.key);
+        if (rows.length === 0) return null;
+        const shownRows = rows.slice(0, g.cap);
+        return (
+          <div className="now-group" key={g.key}>
+            <div className="now-group-head">
+              {g.label}
+              <span className="now-group-count">{rows.length}</span>
+            </div>
+            <div className="now-people">
+              {shownRows.map(m => (
+                <TodayPerson key={m.user_id} t={t} m={m}
+                  changed={!!changed['~' + m.user_id]}/>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* One footnote for the whole block, and only while somebody is affected. A +1 with
+          no legend is a mark that means nothing. */}
+      {data && members.some(m => m.from_yesterday) && (
+        <p className="now-note">{t.todayOvernightNote}</p>
+      )}
+    </div>
+  );
+}
+
+/* "Needs attention".
+   NO new request: App already holds the whole consumables catalog from
+   /consumable-items at boot, and each item carries a server-derived low_stock, so there
+   is exactly ONE low-stock predicate in the app and this block reuses it rather than
+   inventing a second that could disagree with the Consumables page.
+
+   The filter is BROADER than low_stock on purpose: `stock <= 0` also catches a genuinely
+   empty item whose reorder level was never set. That does not contradict the Consumables
+   page, which answers a different question -- "which items are below a configured
+   threshold?" -- and keeps showing "Low stock: 0" for the rest. */
+function AttentionBand({ t, items, onGoToPage }) {
+  const catalog = items || [];
+  // Deliberately a DIFFERENT order from the Consumables page's, which sorts by name
+  // because it is a catalog you look things up in. This is a triage list, so the most
+  // depleted item has to be first. The id tail makes it total.
+  const rows = catalog
+    .filter(ci => (ci.stock ?? 0) <= 0 || ci.low_stock)
+    .sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0)
+      || String(a.name).localeCompare(String(b.name))
+      || a.id - b.id);
+
+  const CAP = 8;
+  const shown = rows.slice(0, CAP);
+  const rest = rows.length - shown.length;
+
+  return (
+    <div className="mini-card now-band">
+      <div className="now-band-head">
+        <span className="mini-card-title">{t.attentionTitle}</span>
+        <span className="now-band-head-right">
+          <button type="button" className="btn btn-ghost" onClick={() => onGoToPage('consumables')}>
+            {t.attentionOpen}
+          </button>
+        </span>
+      </div>
+
+      {/* The block ALWAYS renders, empty or not. A block that vanishes teaches the
+          reader it does not exist, and absence-of-block on a dashboard is
+          indistinguishable from absence-of-feature -- which is the whole answer to "how
+          does anyone know it is here". The all-clear is deliberately QUIET ink and a
+          small check rather than a green wash: this is the absence of a conclusion, not
+          a conclusion, and a green card would be announcing good news. */}
+      {catalog.length === 0 && <p className="now-group-empty">{t.noConsumableItems}</p>}
+
+      {catalog.length > 0 && rows.length === 0 && (
+        <span className="attn-allgood">{Ic.check} {t.attentionAllGood}</span>
+      )}
+
+      {shown.length > 0 && (
+        <div className="attn-chips">
+          {shown.map(ci => (
+            <span className={'attn-chip' + ((ci.stock ?? 0) < 0 ? ' is-over' : '')}
+              key={ci.id}
+              title={(ci.low_stock || (ci.stock ?? 0) < 0)
+                ? t.attentionAtLevel.replace('{n}', ci.reorder_level)
+                : t.attentionEmpty}>
+              <ConsumableIcon name={ci.icon} size={22}/>
+              <span className="attn-name">{ci.name}</span>
+              {/* The badge says WHY, and only when it adds something the number does
+                  not. A chip reading "empty  0" says the same thing twice, which is
+                  what the first screenshot showed for every item; the zero alone is
+                  the alarm, and "empty" moves to the title where it explains the chip
+                  to a pointer or a screen reader without repeating it visually. */}
+              {(ci.stock ?? 0) < 0 ? <span className="badge badge-overdue">{t.stockOverdrawn}</span>
+                : ci.low_stock ? <span className="badge badge-soon">{t.lowStock}</span>
+                : null}
+              <span className="attn-stock">{ci.stock ?? 0}</span>
+            </span>
+          ))}
+          {/* A plain count, not a button: the block already has one link to the same
+              destination, and the sort puts the LEAST urgent items in this tail. */}
+          {rest > 0 && <span className="attn-more">{t.attentionAndMore.replace('{count}', rest)}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Dashboard({ users, stats, consumableItems, onGoToPage }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
 
@@ -7071,11 +7517,20 @@ function Dashboard({ users, stats }) {
   // to stay an em dash rather than count up from zero to nothing.
   const avgNum = stats ? Number(stats.avg_minutes) : null;
   const avgText = avgNum === null ? '—' : Number(avgNum).toFixed(1);
-  // Everyone who can currently sign in, whatever their role: managers log
-  // issues too, and a deactivated account is not active no matter its role.
-  // The `active` flag is the same one that gates login in GetForToken, so
-  // this is the roster of people who could be working today.
-  const activeUsers  = users.filter(u=>u.active);
+
+  // ONE rota fetch for the whole page, lifted out of TodayBand so the tile and the band
+  // cannot disagree. Two requests would be two answers to "who is on", sixty seconds
+  // apart, and the number in the tile would be the one nobody reads.
+  const rota = useTodayRota();
+  const rotaMembers = (rota.data && rota.data.members) || [];
+  // null, not 0: while the answer is unknown the tile must show an em dash. "0 people
+  // working" is a meaningful and WRONG answer, and it is the one a naive
+  // `(rotaMembers || []).length` produces.
+  const onNow = rota.data ? rotaMembers.filter(m => m.status === 'working_now').length : null;
+  // Whoever is next, which is what the old tile should have been saying. Coming_soon is
+  // already sorted by shift start, so the first of them is the soonest.
+  const onNextCell = rotaMembers.find(m => m.status === 'coming_soon' && m.shift);
+  const onNext = onNextCell ? { name: onNextCell.name, time: onNextCell.shift.start_time } : null;
 
   // The bars grow once the data behind them is settled. Keyed on the props rather
   // than on byTech/byType, because both are rebuilt into a fresh object on every
@@ -7112,11 +7567,42 @@ function Dashboard({ users, stats }) {
           <div className="stat-sub"><span className="stat-dot" style={{background:'var(--amber)'}}></span>{t.acrossAll}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">{t.activeUsers}</div>
-          <div className="stat-value"><CountUp value={activeUsers.length}/></div>
-          <div className="stat-sub"><span className="stat-dot" style={{background:'var(--teal-mid)'}}></span>{activeUsers.map(u=>u.name).join(' · ')||'—'}</div>
+          <div className="stat-label">{t.todayOnShift}</div>
+          {/* An EM DASH while the answer is unknown, never 0. "0 people working" is a
+              meaningful and wrong answer; the em dash is the one thing on this row that
+              is not a figure, which is the same reasoning avgTime gives above. */}
+          <div className="stat-value">
+            {onNow === null ? '—' : <CountUp value={onNow}/>}
+          </div>
+          <div className="stat-sub">
+            <span className="stat-dot" style={{background: onNow ? 'var(--green)' : 'var(--teal-mid)'}}></span>
+            {/* The old tile put EVERY active user's name into this box, which .stat-sub
+                has no clamp for -- about 1,800px of text in a 244px column, seven
+                wrapped lines, and the page read BROKEN rather than empty. One bounded
+                line naming who is NEXT, which is the thing a reader actually wants off
+                a dashboard, replaces it.
+
+                The caption is CONDITIONAL rather than falling back to a sentence about
+                nobody being on. The first version fell back to todayNoneWorking, which
+                printed "2" directly above "Nobody is on shift right now" -- the tile
+                contradicting its own caption because the caption was about the wrong
+                thing. When nobody is coming later the honest caption is no caption. */}
+            {onNext
+              ? t.todayNext.replace('{name}', onNext.name).replace('{time}', onNext.time)
+              : (onNow === 0 ? t.todayNoneWorking : '')}
+          </div>
         </div>
       </div>
+
+      {/* The two operational bands sit ABOVE the bar charts, not below them. Everything
+          above them is retrospective -- issues logged, issues resolved, averages -- and
+          nothing on the page answered "what is happening now" until these two arrived.
+          The charts are the only surfaces for by_technician and by_type, so they stay
+          rather than go; costing them a scroll is the price of putting the perishable
+          content where people are looking. */}
+      <TodayBand t={t} lang={lang} rota={rota} onGoToPage={onGoToPage}/>
+      <AttentionBand t={t} items={consumableItems} onGoToPage={onGoToPage}/>
+
       <div className="bottom-grid">
         <div className="mini-card">
           <div className="mini-card-title">{t.workload}</div>
@@ -16337,7 +16823,8 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
                 working. */}
             <PageErrorBoundary resetKey={page}>
             <PageShell page={page}>
-            {page==='dashboard' && <Dashboard users={users} stats={stats}/>}
+            {page==='dashboard' && <Dashboard users={users} stats={stats}
+        consumableItems={consumableItems} onGoToPage={setPage}/>}
             {/* The issue tables fetch and paginate themselves. App used to hold
                 every issue ever logged and hand the same array to all three of
                 these pages at once, which meant the History page needed the whole

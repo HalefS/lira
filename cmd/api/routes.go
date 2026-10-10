@@ -178,6 +178,13 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPatch, "/v1/shifts/:id", app.requireAuth(app.requireManager(app.updateShiftHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/shifts/:id", app.requireAuth(app.requireManager(app.deleteShiftHandler)))
 
+	// The dashboard's "who is on now", PUBLIC like /v1/schedule above because it is a
+	// strict subset of what that already publishes. A different path from
+	// /v1/schedule/today on purpose -- see listTodayHandler for the reason, which is
+	// about not making a third reader re-derive two different httprouter collision
+	// rules rather than about an actual conflict.
+	router.HandlerFunc(http.MethodGet, "/v1/today", app.listTodayHandler)
+
 	// Absences — the dated exceptions to the rota, so the access is the OPPOSITE of
 	// the rota's own: every one of these is manager-only, including the read.
 	//
