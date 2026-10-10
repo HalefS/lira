@@ -304,6 +304,23 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodGet, "/v1/lcu/units/:id", app.requireAuth(app.getLCUUnitHandler))
 	router.HandlerFunc(http.MethodDelete, "/v1/lcu/units/:id", app.requireAuth(app.deleteLCUUnitHandler))
 
+	// The resting history -- readers whose trial has ended -- and the size of the
+	// reconditioned pool.
+	//
+	// requireAuth only, like every other /v1/lcu route: the history is scoped to what
+	// the caller may see (a technician's own readers, a manager's all), and the POOL
+	// COUNT is deliberately team-wide for everyone, because "how many known-good
+	// readers are in the cupboard" is a fact about the hotel and a technician
+	// deciding whether to swap a reader needs the whole number.
+	//
+	// This is also the ONLY endpoint that runs ResolveDue now. It used to run in
+	// /v1/lcu/today and /v1/lcu/units, and both were the wrong place: the frontend
+	// calls /v1/lcu/today first and alone on every boot, so the sweep resolved every
+	// overnight window on a request whose result was thrown away, and a sweep's
+	// "+3 readers added to the pool" had no endpoint left to be reported through.
+	// See listLCURestingHandler.
+	router.HandlerFunc(http.MethodGet, "/v1/lcu/resting", app.requireAuth(app.listLCURestingHandler))
+
 	// lcuGate sits inside authenticate because it needs the resolved user, and
 	// outside the router so it covers every route rather than the ones someone
 	// remembered to wrap.

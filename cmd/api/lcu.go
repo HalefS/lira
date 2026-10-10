@@ -101,13 +101,25 @@ func canAnswerFor(user *data.User, unit *data.LCUUnit) bool {
 func (app *application) lcuTodayHandler(w http.ResponseWriter, r *http.Request) {
 	today := data.Today()
 
-	// Close out any window that has ended, so a reader that finished its week
-	// while nobody was looking is not still shown as on trial.
-	if _, err := app.models.LCU.ResolveDue(today); err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-
+	// DELIBERATELY DOES NOT SWEEP. It used to call ResolveDue here, to "close out any
+	// window that has ended, so a reader that finished its week while nobody was
+	// looking is not still shown as on trial". That reason is real, but this is the
+	// worst possible place to act on it, for two reasons that only became obvious
+	// once a sweep had something to report:
+	//
+	// The frontend fires /lcu/today FIRST AND ALONE on every boot, before anything
+	// else, because the gate refuses everything until today's tests are answered. So
+	// this request is the one that sweeps in effectively every session -- and its
+	// result was discarded. Every window that closed overnight was resolved here, by a
+	// request the user never looks at, so a sweep's "+3 readers added to the pool"
+	// could never be reported to anybody. The new credit output would have been empty
+	// in 100% of real sessions.
+	//
+	// Moving the sweep to GET /v1/lcu/resting fixes that, and is safe for the gate:
+	// PendingToday tests `$3::date BETWEEN u.starts_on AND u.ends_on` -- a DATE RANGE
+	// that excludes a closed window whether or not the sweep has run. So a reader that
+	// finished its week is not "still shown as on trial" here either way, and nothing
+	// is locked.
 	user := app.contextGetUser(r)
 	pending, err := app.models.LCU.PendingToday(user.ID, today)
 	if err != nil {
@@ -124,13 +136,13 @@ func (app *application) lcuTodayHandler(w http.ResponseWriter, r *http.Request) 
 
 // listLCUUnitsHandler returns the readers on trial. A manager sees everyone's;
 // everyone else sees only their own.
+// listLCUUnitsHandler returns the readers still ON TRIAL.
+//
+// It no longer sweeps. See lcuTodayHandler for why the sweep moved to
+// listLCURestingHandler, and the short version is that this endpoint used to be the
+// place a window closed, which meant the sweep happened on a request whose result was
+// thrown away.
 func (app *application) listLCUUnitsHandler(w http.ResponseWriter, r *http.Request) {
-	today := data.Today()
-	if _, err := app.models.LCU.ResolveDue(today); err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-
 	user := app.contextGetUser(r)
 	limit, capped := app.readLimit(r)
 	var (
@@ -169,6 +181,87 @@ func (app *application) listLCUUnitsHandler(w http.ResponseWriter, r *http.Reque
 		"limit":        limit,
 		"limit_capped": capped,
 	}, nil)
+}
+
+// listLCURestingHandler returns the resting history -- readers whose trial has ended
+// -- and the reconditioned pool.
+//
+// THIS IS WHERE ResolveDue RUNS, and that placement is the feature rather than an
+// accident of where it used to live. lcuTodayHandler explains the move; the short
+// version is that the frontend boots by calling /lcu/today alone, so a sweep there
+// resolved every overnight window on a request whose result was discarded, and a
+// sweep's "+3 readers added to the pool" had nowhere to be reported to.
+//
+// Here it is on an endpoint the LCU page actually renders, so a credit made by any
+// sweep is visible to the next load of this page -- including one performed by a
+// colleague's session, which is the case that would otherwise be lost forever.
+//
+// The response carries four things, and each answers a different question:
+//
+//	units                  the resting history, scoped to what the caller may see
+//	reconditioned.pool     team-wide: how many known-good readers are in the cupboard
+//	reconditioned.yours    how many the CALLER added
+//	newly_reconditioned    what THIS sweep credited, empty on every other load
+//
+// pool and yours are deliberately not the same number and are deliberately not
+// derived from one another. See data.ReconditionedPool.
+func (app *application) listLCURestingHandler(w http.ResponseWriter, r *http.Request) {
+	today := data.Today()
+
+	// The sweep runs before the read so that a reader whose window closed a moment
+	// ago appears in this response rather than the next one. Doing it after would
+	// mean the count and the list disagreed on the very load that resolved them.
+	_, credited, err := app.models.LCU.ResolveDue(today)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	user := app.contextGetUser(r)
+	limit, capped := app.readLimit(r)
+
+	var (
+		units []*data.LCUUnit
+		total int
+	)
+	if user.Role == "manager" {
+		units, total, err = app.models.LCU.ListRestedAll(limit)
+	} else {
+		units, total, err = app.models.LCU.ListRestedForUser(user.ID, limit)
+	}
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	if units == nil {
+		units = []*data.LCUUnit{}
+	}
+
+	pool, err := app.models.LCU.ReconditionedPool(r.Context(), user.ID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.writeJSON(w, http.StatusOK, envelope{
+		"units":               units,
+		"total":               total,
+		"limit":               limit,
+		"limit_capped":        capped,
+		"reconditioned":       pool,
+		"newly_reconditioned": creditsOrEmpty(credited),
+	}, nil)
+}
+
+// creditsOrEmpty turns a nil slice into an empty one, so the key is always a JSON
+// array. A nil slice marshals to null, and a client written against [] has to grow a
+// null check for a case that never means anything -- the same reason listLCUUnitsHandler
+// normalises its units.
+func creditsOrEmpty(credited []*data.LCUCredit) []*data.LCUCredit {
+	if credited == nil {
+		return []*data.LCUCredit{}
+	}
+	return credited
 }
 
 // createLCUUnitHandler puts a reader on trial. The window opens today and runs
@@ -354,6 +447,22 @@ func (app *application) recordLCUTestsHandler(w http.ResponseWriter, r *http.Req
 				data.DateOnly(unit.EndsOn).Format("2006-01-02")))
 			continue
 		}
+		// A FUTURE day inside the window. Shipped with the pool because it is the
+		// same feature: the window check above is satisfied by a day that has not
+		// happened yet, so one request could record all seven verdicts on day one and
+		// the reader would pass a fortnight of trial with nobody holding a card
+		// against it.
+		//
+		// That defeats the entire premise of the feature -- 000019's reason for a
+		// week-long window rather than a single test is "a reader that works on
+		// Monday can still be intermittent by Friday" -- and before the pool existed
+		// it cost one wrong verdict. Now it costs a fabricated reader in a stock
+		// count, which is the most abusable number in the app. Two lines here rather
+		// than a separate change request against the same loop.
+		if wr.day.After(data.Today()) {
+			v.AddError("day", "cannot be in the future")
+			continue
+		}
 	}
 	if !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
@@ -391,14 +500,33 @@ func (app *application) recordLCUTestsHandler(w http.ResponseWriter, r *http.Req
 
 // deleteLCUUnitHandler drops a reader that was never going to be worth testing,
 // taking its log with it. The owner or a manager only.
+//
+// A reader in the reconditioned pool is refused with 409 unless the request says
+// force=true. See data.RotaRosterModel's counterpart for why the two acts are kept
+// apart: deleting the row and scrapping the hardware are different facts about the
+// world, and one of them silently standing in for the other is how a stock count
+// starts lying.
+//
+// 409 rather than 422 because nothing about the request is malformed -- it is a
+// perfectly good request that conflicts with the reader's state, which is what
+// Conflict is for, and the client distinguishes it by STATUS (see apiFetch) rather
+// than by matching an English sentence.
 func (app *application) deleteLCUUnitHandler(w http.ResponseWriter, r *http.Request) {
 	unit, ok := app.lcuUnitForRequest(w, r)
 	if !ok {
 		return
 	}
-	if err := app.models.LCU.Delete(unit.ID); err != nil {
+	force := r.URL.Query().Get("force") == "true"
+	if err := app.models.LCU.Delete(unit.ID, force); err != nil {
 		if errors.Is(err, data.ErrRecordNotFound) {
 			app.notFoundResponse(w, r)
+			return
+		}
+		if errors.Is(err, data.ErrUnitInReconditionedPool) {
+			app.writeJSON(w, http.StatusConflict, envelope{
+				"error":  err.Error(),
+				"reason": "in_reconditioned_pool",
+			}, nil)
 			return
 		}
 		app.serverErrorResponse(w, r, err)

@@ -2138,6 +2138,64 @@ html.dark .week-nav button { background: var(--gray-50); }
 .lcu-howto svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--blue); margin-top: 1px; }
 .lcu-lockout { text-align: center; font-size: 12px; color: var(--gray-400); margin-top: 4px; }
 
+/* ── Resting history and the reconditioned pool ──
+   Every colour below is an existing token, so dark mode flips with no override of
+   its own. That is the test: if one of these ever needs a dark rule, a token was
+   bypassed. */
+
+/* Two cards, not one card with two numbers. "Pool: 40, yours: 3" reads as a
+   contradiction however it is worded -- wording cannot fix a layout problem. Two
+   surfaces is what structurally separates a fact about the hotel from a fact about
+   you, and it is why this is not .stats-grid (which is hard-coded to four columns
+   and would leave two of them empty). */
+.lcu-pool-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 18px; }
+@media (max-width: 520px) { .lcu-pool-grid { grid-template-columns: 1fr; } }
+
+/* The resting section is a ledger, not a set of cards: homogeneous records, scanned
+   down a column, paged. .table-card / .table-header / table is the register
+   ConsumablesPage already established, so this borrows it rather than inventing a
+   fourth idiom. The alternative -- reusing LCUUnitCard -- gives a reader that
+   finished three weeks ago the same seven-cell day strip and the same entrance
+   animation as live work, which is the problem the section exists to solve. */
+.lcu-resting-table { width: 100%; border-collapse: collapse; }
+.lcu-resting-table th {
+  text-align: left; padding: 9px 20px;
+  font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--gray-400); border-bottom: 1px solid var(--gray-200);
+  /* Wrapping heads, because the longest one is "LEITORES RECONDICIONADOS" and
+     uppercase plus letter-spacing makes it wider than the column it names. */
+  white-space: normal;
+}
+/* The delete column holds a button or nothing at all, so it must not be a column the
+   browser sizes by content. width:1% + nowrap shrinks it to exactly what it needs and
+   hands the space back to the columns that have something to say -- which is what was
+   clipping the pool header in Portuguese. */
+.lcu-resting-table th:last-child,
+.lcu-resting-table td:last-child { width: 1%; white-space: nowrap; }
+.lcu-resting-table td { padding: 11px 20px; border-bottom: 1px solid var(--gray-100); font-size: 13px; vertical-align: middle; }
+.lcu-resting-table tr:last-child td { border-bottom: 0; }
+html.dark .lcu-resting-table td { border-color: var(--gray-200); }
+
+/* is-pass is .badge-ok and is-fail is .sla-breach, restated as classes rather than
+   the inline style LCUUnitCard carries for the same two colours. */
+.lcu-verdict.is-pass { background: var(--green-light); color: var(--green); }
+.lcu-verdict.is-fail { background: var(--red-light); color: var(--red); }
+
+.lcu-cell-dim { color: var(--gray-400); font-size: 12.5px; white-space: nowrap; }
+/* DM Mono because the pass figure is a RATIO, and a ratio set in a proportional face
+   is hard to scan down a column -- the same reasoning .roster-count gives. */
+.lcu-cell-fig { font-family: 'DM Mono', monospace; color: var(--gray-900); white-space: nowrap; }
+.lcu-cell-recond { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.lcu-pool-since { font-size: 12.5px; color: var(--gray-600); font-weight: 500; white-space: nowrap; }
+/* An em-dash, not a blank. Same grammar .rota-cell.is-off uses: in a bordered row a
+   blank reads as loading, and a ledger that looks like it is loading looks broken. */
+.lcu-cell-none { color: var(--gray-300); }
+
+/* The pool number, on the load that moved it. Reuses statusHighlightPulse rather than
+   declaring a fourth keyframe for "a figure just changed" -- it is already exactly
+   that, and it is already known to read on both surfaces. */
+.lcu-pool-fresh { animation: statusHighlightPulse 700ms ease-out; }
+
 /* ── Modal ── */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(28,28,26,0.45);
@@ -2796,6 +2854,16 @@ async function apiFetch(path, { method='GET', body, token } = {}) {
       ? (typeof data.error === 'object' ? Object.values(data.error).join(', ') : data.error)
       : 'Something went wrong';
     const err = new Error(msg);
+    // The STATUS travels with the error.
+    //
+    // Without it a caller can only tell two refusals apart by matching the English
+    // sentence the server wrote -- and envelope.error is server-controlled English, so
+    // matching it also breaks the EN/PT parity every other string in this file keeps.
+    // The LCU pool guard needs this: deleting a reader that is in the pool is a 409
+    // with a perfectly good message, and the row it belongs on has to show its own
+    // error rather than the page banner nine hundred pixels away.
+    err.status = res.status;
+    err.reason = data.reason;
     // The server refuses work from a user who still owes an LCU result for
     // today. Both cases here are 403, so the code in the body is the only way to
     // tell them apart; the units come along so the prompt can be built from the
@@ -3670,7 +3738,6 @@ const T = {
     lcuSerialPlaceholder: 'e.g. LCU-88231',
     lcuNote: 'Note (optional)',
     lcuNotePlaceholder: 'Which door it came from',
-    lcuNone: 'No LCU test units yet.',
     lcuAdded: 'LCU test unit added',
     lcuDeleted: 'LCU test unit removed',
     lcuRecorded: "Today's result recorded",
@@ -3689,6 +3756,31 @@ const T = {
     lcuGateBody: 'Record how each reader behaved today before you can carry on using the app.',
     lcuGateLogOut: 'Log out',
     lcuGateLocked: 'The app stays locked until every reader is answered.',
+    // -- Resting history and the reconditioned pool ---------------------------
+    // A reader whose trial ended, and the cupboard of known-good ones.
+    lcuNone: 'No readers on trial.',
+    lcuPool: 'Reconditioned pool',
+    // The disambiguator. "Pool: 40 / Added by you: 3" reads as a contradiction until
+    // this says the 40 is the whole team's, and it has to be on the pool card rather
+    // than under the small number, because that is the card people look at.
+    lcuPoolSub: 'Known-good readers in the cupboard, from the whole team',
+    lcuPoolYours: 'Added by you',
+    lcuPoolSince: 'In the pool since {date}',
+    lcuResting: 'Finished trials',
+    lcuRestingSub: 'Readers whose trial has ended, newest verdict first',
+    lcuRestingNone: 'No finished trials yet.',
+    // Column heads for the resting table. Separate keys rather than reusing lcuDay or
+    // lcuResting: a table head has to NAME its column, and "Day" above a date range is
+    // a label that is technically related and completely unhelpful.
+    lcuColVerdict: 'Verdict',
+    lcuColWindow: 'Trial window',
+    lcuColResult: 'Days passed',
+    lcuColResolved: 'Resolved',
+    // Fired once, on the load whose sweep actually credited them. Not derivable in the
+    // browser: the credit is made server-side by whichever request ran the sweep.
+    lcuReconditionedOne: '1 reader added to the reconditioned pool',
+    lcuReconditionedMany: '{count} readers added to the reconditioned pool',
+    lcuDeleteBlocked: 'This reader is in the reconditioned pool and cannot be removed.',
     signInBtn: 'Sign in',
     // Self-service reset. The code comes from a manager, not from an email:
     // this is the path for someone who cannot remember their password at all.
@@ -4517,7 +4609,7 @@ const T = {
     lcuSerialPlaceholder: 'ex. LCU-88231',
     lcuNote: 'Nota (opcional)',
     lcuNotePlaceholder: 'De que porta veio',
-    lcuNone: 'Ainda não há unidades de teste LCU.',
+    lcuNone: 'Ainda não há leitores em teste.',
     lcuAdded: 'Unidade de teste LCU adicionada',
     lcuDeleted: 'Unidade de teste LCU removida',
     lcuRecorded: "Resultado de hoje registado",
@@ -4536,6 +4628,25 @@ const T = {
     lcuGateBody: 'Registe como se comportou cada leitor hoje antes de continuar a usar a aplicação.',
     lcuGateLogOut: 'Terminar sessão',
     lcuGateLocked: 'A aplicação fica bloqueada até responder para todos os leitores.',
+    // -- Testes terminados e o pool recondicionado ---------------------------
+    // "Stock" is already the consumables' word here, and reusing it for readers would
+    // collide. "Pool" is left untranslated on purpose: the obvious Portuguese
+    // alternative is "reserva", which in a hotel means a BOOKING -- an alarming thing
+    // to read next to a count of hardware.
+    lcuPool: 'Leitores recondicionados',
+    lcuPoolSub: 'Leitores bons no armário, de toda a equipa',
+    lcuPoolYours: 'Adicionados por si',
+    lcuPoolSince: 'No pool desde {date}',
+    lcuResting: 'Testes terminados',
+    lcuRestingSub: 'Leitores cujo teste terminou, veredicto mais recente primeiro',
+    lcuRestingNone: 'Ainda não há testes terminados.',
+    lcuColVerdict: 'Veredicto',
+    lcuColWindow: 'Janela de teste',
+    lcuColResult: 'Dias aprovados',
+    lcuColResolved: 'Resolvido',
+    lcuReconditionedOne: '1 leitor adicionado ao pool recondicionado',
+    lcuReconditionedMany: '{count} leitores adicionados ao pool recondicionado',
+    lcuDeleteBlocked: 'Este leitor está no pool recondicionado e não pode ser removido.',
     signInBtn: 'Iniciar sessão',
     // Self-service reset. The code comes from a manager, not from an email:
     // this is the path for someone who cannot remember their password at all.
@@ -9399,6 +9510,92 @@ function LCUUnitCard({ unit, today, onAnswer, onDelete, t, index }) {
   );
 }
 
+/* One row of the resting history -- a trial that has ended.
+
+   A table row, and specifically NOT an LCUUnitCard. A resolved unit's whole log is
+   three numbers: passes, fails, window length. Seven coloured day-cells carry
+   exactly those three numbers, so the strip is ninety pixels of picture around twenty
+   pixels of information, and on a forty-row pool that is the difference between a
+   scroll and a page.
+
+   It also carries no answer control, because there is nothing left to answer. */
+function LCURestingRow({ t, lang, unit, fresh, onDelete, busy }) {
+  const [err, setErr] = useState('');
+
+  const passed = unit.status === 'passed';
+  // The window it actually ran, not the current setting -- a reader trialled for a
+  // week stays a week long after the default moves to fourteen.
+  const range = `${unit.starts_on.slice(0,10)} → ${unit.ends_on.slice(0,10)}`;
+  const since = unit.pool_counted_at
+    ? new Date(unit.pool_counted_at).toLocaleDateString(lang === 'pt' ? 'pt-PT' : 'en-GB',
+        { day: '2-digit', month: 'short' })
+    : '';
+
+  async function remove() {
+    setErr('');
+    try { await onDelete(unit); }
+    catch (ex) {
+      // Row-local, not the page banner. The banner sits above the list, so a refusal
+      // reported there is nine hundred pixels from the button that caused it.
+      if (ex.status === 409) { setErr(t.lcuDeleteBlocked); return; }
+      setErr(ex.message || '');
+    }
+  }
+
+  return (
+    <tr className={fresh ? 'row-enter' : undefined}>
+      <td><span className="lcu-serial">{unit.serial}</span></td>
+      <td>
+        <span className={`badge lcu-verdict ${passed ? 'is-pass' : 'is-fail'}`}>
+          {passed ? t.lcuPassed : t.lcuFailed}
+        </span>
+      </td>
+      <td className="lcu-cell-dim">{range}</td>
+      <td className="lcu-cell-fig"
+        title={`${unit.passes} ${t.lcuPassed.toLowerCase()} · ${unit.fails} ${t.lcuFailed.toLowerCase()}`}>
+        {unit.passes}/{unit.window_days}
+      </td>
+      <td className="lcu-cell-dim">
+        {unit.resolved_at
+          ? new Date(unit.resolved_at).toLocaleDateString(lang === 'pt' ? 'pt-PT' : 'en-GB',
+              { day: '2-digit', month: 'short' })
+          : '—'}
+      </td>
+      <td className="lcu-cell-recond">
+        {unit.in_pool ? (
+          <>
+            <span className="lcu-pool-since">{t.lcuPoolSince.replace('{date}', since)}</span>
+            {unit.added_by_name && <span className="lcu-meta">{t.lcuAddedBy} {unit.added_by_name}</span>}
+          </>
+        ) : (
+          <span className="lcu-cell-none">—</span>
+        )}
+      </td>
+      <td style={{textAlign:'right'}}>
+        {/* Delete is offered ONLY when the reader is not in the pool, and the reason is
+            not that deleting is forbidden -- it is not, with force -- but that on a
+            pool-bound reader the button's most common outcome is a refusal. A control
+            whose common outcome is an error is a bad control.
+
+            It is still there for failed readers and for passed readers that predate the
+            pool, so nothing that used to be deletable becomes quietly undeletable. */}
+        {!unit.in_pool && unit.can_answer && (
+          <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}}
+            disabled={busy}
+            onClick={()=>{ if (confirm(t.lcuDeleteConfirm.replace('{days}', unit.window_days || 7))) remove(); }}>
+            {t.lcuDelete}
+          </button>
+        )}
+      </td>
+      {err && (
+        <tr className="lcu-err-row"><td colSpan={7}>
+          <div className="auth-error" style={{margin:'0'}}>{err}</div>
+        </td></tr>
+      )}
+    </tr>
+  );
+}
+
 function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
@@ -9408,6 +9605,7 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
   const [note, setNote]       = useState('');
   const [saving, setSaving]   = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [restBusy, setRestBusy] = useState(false);
 
   // The trial length is a manager setting, so the page copy cannot name a number.
   // 7 is the same default the server falls back to.
@@ -9416,18 +9614,56 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
   // on every render without mattering.
   const withDays = s => s.replace('{days}', days);
 
+  /* The resting history, paged independently of the active list.
+
+     A second usePagedList instance is safe because all of that hook's state is
+     function-local -- no module state, no context, no singleton -- so the two carry
+     separate limits and separate rows. They share filterKey deliberately: one reload
+     after answering a day should drop BOTH back to a single page, and the reason the
+     active list drops back is that its rows were fetched before the answer and the
+     answer is not among them.
+
+     It is also the request that PERFORMS the sweep. See cmd/api/lcu.go: this
+     endpoint is the only place ResolveDue runs, precisely so that a credit made by
+     any sweep can be reported to the next load of this page. */
+  const restingList = usePagedList(limit => `/lcu/resting?limit=${limit}`, token, {
+    rowsKey: 'units',
+    filterKey: `${refreshKey}|${reloadKey}`,
+    onError: ex => {
+      if (ex.lcuRequired) { onLcuRequired(ex); return; }
+      // Deliberately NOT setErr. The active list owns the page-level banner; two
+      // failing requests must not stack two copies of the same message at the top.
+    },
+  });
   /* Readers on trial, paged. `refreshKey` is bumped when the daily prompt closes,
      so the list is re-read after an answer rather than left showing whatever it
      managed to fetch before the gate closed -- and it doubles as the filter key,
      so it also drops back to a single page rather than showing the answer under
      pages of rows fetched before it.
 
+     THE FILTER KEY IS DELIBERATELY PAIRED WITH THE RESTING LIST'S ARRIVAL BELOW.
+
+     ResolveDue -- the sweep that closes ended windows and credits the pool -- now
+     runs on GET /v1/lcu/resting and nowhere else, so that a credit made by ANY
+     sweep can be reported (cmd/api/lcu.go explains why /v1/lcu/today was the wrong
+     home for it). The cost is that /vcu/units no longer sweeps, and a page that
+     fetched both in parallel could read the active list BEFORE the sweep and render
+     eight resolved readers as "On trial" -- which is exactly what the first
+     screenshot showed.
+
+     Making this list wait for the resting list is the fix. It costs one round trip
+     of ordering on a page that is showing a week of history anyway, and it is the
+     only thing here that is load-bearing rather than tidy: reversing these two
+     requests reproduces the bug immediately. Hence the key, and hence this
+     paragraph -- a bare `filterKey` that happens to encode "after" is the kind of
+     line nobody dares touch.
+
      Adding a unit makes today's result owed straight away, so the reload that
      follows is itself refused. That is the gate working, not a failure, and it
      arrives here as an error rather than an empty list. */
   const paged = usePagedList(limit => `/lcu/units?limit=${limit}`, token, {
     rowsKey: 'units',
-    filterKey: `${refreshKey}|${reloadKey}`,
+    filterKey: restingList.rows ? `${refreshKey}|${reloadKey}` : 'awaiting-sweep',
     onError: ex => {
       if (ex.lcuRequired) { onLcuRequired(ex); return; }
       setErr(ex.message);
@@ -9440,8 +9676,45 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
   // line above a list that has since loaded perfectly well.
   useEffect(() => { if (paged.res) setErr(''); }, [paged.res]);
 
+
+  const restRows = restingList.rows || [];
+  const restRes  = restingList.res;
+  const pool    = (restRes && restRes.reconditioned && restRes.reconditioned.pool) || 0;
+  const yours   = (restRes && restRes.reconditioned && restRes.reconditioned.yours) || 0;
+  const credits = (restRes && restRes.newly_reconditioned) || [];
+
+  /* THE TOAST, GUARDED ON IDENTITY RATHER THAN ON "FIRST RENDER".
+
+     loadMore refetches /lcu/resting with a bigger limit, and a sweep can genuinely
+     happen between two of those fetches -- so newly_reconditioned can legitimately be
+     non-empty again on a later load, not only on the first. Guarding on ids rather
+     than on a once-flag therefore does the right thing in both cases, where "only
+     toast on mount" would announce the same three readers twice and "only ever toast
+     once" would stay silent about the fourth. */
+  const announced = useRef({});
+  useEffect(() => {
+    if (!credits.length) return;
+    const fresh = credits.filter(c => !announced.current[c.unit_id || c.serial]);
+    if (!fresh.length) return;
+    credits.forEach(c => { announced.current[c.unit_id || c.serial] = true; });
+    setToast(fresh.length === 1
+      ? t.lcuReconditionedOne
+      : t.lcuReconditionedMany.replace('{count}', fresh.length));
+  }, [restRes, setToast, t]);
+
+  // The pulse is a one-shot flag rather than a class held for ever: the number stops
+  // moving, so the highlight has to stop too or it reads as "still counting".
+  const [poolFresh, setPoolFresh] = useState(false);
+  useEffect(() => {
+    if (!credits.length) return;
+    setPoolFresh(true);
+    const h = setTimeout(() => setPoolFresh(false), 800);
+    return () => clearTimeout(h);
+  }, [restRes]);
+  useEffect(() => { if (!restRes) setPoolFresh(false); }, [restRes]);
+
   async function reload() {
-    // Handled by bumping the key the hook watches.
+    // Handled by bumping the key the hooks watch.
     setReloadKey(k => k + 1);
   }
 
@@ -9473,12 +9746,60 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
     } catch(ex) { setErr(ex.message); }
   }
 
+  /* Removing from the resting history.
+
+     It RE-THROWS rather than reporting, because the two callers want different
+     things: an active card wants the message on the page banner, and a resting row
+     wants it next to the button. The row catches a 409 and keeps it to itself; the
+     active card lets it land on the banner as before. */
+  async function removeResting(unit) {
+    setRestBusy(true);
+    try {
+      await apiFetch(`/lcu/units/${unit.id}`, {method:'DELETE', token});
+      setToast(t.lcuDeleted);
+      reload();
+    } finally {
+      setRestBusy(false);
+    }
+  }
+
   return (
     <div style={{maxWidth:900}}>
       <div className="lcu-howto" style={{marginBottom:18}}>
         {Ic.info}
         <span>{withDays(t.lcuIntro)}</span>
       </div>
+
+      {/* THE POOL, ABOVE EVERYTHING ELSE.
+
+          The number frames the work, and the "+1" is an event about a count -- so the
+          news has to land where people are already looking. My first candidate put
+          this block below the resting history, which is where the credit is most
+          legible; that is wrong, because by then you have scrolled past the thing the
+          toast just told you changed.
+
+          The block is CONDITIONAL on a non-zero pool rather than rendering a zero. A
+          large grey "0" above an "Add test unit" button reads as a shortfall, when the
+          honest statement is that nobody has run a trial yet -- which is silence, and
+          silence is what an unused feature looks like. */}
+      {(pool > 0 || credits.length > 0) && (
+        <div className="lcu-pool-grid">
+          <div className="stat-card">
+            <div className="stat-label">{t.lcuPool}</div>
+            <div className={'stat-value' + (poolFresh ? ' lcu-pool-fresh' : '')}>{pool}</div>
+            <div className="stat-sub">{t.lcuPoolSub}</div>
+          </div>
+          {/* OMITTED ENTIRELY at zero rather than shown as "0". A zero here is a
+              statement about the reader ("I have done nothing"); the true statement is
+              "none of these are mine", which is not worth a tile. */}
+          {yours > 0 && (
+            <div className="stat-card">
+              <div className="stat-label">{t.lcuPoolYours}</div>
+              <div className="stat-value">{yours}</div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="team-viewbar" style={{marginBottom:16}}>
         <button className="btn btn-primary" onClick={()=>setAdding(a=>!a)}>
@@ -9528,6 +9849,64 @@ function LCUPage({ token, setToast, onLcuRequired, refreshKey, windowDays }) {
       ))}
 
       <LoadMore list={paged} t={t}/>
+
+      {/* THE RESTING HISTORY, below the active work rather than beside it.
+
+          A first run therefore shows ONE empty state, not two: the whole section --
+          header, table, LoadMore and all -- is withheld until there is something in
+          it. Two stacked .empty-state blocks two hundred pixels apart, on a page whose
+          job is "add a reader", is a lot of nothing.
+
+          Gated on !rows && !error rather than on rows alone, for the reason the active
+          list's loading state gives at the top of this file: rows is null both while a
+          request is in flight and after one failed, so asking only for rows prints
+          "Loading analytics..." underneath a red line saying the request already
+          failed. */}
+      {(restRows.length > 0 || pool > 0) && (
+        <div className="table-card" style={{marginTop:4}}>
+          <div className="table-header">
+            <span className="table-title">{t.lcuResting}</span>
+            <span className="lcu-meta">{t.lcuRestingSub}</span>
+          </div>
+
+          {!restingList.rows && !restingList.error && (
+            <div className="empty-state"><p>{t.analyticsLoading}</p></div>
+          )}
+
+          {restingList.rows && restRows.length === 0 && (
+            <div className="empty-state">{Ic.server}<p>{t.lcuRestingNone}</p></div>
+          )}
+
+          {restRows.length > 0 && (
+            <table className="lcu-resting-table">
+              <thead>
+                <tr>
+                  <th>{t.lcuSerial}</th>
+                  <th>{t.lcuColVerdict}</th>
+                  <th>{t.lcuColWindow}</th>
+                  <th>{t.lcuColResult}</th>
+                  <th>{t.lcuColResolved}</th>
+                  <th>{t.lcuPool}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {restRows.map(u => (
+                  <LCURestingRow key={u.id}
+                    t={t} lang={lang} unit={u} busy={restBusy}
+                    // Only the rows THIS sweep credited animate. Animating all forty on
+                    // first paint would be noise, and it looks like a loading bug.
+                    fresh={!!u.pool_counted_at
+                      && credits.some(c => c.unit_id === u.id)}
+                    onDelete={removeResting}/>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          <LoadMore list={restingList} t={t}/>
+        </div>
+      )}
     </div>
   );
 }
