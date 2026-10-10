@@ -722,6 +722,36 @@ type ScheduleWeek struct {
 	Week     *Week             `json:"week"`
 	Members  []*ScheduleMember `json:"members"`
 	Absences []*AbsenceRef     `json:"absences"`
+
+	// Status is where this week sits relative to today. See WeekStatus: the three-way
+	// split exists because a boolean "is this editable" cannot say that Monday is a
+	// record while Friday is still going to change next week.
+	Status WeekStatus `json:"week_status"`
+
+	// Editable is Status != past, BEFORE the caller has any say in it. It answers "can
+	// this week be written", and the page combines it with the caller's own role:
+	// CanEdit says whether they may write rota at all. Two independent axes, and
+	// collapsing them into one flag is how a technician ends up looking like a manager
+	// on a closed week.
+	Editable bool `json:"editable"`
+
+	// Recorded is whether this week has cells of its own, or is rendering the standing
+	// pattern. A future week that has never been touched is false, which is what the
+	// UI needs in order to say "this is inherited, changing it affects only this week".
+	//
+	// It means "has an opinion about at least one day", not "is complete". A week can
+	// be recorded and still inherit three of its seven days, and that is normal.
+	Recorded bool `json:"recorded"`
+
+	// HistoryExact is false for a PAST week rendered from the standing pattern because
+	// it was never recorded. It can only be false for weeks that closed before
+	// shift_week_cells existed, and the app cannot know what those weeks really were:
+	// there was only ever one pattern, so an empty past week rendering it is right
+	// until the pattern is first edited, and fabrication after that.
+	//
+	// The UI says this out loud. It is the difference between a rota that lies and one
+	// that admits it does not remember.
+	HistoryExact bool `json:"history_exact"`
 }
 
 // ScheduleModel is the recurring pattern itself: who is on what, on which weekday.
@@ -843,14 +873,19 @@ func (m ScheduleModel) Week(ref time.Time) (*ScheduleWeek, error) {
 
 	// Everything else is one read, not one per member.
 	//
-	// The outer table is aliased sa, not a: shiftColumns already uses `a` for its
-	// correlated count, and shadowing it would be a silent trap rather than an
-	// error.
-	shiftRows, err := m.DB.QueryContext(ctx, `
-		SELECT sa.user_id, sa.weekday, `+shiftColumns+`
-		FROM shift_assignments sa
-		INNER JOIN shifts s ON s.id = sa.shift_id
-		ORDER BY sa.user_id, sa.weekday`)
+	// The pattern tables are aliased pat and ps, not sa and ts: shiftColumns' correlated
+	// count uses `a`, and shadowing any of these is a silent trap rather than an error.
+	//
+	// CROSS JOIN generate_series rather than reading the cells alone: a week with NO
+	// cells has no rows to join, and that week is precisely the one that must render the
+	// standing pattern. Generating the seven weekdays makes "no rows" and "all
+	// inherited" the same shape, so the WHERE drops only the days that resolve to
+	// nothing and the loop below fills the rest as off.
+	//
+	// A frozen week and an open one read identically, which is deliberate: freezing is
+	// about WRITING. A record reads exactly as it did while the week was still open.
+	weekStart := localDay(ref)
+	shiftRows, err := m.DB.QueryContext(ctx, weekShiftQuery, weekStart)
 	if err != nil {
 		return nil, err
 	}
@@ -932,6 +967,37 @@ func (m ScheduleModel) Week(ref time.Time) (*ScheduleWeek, error) {
 		}
 		out.Absences = append(out.Absences, a.Ref())
 	}
+
+	// The four week-level flags, in one extra read rather than four. COUNT(*) is enough
+	// for both Recorded and HistoryExact because they ask different questions about the
+	// same fact: "does this week have cells" is Recorded, and "is that sufficient to
+	// know what the week was" is HistoryExact.
+	//
+	// This is a fourth query where the function previously had three, and the reason is
+	// that the count cannot be folded into query 2. Query 2 filters to days that resolve
+	// to a shift, so a recorded week whose only record is "Marco was explicitly off
+	// Tuesday" produces ZERO rows from it -- and that week is exactly the one whose
+	// Recorded flag matters most, because it diverges from the pattern.
+	var cellRows int
+	if err := m.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM shift_week_cells WHERE week_start = $1::date`,
+		DateOnly(out.Week.Start.Time())).Scan(&cellRows); err != nil {
+		return nil, err
+	}
+	// Classify against NOW, not against ref.
+	//
+	// ref is the week being asked for and today is the day it is being asked on, and
+	// they are not the same question. Week(three weeks ago) is a closed week even
+	// though ref says nothing about that -- and comparing the two is how every week
+	// comes back "current", because a week always contains its own anchor.
+	out.Status = ClassifyWeek(out.Week.Start.Time(), time.Now())
+	out.Recorded = cellRows > 0
+	out.Editable = out.Status != WeekPast
+	// A past week is exact when it holds a record. A future or current week always
+	// renders truthfully, whatever it holds, because nothing about it is history yet --
+	// and saying otherwise would put "not remembered" on the very page a manager is
+	// looking at a week before it happens.
+	out.HistoryExact = out.Status != WeekPast || cellRows > 0
 
 	return out, nil
 }
@@ -1059,35 +1125,170 @@ func (h *shiftHolder) shift() *Shift {
 // would use the DATABASE SESSION's timezone, which is not necessarily the Go process's,
 // and data.Today() exists precisely to keep that coupling out of everything that reads
 // a date.
+// WeekStatus is where a week sits relative to today.
+//
+// Three, not two, and the CURRENT one is the interesting case: a week is half elapsed, so
+// the days before today in it are history and the days after are still going to change
+// next week. A boolean cannot say that, and every decision in the write path depends on
+// it.
+type WeekStatus string
+
+const (
+	WeekPast    WeekStatus = "past"
+	WeekCurrent WeekStatus = "current"
+	WeekFuture  WeekStatus = "future"
+)
+
+// mondayOf snaps a local calendar day back to the Monday of its week.
+//
+// The ISO shift is the same one Today and Week use for the weekday index: Go numbers
+// Sunday as 0, and a rota numbers Monday as 1.
+//
+// It is deliberately NOT "the last Monday", which is what a naive t.AddDate(0,0,-int(w))
+// computes for a Sunday and would put Sunday's week in the wrong bucket. WeekRange
+// already argues the same arithmetic from the other direction.
+func mondayOf(t time.Time) time.Time {
+	return localDay(t).AddDate(0, 0, -((int(localDay(t).Weekday()) + 6) % 7))
+}
+
+// ClassifyWeek says where the week beginning on Monday weekStart stands against now.
+//
+// The boundaries are inclusive of both ends: the week containing today is current even
+// on its last day, and the week starting tomorrow is not current. That is what makes
+// "editing Sunday still changes next week" true, which is the behaviour a manager
+// expects at 18:00 on a Sunday.
+//
+// Computed from localDay, not DateOnly: this is arithmetic on calendar days, and
+// DateOnly's midnight is stamped in UTC, which would put a UK Sunday evening into the
+// following week. See localDay.
+func ClassifyWeek(weekStart, now time.Time) WeekStatus {
+	monday := localDay(weekStart)
+	switch {
+	case monday.Before(mondayOf(now)):
+		return WeekPast
+	case monday.After(mondayOf(now)):
+		return WeekFuture
+	}
+	return WeekCurrent
+}
+
+// ErrWeekClosed is returned when a write targets a week that has already ended.
+//
+// 422 rather than 409: nothing about the request is malformed and it does not conflict
+// with the caller's state, it conflicts with the CLOCK. The client distinguishes it by
+// reason and by status, never by matching an English sentence.
+var ErrWeekClosed = errors.New("schedule: that week is closed and cannot be changed")
+
+// windowLockNS namespaces the advisory lock so it cannot collide with another caller of
+// pg_advisory_xact_lock in this database.
+const windowLockNS = 0x5C4 // 2368, arbitrary and stable
+
+// shiftColumnsResolved picks each shift field from the week's own cell where the row
+// EXISTS, and from the standing pattern otherwise.
+//
+// Test is `wc.week_start IS NOT NULL`, not `wc.shift_id IS NOT NULL`, and that is the
+// whole subtlety: a cell row with a NULL shift_id means "explicitly off this week" and
+// must NOT fall back to the pattern. A plain COALESCE(wc.shift_id, sa.shift_id) cannot
+// tell "off" from "no opinion" and would silently resurrect the standing pattern for a
+// day a manager had deliberately cleared.
+// Aliases it assumes, which the Week query binds: wc the week's cell, s the shift that
+// cell names, pat the standing pattern assignment, ps the shift that pattern names.
+const shiftColumnsResolved = `,
+	CASE WHEN wc.week_start IS NOT NULL THEN s.id        ELSE ps.id END,
+	CASE WHEN wc.week_start IS NOT NULL THEN s.created_at ELSE ps.created_at END,
+	CASE WHEN wc.week_start IS NOT NULL THEN s.updated_at ELSE ps.updated_at END,
+	CASE WHEN wc.week_start IS NOT NULL THEN s.name       ELSE ps.name END,
+	CASE WHEN wc.week_start IS NOT NULL THEN s.start_time ELSE ps.start_time END,
+	CASE WHEN wc.week_start IS NOT NULL THEN s.end_time   ELSE ps.end_time END,
+	CASE WHEN wc.week_start IS NOT NULL THEN s.color      ELSE ps.color END,
+	CASE WHEN wc.week_start IS NOT NULL THEN s.active     ELSE ps.active END,
+	CASE WHEN wc.week_start IS NOT NULL THEN s.created_by ELSE ps.created_by END,
+	CASE WHEN wc.week_start IS NOT NULL THEN s.updated_by ELSE ps.updated_by END,
+	CASE WHEN wc.week_start IS NOT NULL THEN s.version    ELSE ps.version END,
+	CASE WHEN wc.week_start IS NOT NULL
+	     THEN (SELECT COUNT(*) FROM shift_assignments a WHERE a.shift_id = s.id)
+	     ELSE (SELECT COUNT(*) FROM shift_assignments a WHERE a.shift_id = ps.id) END`
+
+// resolvedShiftID is the same branch, once, for the WHERE that drops empty days.
+const resolvedShiftID = `(CASE WHEN wc.week_start IS NOT NULL THEN wc.shift_id ELSE pat.shift_id END)`
+
+// weekShiftQuery is one week, every member, every day that resolves to a shift.
+//
+// A named const rather than an inline literal so that the two half-constants cannot
+// drift from the query that binds the aliases they name -- which is the failure mode
+// when the select list, the WHERE branch and the FROM are three separate pieces of
+// string concatenation that each have to agree about wc, s, pat and ps.
+//
+// shiftColumnsResolved carries its own leading comma, as shiftColumns does, so the
+// select list must not add a second one. That is not a note about something that
+// happened: it did, and Postgres reported it as `syntax error at or near ","` against a
+// line whose real content is nowhere near the defect.
+const weekShiftQuery = `
+	SELECT u.id, d.weekday` + shiftColumnsResolved + `
+	FROM users u
+	CROSS JOIN generate_series(1, 7) AS d(weekday)
+	LEFT JOIN shift_week_cells wc
+	       ON wc.user_id = u.id AND wc.week_start = $1::date AND wc.weekday = d.weekday
+	LEFT JOIN shifts s ON s.id = wc.shift_id
+	LEFT JOIN shift_assignments pat ON pat.user_id = u.id AND pat.weekday = d.weekday
+	LEFT JOIN shifts ps ON ps.id = pat.shift_id
+	WHERE ` + resolvedShiftID + ` IS NOT NULL
+	ORDER BY u.id, d.weekday`
+
 func (m ScheduleModel) Today(ref time.Time) (*ScheduleToday, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	today := DateOnly(ref)
+	today := localDay(ref)
 	// ISO weekday index, 0 = Monday, matching ScheduleMember.Days. Yesterday WRAPS, so
 	// Monday's index is 6 -- and that wrap is exactly what lets Sunday's overnight
 	// cover Monday at 01:00.
 	todayIdx := (int(today.Weekday()) + 6) % 7
 	yesterdayIdx := (todayIdx + 6) % 7
+	// YESTERDAY'S WEEK IS NOT ALWAYS THIS WEEK. On a Monday, yesterday is Sunday of the
+	// week before, so the cell lookup for yesterday's overnight has to name that week's
+	// Monday. Reading the current week's rows for it would find nothing and quietly
+	// report a member on Sunday's night shift as not working -- which is exactly the bug
+	// this two-cell probe exists to prevent.
+	yesterday := today.AddDate(0, 0, -1)
 
 	// The NOT EXISTS (... AND NOT rm.included) spelling is copied verbatim from Week
 	// and is load-bearing: rota_members' rule is that a MISSING row means included, so
 	// the test is for the presence of an exclusion, not of an inclusion.
+	//
+	// The resolution is COALESCE(tw<cell>.shift_id, template.shift_id) -- and that
+	// coalesce is WHY shift_id has to be nullable, because a NULL in a per-week cell
+	// means "explicitly off" and must NOT fall back to the pattern. A plain COALESCE
+	// cannot express the difference between "no opinion" and "off", so the branch tests
+	// for the ROW instead of the value:
+	//
+	//	CASE WHEN tw<cell>.week_start IS NOT NULL THEN tw<cell>.shift_id ELSE tsa.shift_id END
+	//
+	// week_start is NOT NULL in the table, so it is a faithful presence test, and it is
+	// the only thing in the query that distinguishes the three row states.
 	rows, err := m.DB.QueryContext(ctx, `
 		SELECT u.id, u.name, u.avatar_idx, u.role, u.active,
 		       `+shiftColumnsAliased("td")+`,
 		       `+shiftColumnsAliased("yd")+`
 		FROM users u
-		LEFT JOIN shift_assignments tsa ON tsa.user_id = u.id AND tsa.weekday = $1
-		LEFT JOIN shifts td ON td.id = tsa.shift_id
-		LEFT JOIN shift_assignments ysa ON ysa.user_id = u.id AND ysa.weekday = $2
-		LEFT JOIN shifts yd ON yd.id = ysa.shift_id
+		LEFT JOIN shift_week_cells twc
+		       ON twc.user_id = u.id AND twc.week_start = $1::date AND twc.weekday = $2
+		LEFT JOIN shift_assignments tsa
+		       ON tsa.user_id = u.id AND tsa.weekday = $2
+		LEFT JOIN shifts td
+		       ON td.id = CASE WHEN twc.week_start IS NOT NULL THEN twc.shift_id ELSE tsa.shift_id END
+		LEFT JOIN shift_week_cells ywc
+		       ON ywc.user_id = u.id AND ywc.week_start = $3::date AND ywc.weekday = $4
+		LEFT JOIN shift_assignments ysa
+		       ON ysa.user_id = u.id AND ysa.weekday = $4
+		LEFT JOIN shifts yd
+		       ON yd.id = CASE WHEN ywc.week_start IS NOT NULL THEN ywc.shift_id ELSE ysa.shift_id END
 		WHERE NOT EXISTS (
 			SELECT 1 FROM rota_members rm
 			WHERE rm.user_id = u.id AND NOT rm.included
 		)
 		ORDER BY `+rotaMemberOrder,
-		todayIdx+1, yesterdayIdx+1)
+		today, todayIdx+1, localDay(yesterday), yesterdayIdx+1)
 	if err != nil {
 		return nil, err
 	}
@@ -1274,7 +1475,28 @@ func ValidateDayAssignments(v *validator.Validator, days []DayAssignment) {
 // No version guard, and deliberately. See the table comment: an assignment is only
 // ever written by a PUT carrying the caller's whole row, so there is no
 // read-modify-write cycle to interleave with.
-func (m ScheduleModel) SetWeek(userID int64, days []DayAssignment, updatedBy *int64) error {
+//
+// WHY THERE ARE NOW THREE THINGS TO WRITE, AND ONE OF THEM IS THE PATTERN:
+//
+// This is the whole feature. Before shift_week_cells existed this function wrote the
+// standing pattern and nothing else, so a manager tidying THIS week rewrote last
+// Tuesday and next Tuesday with it -- the complaint that produced 000035.
+//
+// Now a write lands in three places, and which of them it lands in is decided per DAY:
+//
+//	cells for the week        always. That is the week being edited and the only week
+//	                         this call can touch.
+//	frozen_at                never here. Closing a week is a separate act; see
+//	                         FreezeClosedWeeks.
+//	standing pattern         ONLY for an unelapsed day of the CURRENT week.
+//
+// The last rule is the subtle one and it cuts both ways. Editing Friday (still to
+// come) must reach the pattern, because that is what makes next week show Friday the
+// new way -- the whole point of "peek ahead and see today's rota". Editing Monday
+// (already worked) must NOT, because Monday is a record and next Monday is a
+// different day from this Monday. Applying one rule for the whole week rather than
+// per day was the mistake that would have survived the migration.
+func (m ScheduleModel) SetWeekFor(userID int64, weekStart time.Time, days []DayAssignment, updatedBy *int64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1284,40 +1506,241 @@ func (m ScheduleModel) SetWeek(userID int64, days []DayAssignment, updatedBy *in
 	}
 	defer tx.Rollback()
 
-	// The weekdays that end the request holding a shift. Everything else is a day
-	// off by the time the DELETE runs.
-	kept := make([]int, 0, len(days))
-	for _, d := range days {
-		if d.ShiftID == nil {
-			continue
-		}
-		kept = append(kept, d.Weekday)
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO shift_assignments (user_id, weekday, shift_id, updated_by)
-			VALUES ($1, $2, $3, $4)
-			ON CONFLICT (user_id, weekday) DO UPDATE
-			SET shift_id   = EXCLUDED.shift_id,
-			    updated_at = NOW(),
-			    updated_by = EXCLUDED.updated_by`,
-			userID, d.Weekday, *d.ShiftID, updatedBy); err != nil {
+	// localDay(time.Now()), not Today().
+	//
+	// Today() returns the local calendar date stamped at midnight UTC, which is right
+	// for a DATE column and wrong to do arithmetic on: every comparison below is
+	// "is this calendar day before this other one", and routing that through a UTC
+	// midnight first means the answer depends on the process's timezone offset. The
+	// offset of this box is -01:00, so it happens to agree today. See localDay.
+	now := localDay(time.Now())
+	weekStart = localDay(weekStart)
+	status := ClassifyWeek(weekStart, now)
+
+	// The one refusal. It is checked HERE rather than in the handler because this is
+	// where the transaction is, and a check that can be raced past is not a check.
+	if status == WeekPast {
+		return ErrWeekClosed
+	}
+
+	// One writer at a time for the seed and the freeze, which both read the pattern
+	// and then write cells derived from it. Without it, two managers whose first
+	// writes of a new week overlap can each see no cells, both materialise, and one
+	// of them wins the ON CONFLICT -- which is harmless here, but only by luck of the
+	// DO NOTHING, and the same race around a DELETE would not be harmless.
+	if _, err := tx.ExecContext(ctx,
+		`SELECT pg_advisory_xact_lock($1)`, windowLockNS); err != nil {
+		return err
+	}
+
+	// Close every week that has ended but was never closed. Doing it HERE, inside the
+	// transaction that is about to change the pattern, is what makes the history
+	// honest without a scheduler: the only thing that can invalidate a past week is a
+	// pattern write, and every pattern write passes through this function.
+	if err := m.freezeClosedWeeks(ctx, tx, now); err != nil {
+		return err
+	}
+
+	// The current week is half elapsed, and its elapsed half is a record. So before
+	// anything is written to it, give it cells of its own -- the whole week, every
+	// member on the rota, copied from the pattern as it stands RIGHT NOW. Existing
+	// cells win, so this is a one-time fill per week and a later pattern write cannot
+	// reach back into it.
+	//
+	// The fill is for EVERY member, not just the one being written. If it seeded only
+	// the editor, a colleague nobody had edited during that week would still be
+	// inheriting when it closed, and the week would be recorded and wrong at the same
+	// time -- which is worse than not recording it.
+	if status == WeekCurrent {
+		if err := m.materialiseWeek(ctx, tx, weekStart, updatedBy); err != nil {
 			return err
 		}
 	}
 
-	// Days the request did not mention are days off.
+	// Every weekday gets a row, including the off ones, and that is a change of shape
+	// from the pattern: here a day off is a row with shift_id NULL rather than the
+	// absence of one, because "off on Tuesday but on every other Tuesday" has to be
+	// expressible and a missing row can only mean "inherit".
 	//
-	// kept must be non-nil: a nil slice binds as SQL NULL, and `weekday <> ALL(NULL)`
-	// is NULL rather than true, so nothing would be deleted -- including the cells
-	// just written. That is the trap SetForIssue calls out by name.
-	//
-	// An empty slice binds as '{}', and `weekday <> ALL('{}')` is true for every
-	// row, which is exactly the "clear this person's whole week" case.
+	// The map is keyed by weekday and read for all seven below, rather than iterated
+	// over the request. Iterate the request and an omitted weekday would leave no row,
+	// which on a future week means the day silently inherits the pattern -- so "clear
+	// this person's Friday" would put the standing shift back. Iterate the week instead.
+	shiftOf := make(map[int]*int64, len(days))
+	for _, d := range days {
+		shiftOf[d.Weekday] = d.ShiftID
+	}
+
+	// Only this user's cells, and only this week. The week is in the WHERE rather than
+	// trusted from a variable scope because a predicate that cannot name the wrong week
+	// is worth more than a parameter that must be passed correctly.
 	if _, err := tx.ExecContext(ctx, `
-		DELETE FROM shift_assignments
-		WHERE user_id = $1 AND weekday <> ALL($2::smallint[])`,
-		userID, pq.Array(kept)); err != nil {
+		DELETE FROM shift_week_cells
+		WHERE week_start = $1::date AND user_id = $2`,
+		weekStart, userID); err != nil {
 		return err
+	}
+	for weekday := 1; weekday <= 7; weekday++ {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO shift_week_cells (week_start, user_id, weekday, shift_id, updated_by)
+			VALUES ($1::date, $2, $3, $4, $5)`,
+			weekStart, userID, weekday, shiftOf[weekday], updatedBy); err != nil {
+			return err
+		}
+	}
+
+	// The standing pattern, for the days that have not happened yet.
+	//
+	// A future week has no elapsed days, so every day it was given is unelapsed -- but
+	// the pattern is NOT touched for it either, because next week is a different week
+	// and the pattern is what THIS week repeats into. That is the whole difference
+	// between "editing a future week diverges from the pattern" and "editing the current
+	// week moves the pattern forward", and it is why a manager can plan next Tuesday
+	// without silently redrawing every Tuesday after it.
+	if status == WeekCurrent {
+		today := localDay(now)
+		for weekday := 1; weekday <= 7; weekday++ {
+			day := weekStart.AddDate(0, 0, weekday-1)
+			if day.Before(today) {
+				// Elapsed. A record, not a plan, so the pattern must not learn it --
+				// this is the whole per-day rule, and comparing against today rather
+				// than against monday is what makes it fire on Tuesday and not on
+				// Monday.
+				continue
+			}
+			sid := shiftOf[weekday]
+			if sid == nil {
+				if _, err := tx.ExecContext(ctx, `
+					DELETE FROM shift_assignments WHERE user_id = $1 AND weekday = $2`,
+					userID, weekday); err != nil {
+					return err
+				}
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO shift_assignments (user_id, weekday, shift_id, updated_by)
+				VALUES ($1, $2, $3, $4)
+				ON CONFLICT (user_id, weekday) DO UPDATE
+				SET shift_id   = EXCLUDED.shift_id,
+				    updated_at = NOW(),
+				    updated_by = EXCLUDED.updated_by`,
+				userID, weekday, *sid, updatedBy); err != nil {
+				return err
+			}
+		}
 	}
 
 	return tx.Commit()
+}
+
+// materialiseWeek gives one week cells of its own, copied from the standing pattern,
+// without disturbing any that already exist.
+//
+// ON CONFLICT DO NOTHING is the whole contract: existing cells win, so this is safe to
+// run on every write of every week. It is a fill, never an overwrite -- which matters
+// most for the freeze path, where the cells it is filling in are records and the ones
+// being protected are the ones a manager wrote during the week.
+//
+// The LEFT JOIN is what makes a day off survive: a member with no pattern row for
+// Wednesday still gets a Wednesday cell, with shift_id NULL. Without the CROSS JOIN
+// those members would simply be absent from the week, and an absent member is
+// indistinguishable from an absent day.
+//
+// by is $2 and not $3: Postgres numbers placeholders by position and refuses a gap, so
+// a query that binds $1 and $3 fails with "could not determine data type of parameter
+// $2" -- an error that names a parameter the query does not contain and sends you
+// looking for a statement that was never written.
+func (m ScheduleModel) materialiseWeek(ctx context.Context, tx *sql.Tx, weekStart time.Time, by *int64) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO shift_week_cells (week_start, user_id, weekday, shift_id, updated_by)
+		SELECT $1::date, u.id, d.weekday, pat.shift_id, $2
+		FROM users u
+		CROSS JOIN generate_series(1, 7) AS d(weekday)
+		LEFT JOIN shift_assignments pat
+		       ON pat.user_id = u.id AND pat.weekday = d.weekday
+		WHERE NOT EXISTS (
+			SELECT 1 FROM rota_members rm
+			WHERE rm.user_id = u.id AND NOT rm.included
+		)
+		ON CONFLICT (week_start, user_id, weekday) DO NOTHING`,
+		weekStart, by)
+	return err
+}
+
+// freezeClosedWeeks closes every week that has ended and was never closed.
+//
+// A closed week cannot be written to -- the trigger in 000035 refuses it even from a
+// direct psql session -- so this is the only way one ever closes.
+//
+// It is called from inside the transaction that is about to change the standing
+// pattern, and that placement is the entire design. A past week's accuracy can only be
+// destroyed by a pattern write, and every pattern write comes through SetWeekFor, so
+// sweeping here means there is no window in which the history and the thing that
+// rewrites it exist at the same time. There is no ticker and no cron, which is what
+// the rest of this codebase does for ResolveDue; the difference is that ResolveDue is
+// idempotent and order-independent, while freezing is a point-in-time capture and has
+// to happen at a knowable moment.
+//
+// THE HONEST LIMIT, because it is real: a week nobody wrote to is closed from the
+// pattern as it stands at this moment, which is exact only if the pattern has not
+// changed since that week ended. That needs BOTH an untouched week AND a pattern edit
+// before anything swept it -- and the pattern edit is itself a rota write, which sweeps
+// first. So the failure needs a week with no rota writes at all followed by a pattern
+// change, and the sweep that would have caught it ran as part of that change. What is
+// left is a week with no writes AND a pattern change made by some path that did not go
+// through SetWeekFor; there is no such path, and 000035's trigger is what stops one
+// being added silently.
+//
+// Nothing here marks a week that was closed without ever having cells as inexact. It is
+// closed, it renders from the pattern, and ScheduleWeek.HistoryExact -- which compares
+// against a CLOSED week, not an unrecorded one -- reports the truth either way.
+func (m ScheduleModel) freezeClosedWeeks(ctx context.Context, tx *sql.Tx, now time.Time) error {
+	// THIS MONDAY, not today.
+	//
+	// The boundary is "a week that has finished", and a week finishes on its Sunday.
+	// Comparing against today closes the running week the moment Monday arrives, which
+	// is the opposite of the rule: the current week has to stay writable until Sunday
+	// is over, because Sunday is the day a manager most often tidies. The first version
+	// of this compared against today and froze the current week on its own first write,
+	// so every edit after the first was refused as a write to a closed week.
+	//
+	// Only weeks that HOLD CELLS are considered. A week nobody ever wrote to has
+	// nothing to close, and it renders from the pattern -- which is the honest answer
+	// for a week nobody edited, and is exactly what ScheduleWeek.HistoryExact reports.
+	boundary := mondayOf(now)
+
+	var open []time.Time
+	rows, err := tx.QueryContext(ctx, `
+		SELECT DISTINCT week_start
+		FROM shift_week_cells
+		WHERE frozen_at IS NULL AND week_start < $1::date
+		ORDER BY week_start`, boundary)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var d time.Time
+		if err := rows.Scan(&d); err != nil {
+			rows.Close()
+			return err
+		}
+		open = append(open, d)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	for _, week := range open {
+		if err := m.materialiseWeek(ctx, tx, week, nil); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE shift_week_cells SET frozen_at = NOW()
+			WHERE week_start = $1::date AND frozen_at IS NULL`, week); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -147,6 +147,25 @@ func (app *application) listScheduleHandler(w http.ResponseWriter, r *http.Reque
 		"absences": week.Absences,
 		"kinds":    data.AbsenceKinds(),
 		"can_edit": canEdit,
+
+		// Four week-level facts, all additive, and all needed BY THE CLIENT because
+		// none of them can be derived from what is already in the payload:
+		//
+		//   week_status    past | current | future. A boolean cannot say that Monday
+		//                  is a record while Friday is still going to change next
+		//                  week, and that is the difference the page has to draw.
+		//   editable       false once the week has closed. Independent of can_edit:
+		//                  a technician on an open week and a manager on a closed one
+		//                  both see a read-only board, for different reasons.
+		//   recorded       false when this week is rendering the standing pattern,
+		//                  which is what lets the page say "this is inherited".
+		//   history_exact  false for a past week rendered from the pattern because
+		//                  it was never recorded. The page says so out loud rather
+		//                  than presenting a guess as a record.
+		"week_status":   week.Status,
+		"editable":      week.Editable,
+		"recorded":      week.Recorded,
+		"history_exact": week.HistoryExact,
 	}, nil)
 }
 
@@ -366,6 +385,29 @@ func (app *application) deleteShiftHandler(w http.ResponseWriter, r *http.Reques
 // on screen and half in the database. Days the request leaves out are cleared, which
 // is what makes "put them on days off" a single request rather than seven.
 func (app *application) setScheduleHandler(w http.ResponseWriter, r *http.Request) {
+	// The week being written is a QUERY PARAMETER, not the current week.
+	//
+	// That is the second half of 000035 and it is not optional: a PUT with no week
+	// would have to mean "the week containing today", which makes every other week
+	// unwritable and re-creates the original bug in a different shape -- the manager
+	// looks at next Tuesday, edits it, and the write lands on this Tuesday instead.
+	// Refusing an absent week is better than guessing one.
+	anchor, ok := app.scheduleWeekAnchor(w, r)
+	if !ok {
+		return
+	}
+	if app.readString(r.URL.Query(), "week", "") == "" {
+		app.errorResponse(w, r, http.StatusBadRequest,
+			"week is required, as a date in YYYY-MM-DD format: a rota edit names the week it applies to")
+		return
+	}
+	// The Monday, not the anchor. Every write below is keyed by week_start, and the
+	// database has no notion of "the week containing this date" to normalise it.
+	//
+	// WeekOf rather than a new helper: it is the application's one definition of a
+	// Monday-to-Sunday week, and a second one would be free to disagree with it.
+	weekStart := data.WeekOf(anchor).Start.Time()
+
 	// Read by name rather than through readIDParam, which is hardcoded to the
 	// param "id". This route's segment is "user_id" on purpose -- the handler acts
 	// on a person rather than on a shift, and conflating the two in the path is
@@ -424,14 +466,36 @@ func (app *application) setScheduleHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	editor := app.contextGetUser(r)
-	if err := app.models.Schedule.SetWeek(userID, input.Days, &editor.ID); err != nil {
+	if err := app.models.Schedule.SetWeekFor(userID, weekStart, input.Days, &editor.ID); err != nil {
+		// 422, and a REASON the client switches on. The week being closed is a fact
+		// about the world, not a malformed request and not a conflict with the
+		// caller's own state, which is why it is neither 400 nor 409.
+		//
+		// The reason travels as a field rather than being inferred from the English
+		// sentence. A message that changes when somebody rewords it is a message the
+		// client cannot safely match on, and "week_closed" is the part a machine can
+		// act on.
+		if errors.Is(err, data.ErrWeekClosed) {
+			app.writeJSON(w, http.StatusUnprocessableEntity, envelope{
+				"message": "that week is closed and cannot be changed",
+				"reason":  "week_closed",
+				"week":    weekStart.Format("2006-01-02"),
+			}, nil)
+			return
+		}
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
 	// Answer with the member's row as it now stands, so the editor can confirm the
 	// save without a second round trip and without trusting its own optimistic state.
-	week, err := app.models.Schedule.Week(time.Now())
+	//
+	// Echoed for THE WEEK THAT WAS WRITTEN, not for the current one. That looks like a
+	// one-word detail and is not: saving next Tuesday's rota and being answered with
+	// this week's row would leave the editor's grid showing last week's confirmation,
+	// and the mismatch would read to the manager as the save having gone somewhere
+	// unexpected.
+	week, err := app.models.Schedule.Week(weekStart)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
