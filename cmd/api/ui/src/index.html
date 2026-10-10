@@ -971,6 +971,27 @@ html.dark .set-group-head:hover { background: var(--gray-200); }
 }
 .rota-note svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--blue); margin-top: 1px; }
 
+/* The note is FIVE different sentences in one slot, chosen by which week is on
+   screen, and its height is therefore a function of the copy -- which is how a page
+   that swaps one note for another starts jumping under the reader.
+
+   It did. This slot used to hold two long sentences that both wrapped to two lines,
+   so the height never changed. Rewriting them into five shorter messages -- one line
+   each, apart from the current week's -- made the note 19px taller on the current week
+   than on every other, and stepping the week picker moved the legend and the whole
+   grid down and back again.
+
+   So the two lines are RESERVED rather than hoped for: min-height in em on the text,
+   which is 2 x line-height at this file's 1.5 and needs no number that can drift out
+   of step with the padding above it. A message long enough to need a third line still
+   grows the note, which is right -- better a late jump on an unusually narrow screen
+   than a clipped sentence.
+
+   The alternative -- padding the four short strings out until they match -- would put
+   the same trap back for the next person who edits the wording, and immediately for
+   the Portuguese, whose lengths differ again. */
+.rota-note > span { min-height: 3em; }
+
 /* Week navigation. Present so a different set of dates can be printed and so
    "today" can be pointed at. Deliberately the quietest thing in the header: a
    control that looks like a destination is a promise a standing rota cannot
@@ -1047,6 +1068,12 @@ html.dark .rota-mode-btn[aria-checked="true"] { background: var(--blue-light) !i
   padding: 6px 12px; border-radius: var(--radius-md);
   border: 1px solid var(--gray-200); background: var(--gray-100);
   font-size: 12.5px; font-weight: 500; color: var(--gray-600);
+  /* line-height 1.4 is .rota-mode-btn's, and it is load-bearing rather than a copy of
+     it for tidiness. This chip STANDS IN for the mode switch: whichever of the two is
+     on screen occupies the same slot, and without a matching line-height it came out
+     33px against the switch's 32px. That 1px moved the header and everything under it
+     by 2px every time the week crossed into a closed one. */
+  line-height: 1.4;
 }
 .rota-readonly svg { width: 13px; height: 13px; color: var(--gray-400); flex-shrink: 0; }
 html.dark .rota-readonly { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
