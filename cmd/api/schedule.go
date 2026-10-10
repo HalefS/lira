@@ -477,9 +477,9 @@ func (app *application) setScheduleHandler(w http.ResponseWriter, r *http.Reques
 		// act on.
 		if errors.Is(err, data.ErrWeekClosed) {
 			app.writeJSON(w, http.StatusUnprocessableEntity, envelope{
-				"message": "that week is closed and cannot be changed",
-				"reason":  "week_closed",
-				"week":    weekStart.Format("2006-01-02"),
+				"error":  err.Error(),
+				"reason": "week_closed",
+				"week":   weekStart.Format("2006-01-02"),
 			}, nil)
 			return
 		}

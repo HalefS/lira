@@ -1051,6 +1051,44 @@ html.dark .rota-mode-btn[aria-checked="true"] { background: var(--blue-light) !i
 .rota-readonly svg { width: 13px; height: 13px; color: var(--gray-400); flex-shrink: 0; }
 html.dark .rota-readonly { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
 
+/* WHERE THIS WEEK IS. Two states, and the difference between them is the whole
+   feature: one week is a record and the other is a plan that has not been made yet.
+
+   Neither is red and neither is green. A closed week is not an error -- it is what
+   a rota is FOR -- and an inherited week is not a warning, because it is the
+   default and the most common thing on the calendar. Both are quiet ink, which is
+   also what keeps them from competing with the amber the page already spends on
+   genuine attention (a pending absence, an unsaved draft).
+
+   .is-past is not a colour variant either; it is the SAME ink, weightier and with a
+   rule down its left edge. The only thing that changes is how firmly it says it,
+   because the consequence is firmer: one is a description, the other is a refusal.
+
+   Deliberately layout-only classes, so html.dark inherits .rota-week's existing
+   override below and this block adds no dark rules of its own.
+
+   Both states are --gray-600, which is a choice and not a shortcut. The obvious
+   move --grey for the quiet state, darker for the firm one -- needs --gray-500
+   and --gray-700, and NEITHER IS DEFINED anywhere in this file. An undefined custom
+   property is invalid at computed-value time and falls back to currentColor, so
+   those would have inherited whatever the parent happened to be and looked fine in
+   one place and wrong in another. The states are separated by weight and by the
+   strength of the rule instead, which is what actually differs about them; see the
+   note on .is-past. */
+.rota-weekstate {
+  display: inline-flex; align-items: center; flex-shrink: 0;
+  padding: 3px 9px; border-radius: var(--radius-sm);
+  border-left: 2px solid var(--gray-300);
+  background: var(--gray-100);
+  font-size: 11.5px; font-weight: 500; color: var(--gray-600);
+  white-space: nowrap;
+}
+/* The same ink, said more firmly. */
+.rota-weekstate.is-past {
+  border-left-color: var(--gray-600);
+  font-weight: 700; color: var(--gray-600);
+}
+
 /* The legend. The grid prints shift names and nothing else, so "Night" arrives
    with no hours attached -- and the reader of a pinned-up rota has never seen
    this UI. It sits in the card, always open, never behind a hover: it is half of
@@ -1740,6 +1778,27 @@ html.dark .rota-dirty { background: var(--gray-50); }
 /* .table-footer centres; this one does not, because it carries a sentence on the
    left and two buttons on the right. */
 .rota-savebar .btn { font-size: 12px; padding: 6px 14px; }
+
+/* A save that was REFUSED, told apart from the save bar's own hint.
+
+   Inside the bar rather than in the page-level error banner, because the page did
+   not fail -- the request did, and only because the week ended while the page was
+   open. Putting it in the page banner would make a working page look broken.
+
+   Red, and the one place on this page that is: everything else here is a quiet
+   fact about the rota, and this is the single thing the manager got wrong by
+   continuing. role="alert" so it is announced, since it replaces a toast that has
+   already been read by nobody at a keyboard.
+
+   No html.dark override: --red-light, --red-mid and --red are each defined twice
+   already, so the tokens flip with the theme and a rule here would only be able to
+   disagree with them. .rota-savebar above is the same and says the same. */
+.rota-savebar-error {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 18px; text-align: left;
+  background: var(--red-light); border-top: 1px solid var(--red-mid);
+  font-size: 12.5px; font-weight: 500; color: var(--red); line-height: 1.45;
+}
 
 /* The attendance-sheet download. It sits last in .table-actions and owns the right
    edge with margin-left:auto, so the week controls stay grouped on the left with
@@ -3999,31 +4058,63 @@ const T = {
     // SettingsPage. Only ever read from the nav, so renaming it changed nothing else.
     settings: 'Settings',
     // The weekly rota. The premise strings come first because they are the
-    // premise: a reader who has not internalised "this repeats every week" will
-    // read the grid as next week's plan and be misled by every cell in it.
+    // premise -- but the premise is no longer "this repeats every week", which is
+    // what these strings used to say and what made editing one week rewrite all of
+    // them. It is now WHICH WEEK YOU ARE LOOKING AT, and the four cases it can be:
+    // closed, inherited, half done, or its own thing. A reader who has not
+    // internalised that will edit a past week expecting it to work, or save a
+    // future week expecting next week to follow, and be misled by every cell.
     rotaTitle: 'Team rota',
     rotaNameColumn: 'Member',
     rotaDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
     yesDiscard: 'Discard them',
     rotaSubtitle: '{members} people, {shifts} shifts',
-    // The standing pattern, and the reason the week navigation exists at all.
-    rotaStanding: 'This is a standing rota. The same hours apply every week until they are changed — this is not a plan for one particular week.',
-    rotaOtherWeek: 'These are the dates this standing rota is shown against. The shifts themselves do not change from week to week.',
+    // What this week IS, said before the grid. Exactly one of these is on screen at a
+    // time, chosen by how much the reader would be misled without it -- the order is
+    // in SchedulePage, and a page carrying three of them at once is a page where none
+    // of them is read.
+    //
+    // rotaStanding and rotaOtherWeek used to claim that "the same hours apply every
+    // week". That sentence WAS the bug: it described a model where editing one week
+    // rewrote all of them, and it is no longer true of any week on this page.
+    rotaHistoryUnknown: 'This week was never recorded. It shows the standing rota rather than what was actually worked.',
+    rotaWeekClosedNote: 'This week is closed. It shows what was scheduled, and cannot be changed.',
+    rotaWeekInheritedNote: 'This week shows the standing rota. Change anything here and it affects this week only.',
+    rotaStanding: 'This week is half done. Days already worked stay as they were; days still to come are what next week repeats.',
+    rotaOtherWeek: 'This week has a rota of its own. Changing it affects this week only.',
     rotaWeekNav: 'Week',
     rotaThisWeek: 'This week',
     rotaPrevWeek: 'Previous week',
     rotaNextWeek: 'Next week',
+    // Where the week on screen sits. Past is the one with a consequence behind it,
+    // so it is the one that gets its own weight; inherited is the default state of
+    // any future week and is therefore the quieter of the two.
+    rotaWeekPast: 'Closed',
+    rotaWeekInherited: 'Inherited',
     rotaModeSwitch: 'Viewing mode',
     rotaView: 'View',
     rotaEdit: 'Edit',
     // One chip for a technician and for an anonymous visitor alike, because
     // the server reports can_edit:false for both and inventing a difference
     // here would be a guess about somebody's permissions.
+    //
+    // rotaWeekClosed is the OTHER reason the same chip appears, and it has to be a
+    // different sentence: "read only" told to a manager on a closed week says their
+    // permissions have gone, and told to a visitor says the rota is broken.
     rotaReadOnly: 'Read only',
+    rotaWeekClosed: 'This week is closed',
     rotaEnteredEdit: 'Edit mode. Each cell is a button; choose a shift or a day off.',
     rotaUnsaved: '{count} unsaved',
+    // The save bar's hint says WHICH week the change reaches, because that is the
+    // thing a manager cannot see. rotaEditHint is the fallback for the case where the
+    // client's "this week" and the server's disagree about the timezone; in the normal
+    // path one of the other two is always chosen.
     rotaEditHint: 'Pick a shift for each day. Days you clear become days off.',
+    rotaEditHintCurrent: 'Pick a shift for each day. Days you clear become days off. Days still to come are what next week repeats.',
+    rotaEditHintFuture: 'Pick a shift for each day. Days you clear become days off. This week only — next week keeps following the standing rota.',
     rotaEditHintClean: 'Nothing changed yet.',
+    // The refusal, when the week closed while the page was open.
+    rotaWeekClosedToast: 'That week has now closed, so it cannot be changed.',
     // -- Absences ---------------------------------------------------------------
     rotaAbsKindLabel: 'Reason',
     rotaAbsKind: { vacation: 'Holiday', sick: 'Sick leave', training: 'Training', unavailable: 'Unavailable' },
@@ -4886,27 +4977,37 @@ const T = {
     language: 'Idioma',
     settings: 'Definições',
     // The weekly rota. The premise strings come first because they are the
-    // premise: a reader who has not internalised "this repeats every week" will
-    // read the grid as next week's plan and be misled by every cell in it.
+    // premise -- and the premise is no longer "this repeats every week", which is
+    // what these strings used to say and what made editing one week rewrite all of
+    // them. It is now WHICH WEEK YOU ARE LOOKING AT.
     rotaTitle: 'Escala da equipa',
     rotaNameColumn: 'Membro',
     rotaDays: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'],
     yesDiscard: 'Descartar',
     rotaSubtitle: '{members} pessoas, {shifts} turnos',
-    rotaStanding: 'Esta é uma escala permanente. As mesmas horas aplicam-se todas as semanas até serem alteradas — não é um plano para uma semana em particular.',
-    rotaOtherWeek: 'Estas são as datas contra as quais esta escala permanente é mostrada. Os turnos não mudam de semana para semana.',
+    rotaHistoryUnknown: 'Esta semana nunca foi registada. Mostra a escala permanente e não o que foi efetivamente trabalhado.',
+    rotaWeekClosedNote: 'Esta semana está fechada. Mostra o que foi planeado e não pode ser alterada.',
+    rotaWeekInheritedNote: 'Esta semana mostra a escala permanente. Qualquer alteração aqui afeta apenas esta semana.',
+    rotaStanding: 'Esta semana está a meio. Os dias já trabalhados mantêm-se; os dias que ainda vêm são os que a próxima semana repete.',
+    rotaOtherWeek: 'Esta semana tem uma escala própria. Alterá-la afeta apenas esta semana.',
     rotaWeekNav: 'Semana',
     rotaThisWeek: 'Esta semana',
     rotaPrevWeek: 'Semana anterior',
     rotaNextWeek: 'Semana seguinte',
+    rotaWeekPast: 'Fechada',
+    rotaWeekInherited: 'Herdada',
     rotaModeSwitch: 'Modo de visualização',
     rotaView: 'Ver',
     rotaEdit: 'Editar',
     rotaReadOnly: 'Apenas leitura',
+    rotaWeekClosed: 'Esta semana está fechada',
     rotaEnteredEdit: 'Modo de edição. Cada célula é um botão; escolha um turno ou um dia de folga.',
     rotaUnsaved: '{count} por guardar',
     rotaEditHint: 'Escolha um turno para cada dia. Os dias que limpar passam a ser dias de folga.',
+    rotaEditHintCurrent: 'Escolha um turno para cada dia. Os dias que limpar passam a ser dias de folga. Os dias que ainda vêm são os que a próxima semana repete.',
+    rotaEditHintFuture: 'Escolha um turno para cada dia. Os dias que limpar passam a ser dias de folga. Apenas esta semana — a próxima continua a seguir a escala permanente.',
     rotaEditHintClean: 'Nada alterado ainda.',
+    rotaWeekClosedToast: 'Essa semana já fechou, por isso não pode ser alterada.',
     // -- Ausências ---------------------------------------------------------------
     rotaAbsKindLabel: 'Motivo',
     // Baixa médica, not Doença and not Falta: *baixa* is the HR noun, and *falta* would
@@ -14676,6 +14777,11 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
   const [data, setData]     = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState('');
+  /* A refusal from a save, kept apart from `error` on purpose. `error` is the
+     page-level banner for a page that did not load, which is a different thing from
+     a save that was refused; putting a week-closed refusal in the page banner would
+     make a working page look broken. */
+  const [saveErr, setSaveErr] = useState('');
   const [mode, setMode]     = useState('view');
   const [draft, setDraft]   = useState(null);
   const [busy, setBusy]     = useState(false);
@@ -14861,7 +14967,22 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
 
   const onThisWeek = weekISO === mondayISO(new Date());
   const canEdit = !!(data && data.canEdit);
-  const editing = mode === 'edit' && canEdit;
+  /* Two INDEPENDENT axes, and collapsing them is how a technician ends up looking
+     like a manager on a closed week.
+
+       canEdit   may this person change a rota at all? (a role question)
+       editable  may THIS WEEK be changed?           (a clock question)
+
+     Both must hold to edit, and they fail for different reasons, so the page says
+     different things for each: rotaReadOnly for a manager on an open week, and the
+     closed-week chip for both roles on a week that is over. A week the server has
+     not reported on yet is treated as open -- see load(). */
+  const editable = !!(data && data.editable);
+  const weekStatus = (data && data.weekStatus) || 'current';
+  const recorded = !!(data && data.recorded);
+  const historyExact = !!(data && data.historyExact);
+  const isPast = weekStatus === 'past';
+  const editing = mode === 'edit' && canEdit && editable;
 
   const load = useCallback(wk => {
     setLoading(true);
@@ -14876,6 +14997,26 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
           // the server's job and neither is re-done here.
           absences: res.absences || [],
           canEdit:  !!res.can_edit,
+          // The four week-level facts, straight from the server.
+          //
+          // None of them can be derived here, and two of them are actively dangerous
+          // to guess. "Is this week over" is a question about the CLOCK, and a client
+          // that answered it from its own clock would disagree with the server by up
+          // to a day across a timezone boundary -- which is the difference between a
+          // rota you may still fix and one that is a record. And `editable` is the
+          // server's authority on whether a write will be refused; the client only
+          // uses it to stop offering the control, never to decide that a write is
+          // allowed.
+          //
+          // `weekStatus` and `recorded` default to 'current'/false rather than to
+          // null so that a response from an older server cannot produce a week that
+          // claims to be closed. Failing OPEN here is deliberate: the worst case is an
+          // edit the server refuses with 422, which is handled below. Failing closed
+          // would freeze every rota until the server was upgraded.
+          weekStatus:   res.week_status   || 'current',
+          editable:     res.editable     !== false,
+          recorded:     !!res.recorded,
+          historyExact: res.history_exact !== false,
         });
         setError('');
       })
@@ -15012,18 +15153,25 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
 
   async function save() {
     setBusy(true);
+    setSaveErr('');
     try {
       // Sequential, not Promise.all: a burst of seven PUTs that half-succeeds
       // leaves a rota nobody can reason about, and this keeps one failure to one
       // member with the rows before it already saved and honest.
       for (const userID of dirtyIds) {
         const m = draft.find(x => x.user_id === userID);
-        const res = await apiFetch('/schedule/' + userID, {
+        const res = await apiFetch('/schedule/' + userID + '?week=' + weekISO, {
           method: 'PUT',
           token,
           // ALL seven, always. Omitted days are cleared server-side, so a payload
           // built from only the touched cells would wipe the rest of the week.
           // This is the single most important line on the page.
+          //
+          // And ?week= names the week on SCREEN, not the week containing today.
+          // Without it the write would land on the current week, so a manager
+          // tidying next Tuesday would quietly rewrite this Tuesday -- which is the
+          // exact bug the per-week rota was built to remove, reappearing one layer up
+          // in the client.
           body: { days: (m.days || []).map((d, i) => ({ weekday: i + 1, shift_id: d ? d.id : null })) },
         });
         // Replaced wholesale from the echoed member, so the row on screen is
@@ -15034,11 +15182,32 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
           members: d.members.map(x => (x.user_id === userID ? res.member : x)),
         }));
       }
+      /* Saving a week that had never been written to is the moment it becomes its
+         own schedule, so the "inherited" note is no longer true. Clearing it here
+         rather than waiting for the reload keeps the page from contradicting itself
+         in the second between the save and the fetch. */
+      if (!recorded) {
+        setData(d => (d ? { ...d, recorded: true, weekStatus: d.weekStatus } : d));
+      }
       leaveEdit();
       setToast(t.rotaSaved);
       setAnnounce(t.rotaSaved);
     } catch (ex) {
-      setToast('Error: ' + ((ex && ex.message) || 'Request failed'));
+      /* 422 week_closed is not a failure of the request; it is the server telling us
+         the week ended while the page was open. That is worth saying in the page's
+         own words and not as "Error: ...", because the manager did nothing wrong and
+         a red error toast says they did.
+
+         It is matched on the `reason` field and never on the English sentence: a
+         message that changes when somebody rewords it is a message this cannot
+         safely match on. Anything else keeps the old generic path. */
+      if (ex && ex.reason === 'week_closed') {
+        setSaveErr(t.rotaWeekClosedToast);
+        setToast(t.rotaWeekClosedToast);
+        setAnnounce(t.rotaWeekClosedToast);
+      } else {
+        setToast('Error: ' + ((ex && ex.message) || 'Request failed'));
+      }
       // Out of edit mode and back to the server's truth. A draft that cannot be
       // written is not something to leave on screen looking editable.
       leaveEdit();
@@ -15169,12 +15338,37 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
                 : <button type="button" className="rota-week-pill" onClick={goThisWeek}>
                     {t.rotaThisWeek}
                   </button>}
+              {/* WHERE THIS WEEK IS, as a fact rather than a control.
+
+                  It sits inside the week navigation because it qualifies exactly
+                  what those arrows are about to reach: the arrows say "another
+                  week", this says "and that one is over".
+
+                  Past gets its own word, because a closed week is not a lesser
+                  kind of current one -- it is a record, and the manager is about
+                  to be told they cannot change it. A future week that is still
+                  INHERITED gets the quieter marker instead, which says what is
+                  true without stopping anybody.
+
+                  Not a third case for the current week: this week is the default,
+                  and a chip on every page would be furniture. */}
+              {isPast
+                ? <span className="rota-weekstate is-past">{t.rotaWeekPast}</span>
+                : (weekStatus === 'future' && !recorded
+                    ? <span className="rota-weekstate">{t.rotaWeekInherited}</span>
+                    : null)}
             </div>
 
             {/* A segmented radiogroup, not a toggle whose label morphs to "Done":
                 "Done" is ambiguous the moment there are unsaved changes, and a
-                morphing label takes the focused element off the screen. */}
-            {canEdit ? (
+                morphing label takes the focused element off the screen.
+
+                Gated on canEdit AND editable. A past week hides the switch
+                altogether rather than showing a disabled Edit button, because a
+                disabled control invites "why?" and the answer -- this week is a
+                record of what people worked -- deserves a sentence rather than a
+                greyed-out button. The chip below says that sentence instead. */}
+            {canEdit && editable ? (
               <>
                 <div className="rota-modeswitch" role="radiogroup" aria-label={t.rotaModeSwitch}>
                   <button type="button" role="radio" className="rota-mode-btn"
@@ -15200,8 +15394,18 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
                  Its only job is to answer "is this page broken?" before anyone
                  has to ask -- an anonymous visitor lands on a public endpoint,
                  finds no Edit button, and without this the absence is
-                 indistinguishable from a failed load. */
-              <span className="rota-readonly">{Ic.eye}<span>{t.rotaReadOnly}</span></span>
+                 indistinguishable from a failed load.
+
+                 The SAME chip serves a manager looking at a closed week, and it
+                 says something different, because the two situations look identical
+                 otherwise and have nothing in common: one is "you may not, ever"
+                 and the other is "you may not, this week is over". A visitor who
+                 was told "read only" would think the rota was broken; a manager
+                 who was told the visitor's sentence would think their own
+                 permissions had gone. */
+              <span className="rota-readonly">{Ic.eye}
+                <span>{isPast ? t.rotaWeekClosed : t.rotaReadOnly}</span>
+              </span>
             )}
 
             {/* The attendance sheet. Last in the toolbar, and a ghost rather than a
@@ -15259,12 +15463,46 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
           </div>
         )}
 
-        {/* The premise, before the grid. Not a hint: it is the one fact that makes
-            every cell in the table mean what a reader assumes it means. */}
+        {/* THE PREMISE, before the grid. Not a hint: it is the one fact that makes
+            every cell in the table mean what a reader assumes it means.
+
+            ONE note, never two, chosen by priority. A rota page with a read-only
+            banner stacked above an inheritance banner above a history note is a
+            page where none of the three gets read, and the one that matters most
+            (history_exact) is the easiest to lose that way.
+
+            The order below is the order of how much the reader would be MISLED
+            without the sentence, not the order of how interesting it is:
+
+              history_exact false   the app does not remember this week. Before
+                                    anything else: a reader who trusts a grid that
+                                    was never recorded is trusting a guess.
+              past                  a record, and not changeable.
+              future, not recorded  shows this week's rota, but is not it.
+              current               the standing pattern, and which half is plan.
+              otherwise             an ordinary recorded week.
+
+            The last case is the only one with nothing to add. Saying "this week
+            has its own schedule" is true of every other week and would be noise. */}
         <div className="rota-note">
           {Ic.info}
-          <span>{onThisWeek ? t.rotaStanding : t.rotaOtherWeek}</span>
+          <span>
+            {!historyExact ? t.rotaHistoryUnknown
+              : isPast ? t.rotaWeekClosedNote
+              : (weekStatus === 'future' && !recorded) ? t.rotaWeekInheritedNote
+              : onThisWeek ? t.rotaStanding
+              : t.rotaOtherWeek}
+          </span>
         </div>
+
+        {/* The refusal, from a save that came back 422 week_closed -- the week ended
+            while this page was open, which is the only way to reach here. It sits
+            inside the save bar rather than the page-level error banner, because it
+            is about the thing the manager was doing rather than about the page
+            having failed, and it clears itself on the next save. */}
+        {saveErr && (
+          <div className="rota-savebar-error" role="alert">{saveErr}</div>
+        )}
 
         {(legend.length > 0 || absLegend.length > 0) && (data.members || []).length > 0 && (
           <div className="rota-legend">
@@ -15399,7 +15637,33 @@ function SchedulePage({ token, setToast, onGoToSettings }) {
         {editing && (
           <div className="rota-savebar">
             {Ic.info}
-            <span>{dirtyIds.length > 0 ? t.rotaEditHint : t.rotaEditHintClean}</span>
+            {/* THREE HINTS, ONE SLOT, and the difference between them is the whole
+                feature rather than a nicety.
+
+                Editing a week that is not the current one touches that week and
+                nothing else, so the hint says so. Editing a FUTURE week is the case
+                that used to be a trap -- the write went to the current week and
+                redrew it -- and a manager who has just been told "changing this
+                affects only this week" is being told something true and worth
+                hearing.
+
+                Editing the CURRENT week is the genuinely subtle one, and the hint
+                says the rule rather than leaving it to be discovered: days already
+                worked are records and stay put, and days still to come are what next
+                week repeats. It is one sentence because it is one rule, and it sits
+                in the save bar because that is the only place on the page where the
+                manager is demonstrably about to act on it.
+
+                Not a modal, and not a warning. A dialog on every cell would be
+                unbearable, and a warning that fires when nothing is at stake trains
+                people to dismiss it for the thing that matters. */}
+            <span>
+              {dirtyIds.length === 0
+                ? t.rotaEditHintClean
+                : onThisWeek ? t.rotaEditHintCurrent
+                : weekStatus === 'future' ? t.rotaEditHintFuture
+                : t.rotaEditHint}
+            </span>
             <span className="rota-savebar-spacer" />
             <button type="button" className="btn btn-ghost" onClick={cancelEdit} disabled={busy}>
               {t.rotaCancel}
