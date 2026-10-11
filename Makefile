@@ -117,6 +117,18 @@ db/migrations/status:
 		echo "  migrate: $$(migrate -path ./migrations -database ${LIRADB_DSN} version 2>&1 | tr -d '\r')"; \
 	fi
 
+## db/migrations/doctor: report what the database actually contains, read-only
+#
+# The question `status` cannot answer on its own: is the schema AHEAD of
+# schema_migrations? That is the state behind every "already exists" error, and it
+# is invisible from the version alone -- the version looks perfectly normal.
+#
+# Pure SELECTs. Safe on a live database with the server running, and safe on a
+# production one, because it writes nothing. See docs/migrations.md section 4.
+.PHONY: db/migrations/doctor
+db/migrations/doctor:
+	@psql ${LIRADB_DSN} -v ON_ERROR_STOP=1 -f ./scripts/migrate-doctor.sql
+
 ## db/migrations/new name=$1: create a new database migration
 .PHONY: db/migrations/new
 db/migrations/new:
