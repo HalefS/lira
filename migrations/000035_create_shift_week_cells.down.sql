@@ -22,3 +22,26 @@
 -- fortnight. Before running it, note which weeks have cells:
 --
 --     SELECT week_start, count(*) FROM shift_week_cells GROUP BY 1 ORDER BY 1;
+--
+--
+-- DROP ORDER, and it is forced
+--
+-- Trigger, then function, then table, and each is defined in terms of the one after it.
+--
+-- IF EXISTS is used on every statement, and that is not defensive habit. This down
+-- migration is the FIRST thing that removes these objects, so on any database where it
+-- runs there is by definition something to drop -- but it is also the thing a person
+-- reaches for after having applied the up migration by hand with psql, which is the
+-- single most likely way to get here. IF EXISTS makes both of those work, and a down
+-- migration that fails halfway leaves the schema in a state no migration can describe.
+--
+-- The trigger is named explicitly and dropped before its function: dropping the
+-- function alone would leave a trigger pointing at nothing.
+DROP TRIGGER IF EXISTS shift_week_cells_no_edit_frozen ON shift_week_cells;
+
+-- The indexes go with the table, so they are not dropped separately. 000034's down
+-- migration has to name them because it drops a table that other tables' indexes
+-- outlive; these three belong to shift_week_cells alone.
+DROP FUNCTION IF EXISTS shift_week_cells_freeze_guard();
+
+DROP TABLE IF EXISTS shift_week_cells;
