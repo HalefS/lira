@@ -143,7 +143,7 @@ CREATE INDEX IF NOT EXISTS shift_week_cells_frozen_idx
 -- error, no warning, just rows that quietly refused to go away, and an
 -- "empty this person's week" write that collided with the very rows it meant to
 -- replace. Return OLD for a delete and NEW otherwise, which is the only thing that
- distinguishes the two operations.
+-- distinguishes the two operations.
 CREATE OR REPLACE FUNCTION shift_week_cells_freeze_guard() RETURNS trigger AS $$
 BEGIN
     IF OLD.frozen_at IS NOT NULL THEN

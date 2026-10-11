@@ -41,18 +41,29 @@ ORDER BY m.version;
 
 \echo ''
 \echo '=== 3. Partial migrations (object missing but sibling present) ==='
+-- to_regclass, NOT 'shift_week_cells'::regclass.
+--
+-- The cast THROWS when the relation does not exist, and with ON_ERROR_STOP=1 that
+-- aborts the script and loses every section after it -- which is exactly what
+-- happened on a database where 000035 had never been created. A diagnostic that
+-- stops working at the moment there is something to diagnose is worse than none.
+-- to_regclass returns NULL instead of raising, so this section works either way.
 SELECT '000033 constraint' AS object,
        EXISTS (SELECT 1 FROM pg_constraint
                 WHERE conrelid='users'::regclass
                   AND conname='users_rota_position_positive') AS present
 UNION ALL
 SELECT '000035 freeze trigger',
-       EXISTS (SELECT 1 FROM pg_trigger
-                WHERE tgrelid='shift_week_cells'::regclass AND NOT tgisinternal)
+       to_regclass('shift_week_cells') IS NOT NULL
+       AND EXISTS (SELECT 1 FROM pg_trigger
+                    WHERE tgrelid=to_regclass('shift_week_cells') AND NOT tgisinternal)
 UNION ALL
 SELECT '000035 guard function',
        EXISTS (SELECT 1 FROM pg_proc
                 WHERE proname='shift_week_cells_freeze_guard');
+--   trigger = f while function = t means the CREATE TRIGGER never ran: the migration
+--   got as far as the function and stopped. That is a PARTIAL application, and the
+--   fix is NOT to force forward -- see docs/migrations.md section 5.
 
 \echo ''
 \echo '=== 4. Is this the database the app is talking to? ==='

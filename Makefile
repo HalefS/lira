@@ -129,6 +129,83 @@ db/migrations/status:
 db/migrations/doctor:
 	@psql ${LIRADB_DSN} -v ON_ERROR_STOP=1 -f ./scripts/migrate-doctor.sql
 
+## db/migrations/dryrun v=35: run one up migration inside a transaction, then roll back
+#
+# FOR REPRODUCING A FAILING MIGRATION. `migrate` does not log why a migration failed
+# -- it prints the error once and then only says "Dirty database version N" -- so on
+# a database that is already dirty there is nothing left to read.
+#
+# This runs the migration file for real, inside a transaction that is rolled back, so
+# the exact failing statement and its exact error are printed and NOTHING persists.
+# Postgres DDL is transactional, which is what makes this safe on production: a
+# CREATE TABLE that succeeds here is undone before psql exits.
+#
+# ON_ERROR_STOP is deliberately 0. With it set, psql aborts on the first error and
+# never reaches the ROLLBACK -- leaving the transaction open, to be discarded anyway
+# when the connection closes, but only after printing nothing useful about what came
+# after the failure. The rollback must be unconditional.
+#
+# Not a substitute for reading the migration. It tells you WHICH statement failed,
+# not what the author meant.
+.PHONY: db/migrations/dryrun
+db/migrations/dryrun:
+	@p=$$(printf '%06d' $(v) 2>/dev/null); \
+	f=$$(ls ./migrations/$${p}_*.up.sql 2>/dev/null | head -1); \
+	if [ -z "$$f" ]; then \
+		echo "  No migration file for version '$(v)' (looked for migrations/$${p}_*.up.sql)."; \
+		echo "  Usage: make db/migrations/dryrun v=35"; \
+		exit 1; \
+	fi; \
+	echo "  Dry run of $$f -- every statement below is rolled back."; \
+	echo ''; \
+	printf 'BEGIN;\n\\i %s\nROLLBACK;\n' "$$f" | psql ${LIRADB_DSN} -v ON_ERROR_STOP=0
+
+## db/migrations/lint: parse every migration file and report the ones that are not valid SQL
+#
+# Exists because of a bug that shipped in 5417b03 and could not reach production
+# any other way. One line of a comment in 000035 lost its leading `--`, so the file
+# stopped being a comment and became a bare sentence sitting in a CREATE TABLE
+# script. It was a SYNTAX ERROR, and therefore fatal -- but the migration had
+# already been "applied" locally, so nobody ran it again, and the only evidence it
+# was broken was a deploy on another server failing with an error that named line 158
+# of a file the author had written that morning.
+#
+# Every file is run through the real parser inside a transaction that is rolled
+# back. Only PARSE errors are reported -- `syntax error`, `unterminated quoted
+# string`, `incomplete input`. Those are state-independent: a file with one is
+# invalid against an empty database, a full database and a production one alike, so
+# this lints correctly on a database where everything is already applied and every
+# statement is a harmless "already exists" notice.
+#
+# State-dependent failures ("already exists", duplicate key) are DELIBERATELY not
+# reported here. On a migrated database every such statement is expected, and
+# reporting them would bury the one line that matters.
+#
+# Safe against a live database: DDL is transactional, so every statement is undone
+# before psql exits. The migrations contain no CONCURRENTLY, VACUUM, ALTER TYPE,
+# CREATE DATABASE or CREATE EXTENSION, all of which would refuse to run inside a
+# transaction and are the reason this is safe to point at production.
+.PHONY: db/migrations/lint
+db/migrations/lint:
+	@fail=0; n=0; \
+	for f in ./migrations/0*.sql; do \
+		n=$$((n+1)); \
+		out=$$(printf 'BEGIN;\n\\i %s\nROLLBACK;\n' "$$f" | psql ${LIRADB_DSN} -v ON_ERROR_STOP=0 -q 2>&1); \
+		if echo "$$out" | grep -qE 'syntax error|unterminated quoted string|incomplete input'; then \
+			echo "  PARSE ERROR  $$f"; \
+			echo "$$out" | grep -E 'ERROR|LINE [0-9]' | sed 's/^/      /'; \
+			fail=1; \
+		fi; \
+	done; \
+	if [ $$fail -eq 0 ]; then \
+		echo "  $$n migration files parse"; \
+	else \
+		echo ''; \
+		echo "  A migration file is not valid SQL. Nothing above this line is a bug --"; \
+		echo "  every other statement ran and was rolled back."; \
+		exit 1; \
+	fi
+
 ## db/migrations/new name=$1: create a new database migration
 .PHONY: db/migrations/new
 db/migrations/new:
