@@ -45,8 +45,47 @@ db/psql:
 	psql ${LIRADB_DSN}
 
 ## db/migrations/up: apply all up database migrations
+#
+# `tr -d '\r'` in the recipes below is not decoration. psql on Windows terminates its
+# output with CRLF, and `$(...)` strips the newline but NOT the carriage return -- so
+# the value read back is "t\r", `[ "$d" = "t" ]` is false, and a dirty database reads
+# as clean. That failure is silent and worse than having no guard at all: it looks
+# like the check is passing.
+#
+# So: apply migrations with `migrate`. Never with `psql`. See docs/migrations.md.
+#
+# The dirty check below is the important part, and it is here because the failure it
+# prevents is confusing rather than obvious.
+#
+# `psql -f migrations/0000NN.up.sql` applies a migration PERFECTLY -- every table,
+# column and trigger is created -- and records nothing, because schema_migrations is
+# written only by the migrate CLI. The next `up` then reads an old version, believes
+# it, tries to re-apply a migration whose objects already exist, fails, and marks the
+# database DIRTY. From that point every migrate command refuses, and the error names
+# the migration that FAILED, which is usually not the one you were working on.
+#
+# So the guard prints what dirty means and how to get out of it, rather than letting
+# migrate print "Fix and force version" and leaving the reader to work out what that
+# means. See docs/migrations.md.
 .PHONY: db/migrations/up
 db/migrations/up: confirm
+	@d=$$(psql ${LIRADB_DSN} -At -c 'SELECT dirty FROM schema_migrations' 2>/dev/null | tr -d '\r'); \
+	if [ "$$d" = "t" ]; then \
+		v=$$(psql ${LIRADB_DSN} -At -c 'SELECT version FROM schema_migrations' 2>/dev/null | tr -d '\r'); \
+		echo ""; \
+		echo "  This database is DIRTY at version $$v."; \
+		echo "  The schema and schema_migrations disagree, and migrate will refuse to"; \
+		echo "  run until the version is forced."; \
+		echo ""; \
+		echo "  CHECK THE SCHEMA FIRST -- force runs no SQL and verifies nothing:"; \
+		echo "    make db/migrations/status"; \
+		echo "  then, if every object is really there:"; \
+		echo "    migrate -path ./migrations -database ${LIRADB_DSN} force $$v"; \
+		echo ""; \
+		echo "  Full procedure: docs/migrations.md"; \
+		echo ""; \
+		exit 1; \
+	fi
 	@echo 'Running up migrations...'
 	migrate -path ./migrations -database ${LIRADB_DSN} up
 
@@ -55,6 +94,28 @@ db/migrations/up: confirm
 db/migrations/down: confirm
 	@echo 'Running down migrations...'
 	migrate -path ./migrations -database ${LIRADB_DSN} down
+
+## db/migrations/status: report the applied version, and flag a dirty database
+#
+# Read-only. It never forces anything, because `force` runs no SQL and so verifies
+# nothing -- a status command that could silently paper over a half-applied migration
+# would be the wrong place to put that power.
+.PHONY: db/migrations/status
+db/migrations/status:
+	@v=$$(psql ${LIRADB_DSN} -At -c 'SELECT version FROM schema_migrations' 2>/dev/null | tr -d '\r'); \
+	d=$$(psql ${LIRADB_DSN} -At -c 'SELECT dirty FROM schema_migrations' 2>/dev/null | tr -d '\r'); \
+	if [ -z "$$v" ]; then \
+		echo "  No schema_migrations table. This database has never been migrated."; \
+		echo "  Run: make db/migrations/up"; \
+	elif [ "$$d" = "t" ]; then \
+		echo "  DIRTY at version $$v"; \
+		echo "  A migration failed partway. migrate will refuse every command until"; \
+		echo "  the version is forced, and forcing runs no SQL."; \
+		echo "  Check the schema first, then see docs/migrations.md section 5."; \
+	else \
+		echo "  Clean, version $$v"; \
+		echo "  migrate: $$(migrate -path ./migrations -database ${LIRADB_DSN} version 2>&1 | tr -d '\r')"; \
+	fi
 
 ## db/migrations/new name=$1: create a new database migration
 .PHONY: db/migrations/new

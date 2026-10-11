@@ -1,196 +1,166 @@
-[![GitHub Workflow Status (branch)](https://img.shields.io/github/actions/workflow/status/golang-migrate/migrate/ci.yaml?branch=master)](https://github.com/golang-migrate/migrate/actions/workflows/ci.yaml?query=branch%3Amaster)
-[![GoDoc](https://pkg.go.dev/badge/github.com/golang-migrate/migrate)](https://pkg.go.dev/github.com/golang-migrate/migrate/v4)
-[![Coverage Status](https://img.shields.io/coveralls/github/golang-migrate/migrate/master.svg)](https://coveralls.io/github/golang-migrate/migrate?branch=master)
-[![packagecloud.io](https://img.shields.io/badge/deb-packagecloud.io-844fec.svg)](https://packagecloud.io/golang-migrate/migrate?filter=debs)
-[![Docker Pulls](https://img.shields.io/docker/pulls/migrate/migrate.svg)](https://hub.docker.com/r/migrate/migrate/)
-![Supported Go Versions](https://img.shields.io/badge/Go-1.20%2C%201.21-lightgrey.svg)
-[![GitHub Release](https://img.shields.io/github/release/golang-migrate/migrate.svg)](https://github.com/golang-migrate/migrate/releases)
-[![Go Report Card](https://goreportcard.com/badge/github.com/golang-migrate/migrate/v4)](https://goreportcard.com/report/github.com/golang-migrate/migrate/v4)
+# LIRA
 
-# migrate
+**Llana IT Reporting & Alerts** — a maintenance and operations application for
+hotel technical departments. Issues, preventive maintenance, the team rota,
+consumables, absence, and the daily and attendance reports that come out of all
+of it.
 
-__Database migrations written in Go. Use as [CLI](#cli-usage) or import as [library](#use-in-your-go-project).__
-
-* Migrate reads migrations from [sources](#migration-sources)
-   and applies them in correct order to a [database](#databases).
-* Drivers are "dumb", migrate glues everything together and makes sure the logic is bulletproof.
-   (Keeps the drivers lightweight, too.)
-* Database drivers don't assume things or try to correct user input. When in doubt, fail.
-
-Forked from [mattes/migrate](https://github.com/mattes/migrate)
-
-## Databases
-
-Database drivers run migrations. [Add a new database?](database/driver.go)
-
-* [PostgreSQL](database/postgres)
-* [PGX v4](database/pgx)
-* [PGX v5](database/pgx/v5)
-* [Redshift](database/redshift)
-* [Ql](database/ql)
-* [Cassandra / ScyllaDB](database/cassandra)
-* [SQLite](database/sqlite)
-* [SQLite3](database/sqlite3) ([todo #165](https://github.com/mattes/migrate/issues/165))
-* [SQLCipher](database/sqlcipher)
-* [MySQL / MariaDB](database/mysql)
-* [Neo4j](database/neo4j)
-* [MongoDB](database/mongodb)
-* [CrateDB](database/crate) ([todo #170](https://github.com/mattes/migrate/issues/170))
-* [Shell](database/shell) ([todo #171](https://github.com/mattes/migrate/issues/171))
-* [Google Cloud Spanner](database/spanner)
-* [CockroachDB](database/cockroachdb)
-* [YugabyteDB](database/yugabytedb)
-* [ClickHouse](database/clickhouse)
-* [Firebird](database/firebird)
-* [MS SQL Server](database/sqlserver)
-* [RQLite](database/rqlite)
-
-### Database URLs
-
-Database connection strings are specified via URLs. The URL format is driver dependent but generally has the form: `dbdriver://username:password@host:port/dbname?param1=true&param2=false`
-
-Any [reserved URL characters](https://en.wikipedia.org/wiki/Percent-encoding#Percent-encoding_reserved_characters) need to be escaped. Note, the `%` character also [needs to be escaped](https://en.wikipedia.org/wiki/Percent-encoding#Percent-encoding_the_percent_character)
-
-Explicitly, the following characters need to be escaped:
-`!`, `#`, `$`, `%`, `&`, `'`, `(`, `)`, `*`, `+`, `,`, `/`, `:`, `;`, `=`, `?`, `@`, `[`, `]`
-
-It's easiest to always run the URL parts of your DB connection URL (e.g. username, password, etc) through an URL encoder. See the example Python snippets below:
-
-```bash
-$ python3 -c 'import urllib.parse; print(urllib.parse.quote(input("String to encode: "), ""))'
-String to encode: FAKEpassword!#$%&'()*+,/:;=?@[]
-FAKEpassword%21%23%24%25%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D
-$ python2 -c 'import urllib; print urllib.quote(raw_input("String to encode: "), "")'
-String to encode: FAKEpassword!#$%&'()*+,/:;=?@[]
-FAKEpassword%21%23%24%25%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D
-$
-```
-
-## Migration Sources
-
-Source drivers read migrations from local or remote sources. [Add a new source?](source/driver.go)
-
-* [Filesystem](source/file) - read from filesystem
-* [io/fs](source/iofs) - read from a Go [io/fs](https://pkg.go.dev/io/fs#FS)
-* [Go-Bindata](source/go_bindata) - read from embedded binary data ([jteeuwen/go-bindata](https://github.com/jteeuwen/go-bindata))
-* [pkger](source/pkger) - read from embedded binary data ([markbates/pkger](https://github.com/markbates/pkger))
-* [GitHub](source/github) - read from remote GitHub repositories
-* [GitHub Enterprise](source/github_ee) - read from remote GitHub Enterprise repositories
-* [Bitbucket](source/bitbucket) - read from remote Bitbucket repositories
-* [Gitlab](source/gitlab) - read from remote Gitlab repositories
-* [AWS S3](source/aws_s3) - read from Amazon Web Services S3
-* [Google Cloud Storage](source/google_cloud_storage) - read from Google Cloud Platform Storage
-
-## CLI usage
-
-* Simple wrapper around this library.
-* Handles ctrl+c (SIGINT) gracefully.
-* No config search paths, no config files, no magic ENV var injections.
-
-__[CLI Documentation](cmd/migrate)__
-
-### Basic usage
-
-```bash
-$ migrate -source file://path/to/migrations -database postgres://localhost:5432/database up 2
-```
-
-### Docker usage
-
-```bash
-$ docker run -v {{ migration dir }}:/migrations --network host migrate/migrate
-    -path=/migrations/ -database postgres://localhost:5432/database up 2
-```
-
-## Use in your Go project
-
-* API is stable and frozen for this release (v3 & v4).
-* Uses [Go modules](https://golang.org/cmd/go/#hdr-Modules__module_versions__and_more) to manage dependencies.
-* To help prevent database corruptions, it supports graceful stops via `GracefulStop chan bool`.
-* Bring your own logger.
-* Uses `io.Reader` streams internally for low memory overhead.
-* Thread-safe and no goroutine leaks.
-
-__[Go Documentation](https://pkg.go.dev/github.com/golang-migrate/migrate/v4)__
-
-```go
-import (
-    "github.com/golang-migrate/migrate/v4"
-    _ "github.com/golang-migrate/migrate/v4/database/postgres"
-    _ "github.com/golang-migrate/migrate/v4/source/github"
-)
-
-func main() {
-    m, err := migrate.New(
-        "github://mattes:personal-access-token@mattes/migrate_test",
-        "postgres://localhost:5432/database?sslmode=enable")
-    m.Steps(2)
-}
-```
-
-Want to use an existing database client?
-
-```go
-import (
-    "database/sql"
-    _ "github.com/lib/pq"
-    "github.com/golang-migrate/migrate/v4"
-    "github.com/golang-migrate/migrate/v4/database/postgres"
-    _ "github.com/golang-migrate/migrate/v4/source/file"
-)
-
-func main() {
-    db, err := sql.Open("postgres", "postgres://localhost:5432/database?sslmode=enable")
-    driver, err := postgres.WithInstance(db, &postgres.Config{})
-    m, err := migrate.NewWithDatabaseInstance(
-        "file:///migrations",
-        "postgres", driver)
-    m.Up() // or m.Step(2) if you want to explicitly set the number of migrations to run
-}
-```
-
-## Getting started
-
-Go to [getting started](GETTING_STARTED.md)
-
-## Tutorials
-
-* [CockroachDB](database/cockroachdb/TUTORIAL.md)
-* [PostgreSQL](database/postgres/TUTORIAL.md)
-
-(more tutorials to come)
-
-## Migration files
-
-Each migration has an up and down migration. [Why?](FAQ.md#why-two-separate-files-up-and-down-for-a-migration)
-
-```bash
-1481574547_create_users_table.up.sql
-1481574547_create_users_table.down.sql
-```
-
-[Best practices: How to write migrations.](MIGRATIONS.md)
-
-## Coming from another db migration tool?
-
-Check out [migradaptor](https://github.com/musinit/migradaptor/).
-*Note: migradaptor is not affliated or supported by this project*
-
-## Versions
-
-Version | Supported? | Import | Notes
---------|------------|--------|------
-**master** | :white_check_mark: | `import "github.com/golang-migrate/migrate/v4"` | New features and bug fixes arrive here first |
-**v4** | :white_check_mark: | `import "github.com/golang-migrate/migrate/v4"` | Used for stable releases |
-**v3** | :x: | `import "github.com/golang-migrate/migrate"` (with package manager) or `import "gopkg.in/golang-migrate/migrate.v3"` (not recommended) | **DO NOT USE** - No longer supported |
-
-## Development and Contributing
-
-Yes, please! [`Makefile`](Makefile) is your friend,
-read the [development guide](CONTRIBUTING.md).
-
-Also have a look at the [FAQ](FAQ.md).
+One Go binary, one PostgreSQL database, one embedded single-file frontend. No
+CDN, no build step at run time, no external services.
 
 ---
 
-Looking for alternatives? [https://awesome-go.com/#database](https://awesome-go.com/#database).
+## Stack
+
+| | |
+|---|---|
+| Backend | Go 1.22, `net/http` + [httprouter](https://github.com/julienschmidt/httprouter) |
+| Database | PostgreSQL, [`lib/pq`](https://github.com/lib/pq), `citext` extension |
+| Frontend | React, authored as JSX in one file, compiled with a pinned esbuild |
+| Auth | Bearer tokens, one session per account |
+
+There are no other runtime dependencies. The frontend has none at all: the
+compiled JavaScript and CSS are embedded into the binary with `go:embed`.
+
+---
+
+## Quick start
+
+Requires Go 1.22+ and PostgreSQL with the **`citext`** extension available.
+Node is needed only to rebuild the frontend.
+
+```sh
+make db/setup          # create the database and enable citext  <- do this FIRST
+make db/migrations/up  # apply migrations
+make db/seed           # demo users
+make ui                # compile cmd/api/ui/src/index.html -> cmd/api/ui/index.html
+make run/api           # build and run on :4000
+```
+
+Then open <http://localhost:4000>.
+
+> **`db/setup` is not optional.** Six migrations use `citext` — starting at
+> `000001`, which puts it on `users.email` — and **no migration creates the
+> extension**; `db/setup` does. A database created any other way fails at the
+> first migration with `type "citext" does not exist`. Developed and tested
+> against PostgreSQL 18.
+
+`.envrc` holds `LIRADB_DSN` and every Makefile target reads it. `make help`
+lists the targets; the ones that matter most are below.
+
+---
+
+## Commands
+
+| Target | What it does |
+|---|---|
+| `make run/api` | Build and run the server |
+| `make run/api/dev` | Run with no rate limit, in development mode |
+| `make ui` | **Compile the frontend** — run after every edit to `cmd/api/ui/src/index.html` |
+| `make audit` | `go mod tidy`, `go fmt`, `go vet`, `go test -race` |
+| `make db/migrations/status` | Where the database is, and whether it is healthy |
+| `make db/psql` | Open a psql session |
+
+### The frontend is compiled, not interpreted
+
+`cmd/api/ui/src/index.html` holds JSX. `cmd/api/ui/index.html` holds the
+compiled output and **is committed**, so `go build` and every cross-compile
+target need nothing but Go.
+
+Editing the JSX without running `make ui` means `go build` succeeds and serves
+the previous version — the change is not an error, it is simply not there yet.
+
+---
+
+## Migrations
+
+**Apply migrations with `migrate`, never with `psql`.**
+
+```sh
+make db/migrations/new name=add_widgets
+make db/migrations/status
+make db/migrations/up
+```
+
+`psql -f migrations/0000NN.up.sql` applies a migration perfectly — every table,
+column and trigger is created — and records nothing, because `schema_migrations`
+is written only by the `migrate` CLI. The next `up` then re-applies a migration
+whose objects already exist, fails, and leaves the database **dirty**: from then
+on every migration command refuses, naming the migration that failed rather than
+the one you were working on.
+
+`make db/migrations/status` detects that state and explains the recovery;
+`make db/migrations/up` refuses with the same explanation rather than passing a
+bare "Fix and force version" back. Forcing a version **runs no SQL and verifies
+nothing**, so check the schema first — see
+[`docs/migrations.md`](./docs/migrations.md).
+
+The application never migrates on startup. That is deliberate: starting the
+server must not be able to change the shape of a database.
+
+---
+
+## Layout
+
+```
+cmd/api/            HTTP handlers, routing, middleware, the embedded UI
+  ui/src/index.html   JSX source for the whole frontend
+  ui/index.html       compiled output, committed
+  ui/build.mjs        the compiler
+internal/data/       models, queries, migrations-aware business rules
+internal/report/     PDF, XLSX and attendance renderers
+internal/validator/  input validation
+migrations/          numbered .up.sql / .down.sql pairs, plus seed data
+docs/                design and operations documents
+```
+
+`internal/data` is where the rules live. Anything that decides what a request
+*means* — whether a rota week is closed, whether a cell is "off" or "inherit" —
+belongs there rather than in a handler, so that two entry points cannot disagree
+about it.
+
+---
+
+## Documentation
+
+| Document | |
+|---|---|
+| [`docs/migrations.md`](./docs/migrations.md) | Migration workflow, and recovering a dirty database |
+| [`docs/deployment-topology.md`](./docs/deployment-topology.md) | One server or one per hotel |
+| [`docs/multi-tenancy.md`](./docs/multi-tenancy.md) | Serving several hotels from one deployment |
+| [`docs/golang-migrate.md`](./docs/golang-migrate.md) | Upstream `migrate` README, kept for reference |
+
+The proposal documents are proposals. They describe work that has **not** been
+done, and each says so at the top.
+
+---
+
+## Conventions worth knowing before you change something
+
+These are not stylistic preferences. Each one exists because the alternative
+produced a specific bug.
+
+- **Comments argue, and they argue about the rejected options.** A migration
+  that adds a nullable column records why it is nullable and which migration
+  disagrees. A constraint that could have been stricter records why it is not.
+  This is the house style and it is load-bearing: `000029` and `000035` take
+  opposite positions on the same question, and the comment is where that is
+  resolved.
+- **Write the test that fails first.** Several comments here describe an
+  assertion that was added *after* a bug was found, and say so. That is the
+  point of them.
+- **Timezone arithmetic belongs in Go.** `data.Today()` and `localDay()` exist so
+  that no read of a date depends on the database session's timezone.
+- **Every string goes through `T.en` / `T.pt`.** Parity is enforced: the two
+  tables must have the same keys and the same `{token}` placeholders. Colour
+  tokens only — `--blue`, `--gray-400`, and nothing spelled as a literal hex in
+  a component.
+- **Rebuild the UI after every frontend edit**, and check both themes. There is
+  a layout-shift trap in any slot that swaps between strings of different
+  lengths; reserve the space rather than hoping the copy matches.
+
+---
+
+## Licence
+
+See [`LICENSE`](./LICENSE).
