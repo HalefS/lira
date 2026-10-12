@@ -206,6 +206,19 @@ db/migrations/lint:
 		exit 1; \
 	fi
 
+## ui/check-names: every person name printed outside the rota is shortened
+#
+# 48 render sites were found by hand and edited by line number, and a MISS is
+# invisible -- the page still renders, the name is just still too long. There are no
+# JS tests in this repository and no lint step, so without this nothing would
+# notice. It found three real misses the first time it ran.
+#
+# A source scan, not a browser check: it proves every name that is PRINTED is
+# wrapped, and it cannot notice a person-name field nobody has added to its list.
+.PHONY: ui/check-names
+ui/check-names:
+	@python scripts/check-short-names.py
+
 ## db/migrations/new name=$1: create a new database migration
 .PHONY: db/migrations/new
 db/migrations/new:

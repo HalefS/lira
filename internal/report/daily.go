@@ -291,6 +291,11 @@ func techBars(r *data.DailyReport) []techBar {
 		if sorted[i].Count != sorted[j].Count {
 			return sorted[i].Count > sorted[j].Count
 		}
+		// Ties break on the FULL name, not the shortened one shown on the chart.
+		// Two people can share a short name — a father and a son, both "João
+		// Santos" — and a sort that could not tell them apart would order the bars
+		// by something arbitrary. Sorting on the name that is actually unique costs
+		// nothing, since nobody reads it.
 		return sorted[i].Name < sorted[j].Name
 	})
 
@@ -301,9 +306,14 @@ func techBars(r *data.DailyReport) []techBar {
 			break
 		}
 		bg, fg := avatarColors(t.AvatarIdx)
+		// Shortened, and the initials are taken from the SHORTENED name so the two
+		// agree. Taking them from the full name would give "JS" for João Silva
+		// Santos on a chart labelled "João Santos", which is a different pair of
+		// initials from the words printed beside it.
+		name := shortName(t.Name)
 		bars = append(bars, techBar{
-			Name:     t.Name,
-			Initials: initials(t.Name),
+			Name:     name,
+			Initials: initials(name),
 			AvatarBG: bg,
 			AvatarFG: fg,
 			Count:    t.Count,
@@ -416,6 +426,38 @@ func initials(name string) string {
 		letters = append(letters, []rune(word)[0])
 	}
 	return strings.ToUpper(string(letters))
+}
+
+// shortName is the display form of an account name: the first word and the LAST
+// word, and nothing in between.
+//
+// WHY IT EXISTS, and why only some reports call it: the rota and the attendance
+// workbook show the whole name, because both are statements about WHO worked —
+// in a grid of people against days, and in a document somebody signs. Every other
+// screen and report shows a name as attribution: who logged this, who solved it,
+// who is assigned. There the shortest form that still identifies the person is the
+// right one, and "João Silva Santos" reads better as "João Santos" in a bar chart
+// than as all three words.
+//
+// FIRST AND LAST, NOT FIRST AND SECOND. The rule is "name and last surname", and
+// the second word is not a surname in general — it is whatever happens to sit in
+// the middle.
+//
+// A SINGLE WORD IS RETURNED UNCHANGED, and deliberately: there is no surname to
+// keep, and doubling it would be worse than saying nothing.
+//
+// IT IS THE SAME RULE AS shortName in cmd/api/ui/src/index.html, and that
+// duplication is unavoidable rather than convenient — Go cannot call into the
+// browser. The two must agree, or a person's name is spelled two different ways in
+// a report and on the screen it came from. The attendance workbook is the export
+// that deliberately does NOT call this; attendance.go passes m.Name straight
+// through.
+func shortName(name string) string {
+	parts := strings.Fields(name)
+	if len(parts) < 2 {
+		return name
+	}
+	return parts[0] + " " + parts[len(parts)-1]
 }
 
 func itoa(n int) string { return fmt.Sprintf("%d", n) }

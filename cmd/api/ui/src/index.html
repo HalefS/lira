@@ -5398,6 +5398,51 @@ function Avatar({ name, idx, size='md', src, style }) {
     : <div className={`avatar-circle av-${(idx??0)%5}`} style={box}>{initials(name)}</div>;
 }
 
+/* ─── Display names ───
+
+   ONE name per account, stored in users.name as free text, and TWO renderings of
+   it.
+
+   The rota shows the WHOLE name. Everything else shows the first word and the
+   last. The rota is the one screen whose job is to say WHO — a grid of people
+   against days, read at a glance, where a repeated "João Santos" and "Bruno
+   Santos" are two different people and dropping what sits between them loses
+   something real. Every other screen is showing a name as ATTRIBUTION: who logged
+   this, who solved it, who is assigned. There the shortest form that still
+   identifies the person is the right one.
+
+   FIRST AND LAST, NOT FIRST AND SECOND. "João Silva Santos" becomes "João Santos",
+   not "João Silva" — the rule is "name and last surname", and the second word is
+   not a surname in general, it is whatever happens to be in the middle.
+
+   A SINGLE WORD IS RETURNED UNCHANGED. There is no surname to keep, and inventing
+   one by doubling it — "lira" becoming "lira lira" — would be worse than saying
+   nothing at all.
+
+   IT IS THE SAME RULE IN TWO LANGUAGES, and the duplication is deliberate rather
+   than convenient: shortName in internal/report/daily.go does this for the daily
+   and consumables PDFs, because Go cannot call into the browser. Both take the
+   first and last word of a whitespace-split name and nothing else. Change one,
+   change the other, or a person's name is spelled two different ways in two
+   different documents.
+
+   The attendance workbook is the one export that keeps the whole name: it is a
+   signed statement about who worked, and it is the rota's own document.
+
+   TOP LEVEL, which sounds like a note and is not. This function was first placed
+   directly beneath Avatar's `return`, which put it INSIDE Avatar's body: after a
+   return it is unreachable, and because it was a nested function declaration
+   rather than a module-level one, every shortName() call in the file raised
+   ReferenceError and the whole application rendered as a blank page. The symptom
+   pointed at the call sites -- forty-eight of them, all correct -- and not at the
+   one line that was wrong. */
+function shortName(name) {
+  if (!name) return name;
+  const parts = String(name).trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return name;
+  return parts[0] + ' ' + parts[parts.length - 1];
+}
+
 /* ── TypeBadge ── */
 // Colors are assigned server-side and stored per issue type as a "#RRGGBB"
 // hex value (guaranteed unique — see the admin issue-types catalog).
@@ -7394,15 +7439,15 @@ function TodayPerson({ t, m, changed }) {
 
   return (
     <div className={`rota-person ${tone}${m.active ? '' : ' is-inactive'}${changed ? ' now-person-changed' : ''}`}>
-      <Avatar name={m.name} idx={m.avatar_idx}/>
+      <Avatar name={shortName(m.name)} idx={m.avatar_idx}/>
       <span className="rota-person-id">
         <span className="rota-person-name">
-          {m.name}
+          {shortName(m.name)}
           {/* The overnight tail. Without this, a member on until 06:00 reads as 06:00
               TONIGHT. Reuses the rota page's own mark and key verbatim. */}
           {m.from_yesterday && (
             <span className="rota-person-plus1"
-              title={t.todayOvernightTitle.replace('{name}', m.name)}>
+              title={t.todayOvernightTitle.replace('{name}', shortName(m.name))}>
               {t.rotaPlusOne}
             </span>
           )}
@@ -7414,7 +7459,7 @@ function TodayPerson({ t, m, changed }) {
             that is in the tooltip is also in the accessible name. The cell is not a
             control, so aria-label cannot carry it. */}
         <span className="sr-only">
-          {m.from_yesterday ? t.todayOvernightTitle.replace('{name}', m.name) : ''}
+          {m.from_yesterday ? t.todayOvernightTitle.replace('{name}', shortName(m.name)) : ''}
         </span>
       </span>
       <span className="rota-person-mark" aria-hidden="true">{mark}</span>
@@ -7716,7 +7761,7 @@ function Dashboard({ users, stats, consumableItems, onGoToPage }) {
                 contradicting its own caption because the caption was about the wrong
                 thing. When nobody is coming later the honest caption is no caption. */}
             {onNext
-              ? t.todayNext.replace('{name}', onNext.name).replace('{time}', onNext.time)
+              ? t.todayNext.replace('{name}', shortName(onNext.name)).replace('{time}', onNext.time)
               : (onNow === 0 ? t.todayNoneWorking : '')}
           </div>
         </div>
@@ -7737,7 +7782,7 @@ function Dashboard({ users, stats, consumableItems, onGoToPage }) {
           {byTech.length===0 && <p style={{color:'var(--gray-400)',fontSize:13}}>{t.noUsers}</p>}
           {byTech.map(ts=>(
             <div className="bar-row" key={ts.user_id}>
-              <div className="bar-label"><Avatar name={ts.name} idx={ts.avatar_idx} size="sm"/>{ts.name}</div>
+              <div className="bar-label"><Avatar name={shortName(ts.name)} idx={ts.avatar_idx} size="sm"/>{shortName(ts.name)}</div>
               <div className="bar-track"><div className="bar-fill" style={{width:`${(ts.count/maxWork)*100}%`,background:'#1769AA'}}></div></div>
               <div className="bar-count">{ts.count}</div>
             </div>
@@ -7921,8 +7966,8 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
                 <td><span className={`badge ${issue.status==='Ok'?'badge-ok':'badge-pending'} ${issue.id===newIssueId ? 'status-highlight' : ''}`}>{issue.status}</span></td>
                 <td>
                   <div style={{display:'flex',alignItems:'center',gap:7}}>
-                    <Avatar name={issue.loggedByName} idx={issue.loggedByIdx??0} size="sm"/>
-                    <span style={{fontSize:13,color:'var(--gray-600)'}}>{issue.loggedByName}</span>
+                    <Avatar name={shortName(issue.loggedByName)} idx={issue.loggedByIdx??0} size="sm"/>
+                    <span style={{fontSize:13,color:'var(--gray-600)'}}>{shortName(issue.loggedByName)}</span>
                     {issue.loggedBy===currentUser.id && (
                       <span className="badge" style={{background:'var(--blue-light)',color:'var(--blue)',fontSize:10,padding:'1px 6px'}}>{t.you}</span>
                     )}
@@ -8208,7 +8253,7 @@ function AlertsPage({ currentUser, token, onCountsUpdate, setToast }) {
               <span>{t.tvSwapAlertFrom} <strong style={{color:'var(--gray-900)'}}>{alert.from_room}</strong></span>
               <span>{t.tvSwapAlertTo} <strong style={{color:'var(--gray-900)'}}>{alert.to_room}</strong></span>
               <span>{t.date} {new Date(alert.swap_created_at).toLocaleString()}</span>
-              <span>{t.loggedBy} {alert.logged_by_name}</span>
+              <span>{t.loggedBy} {shortName(alert.logged_by_name)}</span>
             </div>
             {alert.notes && (
               <p style={{margin:'9px 0 0',fontSize:12.5,color:'var(--gray-600)',fontStyle:'italic'}}>{alert.notes}</p>
@@ -8220,7 +8265,7 @@ function AlertsPage({ currentUser, token, onCountsUpdate, setToast }) {
               <div style={{fontSize:11,fontWeight:600,color:'var(--green)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:4}}>{t.finalSolution}</div>
               <div style={{fontSize:13,color:'var(--gray-900)'}}>{alert.solution}</div>
               <div style={{fontSize:11.5,color:'var(--gray-400)',marginTop:6}}>
-                {t.solvedBy} <strong>{alert.solved_by_name}</strong>
+                {t.solvedBy} <strong>{shortName(alert.solved_by_name)}</strong>
                 {alert.solved_at && <> · {new Date(alert.solved_at).toLocaleString()}</>}
               </div>
             </div>
@@ -8295,7 +8340,7 @@ function AlertsPage({ currentUser, token, onCountsUpdate, setToast }) {
               <div style={{fontSize:11,fontWeight:600,color:'var(--green)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:4}}>{t.finalSolution}</div>
               <div style={{fontSize:13,color:'var(--gray-900)'}}>{alert.solution}</div>
               <div style={{fontSize:11.5,color:'var(--gray-400)',marginTop:6}}>
-                {t.solvedBy} <strong>{alert.solved_by_name}</strong> · {new Date(alert.solved_at).toLocaleString()}
+                {t.solvedBy} <strong>{shortName(alert.solved_by_name)}</strong> · {new Date(alert.solved_at).toLocaleString()}
               </div>
             </div>
           )}
@@ -8342,7 +8387,7 @@ function AlertsPage({ currentUser, token, onCountsUpdate, setToast }) {
                     <TVSwapStrip swaps={issue.tv_swaps} t={t}/></td>
                   <td>{issue.resolution || '—'}</td>
                   <td><span className={`badge ${issue.status==='Ok'?'badge-ok':'badge-pending'}`}>{issue.status}</span></td>
-                  <td>{issue.logged_by_name}</td>
+                  <td>{shortName(issue.logged_by_name)}</td>
                 </tr>
               ))}
             </tbody>
@@ -8764,7 +8809,7 @@ function TVSwapsPage({ token }) {
                       <div style={{fontSize:12.5,color:'var(--gray-500)',marginTop:2}}>{s.issue_problem}</div>
                     </td>
                     <td style={{fontSize:12.5,color:'var(--gray-500)'}}>{s.notes || '—'}</td>
-                    <td style={{fontSize:12.5,color:'var(--gray-600)'}}>{s.logged_by_name || '—'}</td>
+                    <td style={{fontSize:12.5,color:'var(--gray-600)'}}>{shortName(s.logged_by_name) || '—'}</td>
                   </tr>
                 );
               })}
@@ -8897,7 +8942,7 @@ function AnalyticsPage({ token, alertsPendingCount }) {
             <div className="mini-card" style={{marginBottom:20,display:'flex',alignItems:'center',gap:14}}>
               <span style={{color:'var(--green)'}}>{Ic.check}</span>
               <div>
-                <div className="mini-card-title" style={{marginBottom:2}}>{t.bestAvgTime}: {bestTech.name}</div>
+                <div className="mini-card-title" style={{marginBottom:2}}>{t.bestAvgTime}: {shortName(bestTech.name)}</div>
                 <div style={{fontSize:13,color:'var(--gray-400)'}}>{bestTech.avg_time_minutes}m {t.avgTimeMetric.toLowerCase()} · {bestTech.resolved} {t.resolvedMetric.toLowerCase()}</div>
               </div>
             </div>
@@ -8925,7 +8970,7 @@ function AnalyticsPage({ token, alertsPendingCount }) {
                   {techByAvg.map(tech=>(
                     <tr key={tech.user_id}>
                       <td>
-                        {tech.name}
+                        {shortName(tech.name)}
                         {data.best_technician_id===tech.user_id && (
                           <span className="badge badge-ok" style={{marginLeft:8,fontSize:10}}>{t.bestLabel}</span>
                         )}
@@ -9097,8 +9142,8 @@ function EntryTable({ rows, locationHeader }) {
               </td>
               <td>
                 <div style={{display:'flex',alignItems:'center',gap:7}}>
-                  <Avatar name={c.logged_by_name} idx={c.logged_by_idx||0} size="sm"/>
-                  <span style={{fontSize:13,color:'var(--gray-600)'}}>{c.logged_by_name}</span>
+                  <Avatar name={shortName(c.logged_by_name)} idx={c.logged_by_idx||0} size="sm"/>
+                  <span style={{fontSize:13,color:'var(--gray-600)'}}>{shortName(c.logged_by_name)}</span>
                 </div>
               </td>
             </tr>
@@ -9441,7 +9486,7 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
                                   </td>
                                   <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{m.balance_after}</td>
                                   <td style={{fontSize:12.5}}>{t['stockReason_'+m.reason] || m.reason}</td>
-                                  <td style={{fontSize:12.5,color:'var(--gray-600)'}}>{m.logged_by_name || '—'}</td>
+                                  <td style={{fontSize:12.5,color:'var(--gray-600)'}}>{shortName(m.logged_by_name) || '—'}</td>
                                   <td style={{fontSize:12.5,color:'var(--gray-500)'}}>{m.note || '—'}</td>
                                 </tr>
                               ))}
@@ -9511,7 +9556,7 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
                       </td>
                       <td style={{fontFamily:'DM Mono,monospace',fontSize:13}}>×{c.quantity}</td>
                       <td>{c.location}</td>
-                      <td>{c.logged_by_name}</td>
+                      <td>{shortName(c.logged_by_name)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -9779,9 +9824,9 @@ function TeamPage({ token, users, userIssueStats, currentUser, onUsersUpdate, se
         // Only place the code is ever shown, so it is held in component state
         // and shown in a dialog rather than buried in a toast that disappears.
         setResetCode({ code: res.code, name: res.user.name, expiresIn: res.expires_in });
-        setToast(t.resetPasswordDone.replace('{name}', res.user.name));
+        setToast(t.resetPasswordDone.replace('{name}', shortName(res.user.name)));
       } else {
-        setToast(t.resetPasswordCleared.replace('{name}', res.user.name));
+        setToast(t.resetPasswordCleared.replace('{name}', shortName(res.user.name)));
       }
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
@@ -9839,8 +9884,8 @@ function TeamPage({ token, users, userIssueStats, currentUser, onUsersUpdate, se
               <tr key={u.id} className={u.active ? '' : 'fp-row'}>
                 <td style={{minWidth:170}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <Avatar name={u.name} idx={u.avatar_idx} size="sm" src={u.avatar_data}/>
-                    <span style={{fontWeight:500,whiteSpace:'nowrap'}}>{u.name}</span>
+                    <Avatar name={shortName(u.name)} idx={u.avatar_idx} size="sm" src={u.avatar_data}/>
+                    <span style={{fontWeight:500,whiteSpace:'nowrap'}}>{shortName(u.name)}</span>
                     {u.id===currentUser.id && <span className="team-you">{t.you}</span>}
                   </div>
                 </td>
@@ -9885,7 +9930,7 @@ function TeamPage({ token, users, userIssueStats, currentUser, onUsersUpdate, se
                           const ask = u.must_reset_password
                             ? t.resetPasswordUndoConfirm
                             : t.resetPasswordConfirm;
-                          if (u.must_reset_password || confirm(ask.replace('{name}', u.name))) {
+                          if (u.must_reset_password || confirm(ask.replace('{name}', shortName(u.name)))) {
                             setPasswordReset(u.id, !u.must_reset_password);
                           }
                         }}>
@@ -9919,7 +9964,7 @@ function TeamPage({ token, users, userIssueStats, currentUser, onUsersUpdate, se
       </div>
 
       {resetCode && (
-        <ResetCodeDialog code={resetCode.code} userName={resetCode.name}
+        <ResetCodeDialog code={resetCode.code} userName={shortName(resetCode.name)}
           expiresIn={resetCode.expiresIn} t={t}
           onDone={()=>setResetCode(null)}/>
       )}
@@ -9937,10 +9982,10 @@ function TeamPage({ token, users, userIssueStats, currentUser, onUsersUpdate, se
         return (
           <div className={`mini-card${inactive ? ' team-card-inactive' : ''}`} key={u.id}>
             <div className="team-card-head">
-              <Avatar name={u.name} idx={u.avatar_idx} size="lg" src={u.avatar_data}/>
+              <Avatar name={shortName(u.name)} idx={u.avatar_idx} size="lg" src={u.avatar_data}/>
               <div className="team-card-id">
                 <div className="team-card-name">
-                  <span>{u.name}</span>
+                  <span>{shortName(u.name)}</span>
                   {u.id===currentUser.id && <span className="team-you">{t.you}</span>}
                   {inactive && <span className="team-inactive-badge">{t.inactive}</span>}
                 </div>
@@ -10054,7 +10099,7 @@ function LCUUnitCard({ unit, today, onAnswer, onDelete, t, index }) {
         <div>
           <span className="lcu-serial">{unit.serial}</span>
           <div className="lcu-meta" style={{marginTop:5}}>
-            {unit.added_by_name && <span>{t.lcuAddedBy} {unit.added_by_name}</span>}
+            {shortName(unit.added_by_name) && <span>{t.lcuAddedBy} {shortName(unit.added_by_name)}</span>}
             <span>{unit.starts_on.slice(0,10)} → {unit.ends_on.slice(0,10)}</span>
             {unit.note && <span>· {unit.note}</span>}
           </div>
@@ -10179,7 +10224,7 @@ function LCURestingRow({ t, lang, unit, fresh, onDelete, busy }) {
         {unit.in_pool ? (
           <>
             <span className="lcu-pool-since">{t.lcuPoolSince.replace('{date}', since)}</span>
-            {unit.added_by_name && <span className="lcu-meta">{t.lcuAddedBy} {unit.added_by_name}</span>}
+            {shortName(unit.added_by_name) && <span className="lcu-meta">{t.lcuAddedBy} {shortName(unit.added_by_name)}</span>}
           </>
         ) : (
           <span className="lcu-cell-none">—</span>
@@ -10729,7 +10774,7 @@ function MaintenanceDeviceCard({ s, t, canManage, onComplete, onHistory, onEdit,
             they are the ones who reassign; a technician can only ever see their
             own or a shared one, and "all technicians" on every tile would just
             be noise. */}
-        {s.assignee_name && <span className="maint-fact">{s.assignee_name}</span>}
+        {shortName(s.assignee_name) && <span className="maint-fact">{shortName(s.assignee_name)}</span>}
       </div>
       {/* The foot, under a rule: the two dates a reader scans a queue for. The
           words go green or red with the dot, so a device that was checked today
@@ -11094,7 +11139,7 @@ function MaintenancePage({ token, currentUser, departments, setToast, onCountsUp
                             )}
                           </td>
                           <td style={{maxWidth:260,fontSize:12.5,color:'var(--gray-600)'}}>{c.note || '—'}</td>
-                          <td style={{fontSize:12.5}}>{c.done_by_name}</td>
+                          <td style={{fontSize:12.5}}>{shortName(c.done_by_name)}</td>
                         </tr>
                       );
                     })}
@@ -11370,7 +11415,7 @@ function MaintenanceScheduleDialog({ schedule, departments, staff, t, token, set
             <select id="maint-assignee" className="form-control" value={assignee} onChange={e=>setAssignee(e.target.value)}>
               <option value="">{t.maintenanceAllTechnicians}</option>
               {(staff || []).map(u => (
-                <option key={u.id} value={u.id}>{u.name}</option>
+                <option key={u.id} value={u.id}>{shortName(u.name)}</option>
               ))}
             </select>
             <div className="maint-hint">{t.maintenanceAssignHint}</div>
@@ -11452,7 +11497,7 @@ function MaintenanceHistoryDialog({ schedule, token, t, onClose }) {
                     </span>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12.5,color:'var(--gray-500)'}}>
-                        {formatDateShort(c.done_on)} · {t.maintenanceBy.replace('{name}', c.done_by_name)}
+                        {formatDateShort(c.done_on)} · {t.maintenanceBy.replace('{name}', shortName(c.done_by_name))}
                       </div>
                       {c.note && <div style={{fontSize:13,marginTop:2}}>{c.note}</div>}
                       {c.issue_label && (
@@ -11639,7 +11684,7 @@ function ReportsPage({ token, slaMinutes }) {
                 ? <p style={{color:'var(--gray-400)',fontSize:13}}>No technicians.</p>
                 : report.by_technician.map(ts=>(
                     <div className="bar-row" key={ts.user_id}>
-                      <div className="bar-label"><Avatar name={ts.name} idx={ts.avatar_idx} size="sm"/>{ts.name}</div>
+                      <div className="bar-label"><Avatar name={shortName(ts.name)} idx={ts.avatar_idx} size="sm"/>{shortName(ts.name)}</div>
                       <div className="bar-track"><div className="bar-fill" style={{width:`${(ts.count/maxTech)*100}%`,background:'#1769AA'}}></div></div>
                       <div className="bar-count">{ts.count}</div>
                     </div>
@@ -11669,8 +11714,8 @@ function ReportsPage({ token, slaMinutes }) {
                       <td><span className={`badge ${i.status==='Ok'?'badge-ok':'badge-pending'}`}>{i.status}</span></td>
                       <td>
                         <div style={{display:'flex',alignItems:'center',gap:7}}>
-                          <Avatar name={i.logged_by_name} idx={i.logged_by_idx||0} size="sm"/>
-                          <span style={{fontSize:13,color:'var(--gray-600)'}}>{i.logged_by_name}</span>
+                          <Avatar name={shortName(i.logged_by_name)} idx={i.logged_by_idx||0} size="sm"/>
+                          <span style={{fontSize:13,color:'var(--gray-600)'}}>{shortName(i.logged_by_name)}</span>
                         </div>
                       </td>
                     </tr>
@@ -11701,8 +11746,8 @@ function ReportsPage({ token, slaMinutes }) {
                       <td><span className={`badge ${i.status==='Ok'?'badge-ok':'badge-pending'}`}>{i.status}</span></td>
                       <td>
                         <div style={{display:'flex',alignItems:'center',gap:7}}>
-                          <Avatar name={i.logged_by_name} idx={i.logged_by_idx||0} size="sm"/>
-                          <span style={{fontSize:13,color:'var(--gray-600)'}}>{i.logged_by_name}</span>
+                          <Avatar name={shortName(i.logged_by_name)} idx={i.logged_by_idx||0} size="sm"/>
+                          <span style={{fontSize:13,color:'var(--gray-600)'}}>{shortName(i.logged_by_name)}</span>
                         </div>
                       </td>
                     </tr>
@@ -11838,7 +11883,7 @@ function ProfilePage({ currentUser, token, onSessionUpdate, setToast, lang, onLa
       {/* Profile header */}
       <div className="mini-card" style={{display:'flex',alignItems:'center',gap:20,marginBottom:20,padding:'20px 24px'}}>
         <div style={{position:'relative',flexShrink:0}}>
-          <Avatar name={currentUser.name} idx={currentUser.avatar_idx} size="lg"
+          <Avatar name={shortName(currentUser.name)} idx={currentUser.avatar_idx} size="lg"
             src={avatarData || currentUser.avatar_data}
             style={{width:64,height:64,fontSize:22,border:'2px solid var(--gray-200)'}}/>
           <button onClick={()=>fileRef.current.click()}
@@ -11850,7 +11895,7 @@ function ProfilePage({ currentUser, token, onSessionUpdate, setToast, lang, onLa
           <input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleFileChange}/>
         </div>
         <div>
-          <div style={{fontSize:18,fontWeight:600}}>{currentUser.name}</div>
+          <div style={{fontSize:18,fontWeight:600}}>{shortName(currentUser.name)}</div>
           <div style={{fontSize:13,color:'var(--gray-400)',marginTop:2,display:'flex',alignItems:'center',gap:6}}>
             {currentUser.role==='manager' ? Ic.shield : Ic.tool}
             {currentUser.role==='manager' ? t.managerRole : t.techRole}
@@ -11920,7 +11965,7 @@ function ProfilePage({ currentUser, token, onSessionUpdate, setToast, lang, onLa
             {avatarData
               ? <img src={avatarData} style={{width:120,height:120,borderRadius:'50%',objectFit:'cover',border:'3px solid var(--gray-200)'}}/>
               : <div style={{width:120,height:120,borderRadius:'50%',background:'var(--blue-light)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:40,fontWeight:600,color:'var(--blue)'}}>
-                  {initials(currentUser.name)}
+                  {initials(shortName(currentUser.name))}
                 </div>
             }
             <div style={{display:'flex',gap:10}}>
@@ -13445,7 +13490,7 @@ function RosterRow({ t, m, checked, onToggle, showCells,
           onPointerMove={onGripMove}
           onPointerUp={onGripUp}
           onPointerCancel={onGripUp}
-          title={t.rosterOrderGrip.replace('{name}', m.name)}>
+          title={t.rosterOrderGrip.replace('{name}', shortName(m.name))}>
           {Ic.brackets}
         </button>
       )}
@@ -13456,10 +13501,10 @@ function RosterRow({ t, m, checked, onToggle, showCells,
           onChange={() => onToggle(m.user_id)}/>
         <span className="roster-tick" aria-hidden="true">{checked ? Ic.check : null}</span>
 
-        <Avatar name={m.name} idx={m.avatar_idx} size="sm"/>
+        <Avatar name={shortName(m.name)} idx={m.avatar_idx} size="sm"/>
 
         <span className="roster-id">
-          <span className="roster-name">{m.name}</span>
+          <span className="roster-name">{shortName(m.name)}</span>
           {/* Role is a fact about the ACCOUNT, not about rota membership, so it is a
               badge and never a reason to be excluded. */}
           {m.role === 'manager' && <span className="roster-role">{t.rosterRoleManager}</span>}
@@ -13505,7 +13550,7 @@ function RosterRow({ t, m, checked, onToggle, showCells,
             onKeyDown={e => onMoveKey(e, 'up')}
             onClick={() => onMove(-1)}
             title={t.rosterOrderUp}
-            aria-label={t.rosterOrderUpOf.replace('{name}', m.name)}>
+            aria-label={t.rosterOrderUpOf.replace('{name}', shortName(m.name))}>
             {Ic.chevron}
           </button>
           <button type="button"
@@ -13516,7 +13561,7 @@ function RosterRow({ t, m, checked, onToggle, showCells,
             onKeyDown={e => onMoveKey(e, 'down')}
             onClick={() => onMove(+1)}
             title={t.rosterOrderDown}
-            aria-label={t.rosterOrderDownOf.replace('{name}', m.name)}>
+            aria-label={t.rosterOrderDownOf.replace('{name}', shortName(m.name))}>
             {Ic.chevron}
           </button>
         </span>
@@ -13670,9 +13715,14 @@ function RosterCard({ token, setToast }) {
 
   // -- The ordering controls ------------------------------------------------------
 
+  /* SHORTENED, unlike SchedulePage's identically-named nameFor, because this is a
+     Settings screen and Settings is not the rota. The two helpers are the same
+     shape on purpose -- both read the same members array -- so they are easy to
+     confuse, and the difference is a deliberate exception rather than an
+     oversight: the rota keeps whole names, everything else does not. */
   const nameOf = id => {
     const m = (data && data.members || []).find(x => x.user_id === id);
-    return m ? m.name : '';
+    return m ? shortName(m.name) : '';
   };
 
   // The repeated-string trick: an identical message set twice in a row is announced
@@ -14143,8 +14193,8 @@ function ConfirmRosterOff({ t, people, onCancel, onConfirm, busy }) {
           <ul className="roster-offlist">
             {people.map(p => (
               <li key={p.user_id} className="roster-offlist-row">
-                <Avatar name={p.name} idx={p.avatar_idx} size="sm"/>
-                <span className="roster-offlist-name">{p.name}</span>
+                <Avatar name={shortName(p.name)} idx={p.avatar_idx} size="sm"/>
+                <span className="roster-offlist-name">{shortName(p.name)}</span>
                 {p.assigned_cells > 0 && (
                   <span className="rota-free is-away">
                     {Ic.slash}
@@ -17064,9 +17114,9 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
           </div>
           <div className="sidebar-footer">
             <button className="sidebar-user" onClick={()=>setPage('profile')}>
-              <Avatar name={me.name} idx={me.avatar_idx} src={me.avatar_data}/>
+              <Avatar name={shortName(me.name)} idx={me.avatar_idx} src={me.avatar_data}/>
               <div>
-                <div className="sidebar-user-name">{me.name}</div>
+                <div className="sidebar-user-name">{shortName(me.name)}</div>
                 <div className="sidebar-user-role">{me.role==='manager' ? t.managerRole : t.techRole}</div>
               </div>
             </button>

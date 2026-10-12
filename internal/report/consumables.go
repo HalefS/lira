@@ -165,7 +165,10 @@ func newConsumablesView(r *data.ConsumablesWeeklyReport) consumablesView {
 	}
 	for _, t := range r.ByTechnician {
 		bg, fg := avatarColors(t.AvatarIdx)
-		name := t.Name
+		// Shortened for the same reason as the daily report, and by the same
+		// function -- see shortName. The initials come from the shortened name so
+		// the avatar and the printed name agree.
+		name := shortName(t.Name)
 		v.Techs = append(v.Techs, consumableTechRow{
 			Name:     name,
 			Initials: initials(name),

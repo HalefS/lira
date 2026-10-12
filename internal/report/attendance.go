@@ -295,6 +295,12 @@ func newAttendanceView(w *data.ScheduleWeek) attendanceView {
 			continue
 		}
 		row := attendanceRow{
+			// THE FULL NAME, and not shortName. This workbook is the rota's own
+			// document: a signed statement about who worked, in a grid of people
+			// against days, where "João Santos" and "Bruno Santos" are two different
+			// people and dropping what sits between them loses something real. Every
+			// other report shortens, and the difference is deliberate rather than an
+			// oversight -- see shortName.
 			Name:     m.Name,
 			Initials: initials(m.Name),
 			Inactive: !m.Active,
