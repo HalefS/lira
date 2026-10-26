@@ -11723,7 +11723,7 @@ function ReportsPage({ token, slaMinutes, issueTypes }) {
           are fixed on the right, so the page does not become three toolbars. */}
       <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:22,flexWrap:'wrap'}}>
         {mode === 'daily' && (
-          <div style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
             {Ic.calendar}
             <input type="date" value={date} onChange={e=>setDate(e.target.value)}
               aria-label={t.historyPickDate}
@@ -11732,7 +11732,7 @@ function ReportsPage({ token, slaMinutes, issueTypes }) {
         )}
         {mode === 'monthly' && (
           <>
-            <div style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
               {Ic.calendar}
               <input type="month" value={month} onChange={e=>setMonth(e.target.value)}
                 aria-label={t.reportPickMonth}
@@ -11743,14 +11743,14 @@ function ReportsPage({ token, slaMinutes, issueTypes }) {
         )}
         {mode === 'range' && (
           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
               {Ic.calendar}
               <input type="date" value={from} onChange={e=>setFrom(e.target.value)}
                 aria-label={t.reportRangeFrom}
                 style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}/>
             </div>
             <span style={{color:'var(--gray-400)',fontSize:13}}>→</span>
-            <div style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
               {Ic.calendar}
               <input type="date" value={to} onChange={e=>setTo(e.target.value)}
                 aria-label={t.reportRangeTo}
@@ -11763,7 +11763,7 @@ function ReportsPage({ token, slaMinutes, issueTypes }) {
             that chart into one bar, which is honest rather than useful, but the
             rest of the report (summary, by technician) is still worth having for
             one type. */}
-        <div style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
           <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}
             aria-label={t.reportTypeFilter}
             style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}>
