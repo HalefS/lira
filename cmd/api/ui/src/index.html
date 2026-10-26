@@ -3512,6 +3512,8 @@ const T = {
     reportEmptyRange: 'No issues logged between {from} and {to}.',
     reportAggregatesOnly: 'This report shows aggregates. Download the PDF for the full issue list.',
     reportTitle: 'Issues report',
+    reportTypeFilter: 'Filter by issue type',
+    reportAllTypes: 'All types',
     historyShowingAll: 'Showing all dates',
     historyTodayCarriesPending: 'Today also carries anything still pending from earlier days, until it is solved',
     historyToday: 'Today',
@@ -4464,6 +4466,8 @@ const T = {
     reportEmptyRange: 'Nenhuma avaria registada entre {from} e {to}.',
     reportAggregatesOnly: 'Este relatório mostra agregados. Descarregue o PDF para a lista completa.',
     reportTitle: 'Relatório de avarias',
+    reportTypeFilter: 'Filtrar por tipo de avaria',
+    reportAllTypes: 'Todos os tipos',
     historyShowingAll: 'A mostrar todas as datas',
     historyTodayCarriesPending: 'Hoje traz também tudo o que continua pendente de dias anteriores, até ser resolvido',
     historyToday: 'Hoje',
@@ -11554,7 +11558,7 @@ function MaintenanceHistoryDialog({ schedule, token, t, onClose }) {
 }
 
 /* ════════════════ REPORTS PAGE ════════════════ */
-function ReportsPage({ token, slaMinutes }) {
+function ReportsPage({ token, slaMinutes, issueTypes }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   // Three modes, one page. Daily is the original; monthly and range aggregate
@@ -11571,6 +11575,11 @@ function ReportsPage({ token, slaMinutes }) {
     return localISODate(d);
   });
   const [to, setTo]       = useState(todayISO);
+  // Issue-type filter. Empty string means "all types", which is the default and
+  // the only value that makes the by-type chart meaningful; a single type turns
+  // that chart into one bar, which is honest rather than useful, but the rest of
+  // the report (summary, by technician) is still worth having for one type.
+  const [typeFilter, setTypeFilter] = useState('');
   const [error,   setError]   = useState('');
   const [downloading, setDownloading] = useState(false);
   // Re-asks for the same selection. setDate(d => d) cannot do this: it sets the
@@ -11585,14 +11594,15 @@ function ReportsPage({ token, slaMinutes }) {
   // rest of the page can switch on without re-deriving it. Kept in sync with the
   // inputs above rather than computed, because the inputs are the source of truth
   // and the derived form would have to be rebuilt on every render.
-  const filterKey = mode === 'daily'   ? `daily|${date}|${epoch}`
-                  : mode === 'monthly' ? `monthly|${month}|${epoch}`
-                  :                      `range|${from}|${to}|${epoch}`;
+  const filterKey = mode === 'daily'   ? `daily|${date}|${typeFilter}|${epoch}`
+                  : mode === 'monthly' ? `monthly|${month}|${typeFilter}|${epoch}`
+                  :                      `range|${from}|${to}|${typeFilter}|${epoch}`;
 
   function buildPath(limit) {
-    if (mode === 'daily')   return `/reports/daily?date=${date}&limit=${limit}`;
-    if (mode === 'monthly') return `/reports/monthly?month=${month}&limit=${limit}`;
-    return `/reports/range?from=${from}&to=${to}&limit=${limit}`;
+    const typeQ = typeFilter ? `&type=${encodeURIComponent(typeFilter)}` : '';
+    if (mode === 'daily')   return `/reports/daily?date=${date}&limit=${limit}${typeQ}`;
+    if (mode === 'monthly') return `/reports/monthly?month=${month}&limit=${limit}${typeQ}`;
+    return `/reports/range?from=${from}&to=${to}&limit=${limit}${typeQ}`;
   }
 
   /* The two issue tables page; everything else on this page does not.
@@ -11625,9 +11635,10 @@ function ReportsPage({ token, slaMinutes }) {
     try {
       // The PDF endpoint matches the mode, so the downloaded file is the period
       // on screen and not a daily report wearing a different name.
-      const pdfUrl = mode === 'daily'   ? `${API}/reports/daily.pdf?date=${date}`
-                   : mode === 'monthly' ? `${API}/reports/monthly.pdf?month=${month}`
-                   :                      `${API}/reports/range.pdf?from=${from}&to=${to}`;
+      const typeQ = typeFilter ? `&type=${encodeURIComponent(typeFilter)}` : '';
+      const pdfUrl = mode === 'daily'   ? `${API}/reports/daily.pdf?date=${date}${typeQ}`
+                   : mode === 'monthly' ? `${API}/reports/monthly.pdf?month=${month}${typeQ}`
+                   :                      `${API}/reports/range.pdf?from=${from}&to=${to}${typeQ}`;
       const res = await fetch(pdfUrl, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -11747,6 +11758,21 @@ function ReportsPage({ token, slaMinutes }) {
             </div>
           </div>
         )}
+        {/* Issue-type filter. Empty means "all types", which is the default and the
+            only value that makes the by-type chart meaningful; a single type turns
+            that chart into one bar, which is honest rather than useful, but the
+            rest of the report (summary, by technician) is still worth having for
+            one type. */}
+        <div style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
+          <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}
+            aria-label={t.reportTypeFilter}
+            style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}>
+            <option value="">{t.reportAllTypes}</option>
+            {(issueTypes||[]).map(it => (
+              <option key={it.id} value={it.name}>{it.name}</option>
+            ))}
+          </select>
+        </div>
         <button className="btn btn-ghost" onClick={reload} disabled={loading}>
           {loading ? '…' : t.reportRefresh}
         </button>
@@ -17319,7 +17345,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             {page==='support' && <SupportPage token={token}/>}
             {page==='team'    && <TeamPage token={token} users={users} userIssueStats={userIssueStats} currentUser={me}
               onUsersUpdate={setUsers} setToast={setToast}/>}
-            {page==='reports' && <ReportsPage token={token} slaMinutes={settings?.sla_minutes}/>}
+            {page==='reports' && <ReportsPage token={token} slaMinutes={settings?.sla_minutes} issueTypes={issueTypes}/>}
             {/* LCU testing — a card reader on trial for a run of days, the length
                 of which a manager sets on the Admin page. The page needs it
                 because its copy names the period. */}

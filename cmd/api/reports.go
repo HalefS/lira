@@ -35,8 +35,9 @@ const maxReportRangeDays = 90
 func (app *application) dailyReportHandler(w http.ResponseWriter, r *http.Request) {
 	date := app.readString(r.URL.Query(), "date", "")
 	limit, capped := app.readLimit(r)
+	issueType := app.readString(r.URL.Query(), "type", "")
 
-	rep, err := app.models.Issues.GetDailyReport(date, limit)
+	rep, err := app.models.Issues.GetReport(date, date, limit, issueType)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -81,7 +82,9 @@ func (app *application) dailyReportPDFHandler(w http.ResponseWriter, r *http.Req
 	// Zero: the printed report takes every issue of the day. The screen version
 	// above pages, but a PDF is an archive of the day and capping it would print
 	// a document that looks complete and is not.
-	rep, err := app.models.Issues.GetDailyReport(date, 0)
+	issueType := app.readString(r.URL.Query(), "type", "")
+
+	rep, err := app.models.Issues.GetReport(date, date, 0, issueType)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -131,7 +134,9 @@ func (app *application) monthlyReportHandler(w http.ResponseWriter, r *http.Requ
 	from := t.Format("2006-01-02")
 	to := t.AddDate(0, 1, 0).AddDate(0, 0, -1).Format("2006-01-02")
 
-	rep, err := app.models.Issues.GetReport(from, to, -1)
+	issueType := app.readString(r.URL.Query(), "type", "")
+
+	rep, err := app.models.Issues.GetReport(from, to, -1, issueType)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -167,7 +172,9 @@ func (app *application) monthlyReportPDFHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	rep, err := app.models.Issues.GetReport(from, to, 0)
+	issueType := app.readString(r.URL.Query(), "type", "")
+
+	rep, err := app.models.Issues.GetReport(from, to, 0, issueType)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -237,7 +244,9 @@ func (app *application) rangeReportHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	rep, err := app.models.Issues.GetReport(from, to, -1)
+	issueType := app.readString(r.URL.Query(), "type", "")
+
+	rep, err := app.models.Issues.GetReport(from, to, -1, issueType)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -262,7 +271,9 @@ func (app *application) rangeReportPDFHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	rep, err := app.models.Issues.GetReport(from, to, 0)
+	issueType := app.readString(r.URL.Query(), "type", "")
+
+	rep, err := app.models.Issues.GetReport(from, to, 0, issueType)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return

@@ -673,7 +673,7 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*Report, error) {
 	if date == "" {
 		date = time.Now().Format("2006-01-02")
 	}
-	return m.GetReport(date, date, limit)
+	return m.GetReport(date, date, limit, "")
 }
 
 // GetReport builds a report over an inclusive range of days [from, to].
@@ -689,7 +689,10 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*Report, error) {
 // loadIssueChildren is not called. That is what monthly and range reports use,
 // because listing hundreds or thousands of rows in a browser is not reading
 // them, it is loading them.
-func (m IssueModel) GetReport(from, to string, limit int) (*Report, error) {
+// issueType, when non-empty, restricts every aggregate and every issue list to
+// that type. It is a display filter, not a different report: the shape of the
+// response is unchanged, only the rows that feed it.
+func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Report, error) {
 	if from == "" {
 		from = time.Now().Format("2006-01-02")
 	}
@@ -776,10 +779,11 @@ func (m IssueModel) GetReport(from, to string, limit int) (*Report, error) {
 			COALESCE(MAX(time_minutes), 0)                        AS slowest,
 			COUNT(*) FILTER (WHERE false_positive)                AS false_positives
 		FROM issues
-		WHERE created_at >= $1 AND created_at < $2`
+		WHERE created_at >= $1 AND created_at < $2
+		  AND ($3 = '' OR type = $3)`
 
 	var s ReportSummary
-	err = m.DB.QueryRowContext(ctx, summaryQ, fromStr, nextDay).Scan(
+	err = m.DB.QueryRowContext(ctx, summaryQ, fromStr, nextDay, issueType).Scan(
 		&s.TotalIssues, &s.AptIssues, &s.DeptIssues,
 		&s.Resolved, &s.Pending,
 		&s.AvgMinutes, &s.TotalMinutes, &s.FastestMinutes, &s.SlowestMinutes, &s.FalsePositives,
@@ -804,9 +808,10 @@ func (m IssueModel) GetReport(from, to string, limit int) (*Report, error) {
 		SELECT mode, type, status, COUNT(*)
 		FROM issues
 		WHERE created_at >= $1 AND created_at < $2
+		  AND ($3 = '' OR type = $3)
 		GROUP BY mode, type, status`
 
-	breakdownRows, err := m.DB.QueryContext(ctx, breakdownQ, fromStr, nextDay)
+	breakdownRows, err := m.DB.QueryContext(ctx, breakdownQ, fromStr, nextDay, issueType)
 	if err != nil {
 		return nil, err
 	}
@@ -845,10 +850,11 @@ func (m IssueModel) GetReport(from, to string, limit int) (*Report, error) {
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
 		WHERE i.created_at >= $1 AND i.created_at < $2 AND i.mode = $3
+		  AND ($4 = '' OR i.type = $4)
 		ORDER BY i.created_at DESC, i.id DESC`
 
 		if limit > 0 {
-			issueQ += "\n\t\tLIMIT $4"
+			issueQ += "\n\t\tLIMIT $5"
 		}
 
 		reportIssues := []*Issue{}
@@ -856,9 +862,9 @@ func (m IssueModel) GetReport(from, to string, limit int) (*Report, error) {
 			var rows *sql.Rows
 			var err error
 			if limit > 0 {
-				rows, err = m.DB.QueryContext(ctx, issueQ, fromStr, nextDay, mode, limit)
+				rows, err = m.DB.QueryContext(ctx, issueQ, fromStr, nextDay, mode, issueType, limit)
 			} else {
-				rows, err = m.DB.QueryContext(ctx, issueQ, fromStr, nextDay, mode)
+				rows, err = m.DB.QueryContext(ctx, issueQ, fromStr, nextDay, mode, issueType)
 			}
 			if err != nil {
 				return nil, err
@@ -905,11 +911,12 @@ func (m IssueModel) GetReport(from, to string, limit int) (*Report, error) {
 		       COALESCE(AVG(i.time_minutes), 0)                   AS avg_min
 		FROM users u
 		LEFT JOIN issues i ON i.logged_by = u.id AND i.created_at >= $1 AND i.created_at < $2
+		                   AND ($3 = '' OR i.type = $3)
 		GROUP BY u.id, u.name, u.avatar_idx, u.role
 		HAVING u.role = 'technician' OR COUNT(i.id) > 0
 		ORDER BY total DESC`
 
-	techRows, err := m.DB.QueryContext(ctx, techQ, fromStr, nextDay)
+	techRows, err := m.DB.QueryContext(ctx, techQ, fromStr, nextDay, issueType)
 	if err != nil {
 		return nil, err
 	}
