@@ -2886,6 +2886,13 @@ html.dark .error-boundary-card,
 html.dark .btn-ghost,
 html.dark .lang-toggle,
 html.dark .form-control { background: var(--gray-50) !important; }
+/* Native <select> dropdowns are drawn by the OS, not by CSS, so a select whose
+   text colour is light (dark mode) opens as a white list with invisible text.
+   color-scheme tells the browser to render the native control -- including its
+   opened list -- in the theme's own palette. */
+html { color-scheme: light; }
+html.dark { color-scheme: dark !important; }
+html.dark select { color-scheme: dark !important; }
 
 html.dark .sidebar { border-color: var(--gray-200) !important; }
 html.dark .topbar  { border-color: var(--gray-200) !important; }
@@ -11558,7 +11565,7 @@ function MaintenanceHistoryDialog({ schedule, token, t, onClose }) {
 }
 
 /* ════════════════ REPORTS PAGE ════════════════ */
-function ReportsPage({ token, slaMinutes, issueTypes }) {
+function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   // Three modes, one page. Daily is the original; monthly and range aggregate
@@ -11727,7 +11734,7 @@ function ReportsPage({ token, slaMinutes, issueTypes }) {
             {Ic.calendar}
             <input type="date" value={date} onChange={e=>setDate(e.target.value)}
               aria-label={t.historyPickDate}
-              style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}/>
+              style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent',colorScheme: theme==='dark' ? 'dark' : 'light'}}/>
           </div>
         )}
         {mode === 'monthly' && (
@@ -11736,7 +11743,7 @@ function ReportsPage({ token, slaMinutes, issueTypes }) {
               {Ic.calendar}
               <input type="month" value={month} onChange={e=>setMonth(e.target.value)}
                 aria-label={t.reportPickMonth}
-                style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}/>
+                style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent',colorScheme: theme==='dark' ? 'dark' : 'light'}}/>
             </div>
             <button className="btn btn-ghost" onClick={()=>setMonth(localISODate(new Date()).slice(0,7))}>{t.reportThisMonth}</button>
           </>
@@ -11747,14 +11754,14 @@ function ReportsPage({ token, slaMinutes, issueTypes }) {
               {Ic.calendar}
               <input type="date" value={from} onChange={e=>setFrom(e.target.value)}
                 aria-label={t.reportRangeFrom}
-                style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}/>
+                style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent',colorScheme: theme==='dark' ? 'dark' : 'light'}}/>
             </div>
             <span style={{color:'var(--gray-400)',fontSize:13}}>→</span>
             <div style={{display:'flex',alignItems:'center',gap:8,background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
               {Ic.calendar}
               <input type="date" value={to} onChange={e=>setTo(e.target.value)}
                 aria-label={t.reportRangeTo}
-                style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}/>
+                style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent',colorScheme: theme==='dark' ? 'dark' : 'light'}}/>
             </div>
           </div>
         )}
@@ -11766,7 +11773,7 @@ function ReportsPage({ token, slaMinutes, issueTypes }) {
         <div style={{display:'flex',alignItems:'center',gap:8,background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
           <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}
             aria-label={t.reportTypeFilter}
-            style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}>
+            style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent',colorScheme: theme==='dark' ? 'dark' : 'light'}}>
             <option value="">{t.reportAllTypes}</option>
             {(issueTypes||[]).map(it => (
               <option key={it.id} value={it.name}>{it.name}</option>
@@ -17345,7 +17352,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             {page==='support' && <SupportPage token={token}/>}
             {page==='team'    && <TeamPage token={token} users={users} userIssueStats={userIssueStats} currentUser={me}
               onUsersUpdate={setUsers} setToast={setToast}/>}
-            {page==='reports' && <ReportsPage token={token} slaMinutes={settings?.sla_minutes} issueTypes={issueTypes}/>}
+            {page==='reports' && <ReportsPage token={token} slaMinutes={settings?.sla_minutes} issueTypes={issueTypes} theme={theme}/>}
             {/* LCU testing — a card reader on trial for a run of days, the length
                 of which a manager sets on the Admin page. The page needs it
                 because its copy names the period. */}
