@@ -265,6 +265,16 @@ func (app *application) routes() http.Handler {
 	// endpoint rather than nested under it, so the ".pdf" suffix stays part of
 	// the path instead of colliding with the wildcard-free route above.
 	router.HandlerFunc(http.MethodGet, "/v1/reports/daily.pdf", app.requireAuth(app.dailyReportPDFHandler))
+
+	// Monthly and arbitrary-range reports. Same shape as the daily one, one
+	// endpoint per kind so the path says what the period is -- overloading
+	// /v1/reports/daily with from/to would make "daily" a lie for a 30-day
+	// window and leave the validation ambiguous about which parameter is
+	// authoritative.
+	router.HandlerFunc(http.MethodGet, "/v1/reports/monthly", app.requireAuth(app.monthlyReportHandler))
+	router.HandlerFunc(http.MethodGet, "/v1/reports/monthly.pdf", app.requireAuth(app.monthlyReportPDFHandler))
+	router.HandlerFunc(http.MethodGet, "/v1/reports/range", app.requireAuth(app.rangeReportHandler))
+	router.HandlerFunc(http.MethodGet, "/v1/reports/range.pdf", app.requireAuth(app.rangeReportPDFHandler))
 	// Weekly consumables report, JSON and printable. Readable by any
 	// authenticated user, like the daily report.
 	router.HandlerFunc(http.MethodGet, "/v1/reports/consumables/weekly", app.requireAuth(app.weeklyConsumablesReportHandler))

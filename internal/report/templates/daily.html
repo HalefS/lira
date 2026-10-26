@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>LIRA Daily Report — {{.Date}}</title>
+<title>LIRA {{.Title}} - {{.DateLong}}</title>
 <style>
 {{BASE_CSS}}
 
@@ -14,7 +14,7 @@
 <div class="band-top">
   <div class="logo-mark">L</div>
   <div style="margin-left:3.5mm">
-    <div class="title">Daily Report</div>
+    <div class="title">{{.Title}}</div>
     <div class="subtitle">LIRA — Llana IT Reporting &amp; Alerts</div>
   </div>
   <div class="right" style="margin-left:auto">
@@ -31,7 +31,7 @@
 <div class="sheet">
 
   {{if .Empty}}
-    <div class="empty">No issues were logged on {{.DateLong}}.</div>
+    <div class="empty">No issues were logged in this period.</div>
   {{else}}
 
   <div class="section">

@@ -17,6 +17,20 @@ import (
 // parameter, rather than being handed to the database as an internal error.
 var dateParamPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
+// monthParamPattern matches the "YYYY-MM" a monthly report is anchored on. It is
+// checked for the same reason as dateParamPattern above: the month is parsed into
+// a date internally, and an unparseable value must not reach that code as though
+// it were a date.
+var monthParamPattern = regexp.MustCompile(`^\d{4}-\d{2}$`)
+
+// maxReportRangeDays bounds a custom date range. A month is at most 31 days and a
+// quarter is 90, so 90 covers the legitimate cases (a quarter, a season, a
+// manager's "show me the last three months") while stopping a single request
+// from scanning years of issues and rendering a PDF nobody can print. It lives
+// here rather than in the data layer because it is a request-size policy, the
+// same kind of thing readLimit is.
+const maxReportRangeDays = 90
+
 // GET /v1/reports/daily?date=YYYY-MM-DD
 func (app *application) dailyReportHandler(w http.ResponseWriter, r *http.Request) {
 	date := app.readString(r.URL.Query(), "date", "")
@@ -92,6 +106,183 @@ func (app *application) dailyReportPDFHandler(w http.ResponseWriter, r *http.Req
 		fmt.Sprintf("LIRA-Daily-Report-%s.pdf", rep.Date)))
 	// The document is generated per request from a date the user can change and
 	// come back to, so it must never be reused for a different day.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Length", strconv.Itoa(len(pdf)))
+	w.WriteHeader(http.StatusOK)
+	w.Write(pdf)
+}
+
+// GET /v1/reports/monthly?month=YYYY-MM
+//
+// The same report as /v1/reports/daily, aggregated over a calendar month.
+// Readable by any authenticated user, matching the daily endpoint.
+func (app *application) monthlyReportHandler(w http.ResponseWriter, r *http.Request) {
+	month := app.readString(r.URL.Query(), "month", time.Now().Format("2006-01"))
+	if !monthParamPattern.MatchString(month) {
+		app.errorResponse(w, r, http.StatusBadRequest, "month must be in YYYY-MM format")
+		return
+	}
+
+	t, err := time.Parse("2006-01", month)
+	if err != nil {
+		app.errorResponse(w, r, http.StatusBadRequest, "month must be in YYYY-MM format")
+		return
+	}
+	from := t.Format("2006-01-02")
+	to := t.AddDate(0, 1, 0).AddDate(0, 0, -1).Format("2006-01-02")
+
+	rep, err := app.models.Issues.GetReport(from, to, -1)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.writeJSON(w, http.StatusOK, envelope{"report": rep}, nil)
+}
+
+// GET /v1/reports/monthly.pdf?month=YYYY-MM
+//
+// The same report, printed. Readable by any authenticated user.
+func (app *application) monthlyReportPDFHandler(w http.ResponseWriter, r *http.Request) {
+	month := app.readString(r.URL.Query(), "month", time.Now().Format("2006-01"))
+	if !monthParamPattern.MatchString(month) {
+		app.errorResponse(w, r, http.StatusBadRequest, "month must be in YYYY-MM format")
+		return
+	}
+
+	t, err := time.Parse("2006-01", month)
+	if err != nil {
+		app.errorResponse(w, r, http.StatusBadRequest, "month must be in YYYY-MM format")
+		return
+	}
+	from := t.Format("2006-01-02")
+	to := t.AddDate(0, 1, 0).AddDate(0, 0, -1).Format("2006-01-02")
+
+	if app.browser == nil {
+		reason := "no chromium-based browser was found on this server"
+		if app.browserErr != nil && !errors.Is(app.browserErr, report.ErrNoBrowser) {
+			reason = "the configured pdf report browser could not be used: " + app.browserErr.Error()
+		}
+		app.errorResponse(w, r, http.StatusNotImplemented, "pdf reports are unavailable: "+reason)
+		return
+	}
+
+	rep, err := app.models.Issues.GetReport(from, to, 0)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	html, err := report.RenderMonthlyHTML(rep)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	pdf, err := app.browser.Render(r.Context(), html)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", contentDisposition("attachment",
+		fmt.Sprintf("LIRA-Monthly-Report-%s.pdf", month)))
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Length", strconv.Itoa(len(pdf)))
+	w.WriteHeader(http.StatusOK)
+	w.Write(pdf)
+}
+
+// reportDateRange reads and validates the ?from= and ?to= parameters shared by the
+// range report endpoints. It returns the validated dates or ok=false after having
+// written the error response.
+func (app *application) reportDateRange(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+	from := app.readString(r.URL.Query(), "from", "")
+	to := app.readString(r.URL.Query(), "to", "")
+	if from == "" || to == "" {
+		app.errorResponse(w, r, http.StatusBadRequest, "from and to must be dates in YYYY-MM-DD format")
+		return "", "", false
+	}
+	if !dateParamPattern.MatchString(from) || !dateParamPattern.MatchString(to) {
+		app.errorResponse(w, r, http.StatusBadRequest, "from and to must be dates in YYYY-MM-DD format")
+		return "", "", false
+	}
+	ft, err := time.Parse("2006-01-02", from)
+	if err != nil {
+		app.errorResponse(w, r, http.StatusBadRequest, "from and to must be dates in YYYY-MM-DD format")
+		return "", "", false
+	}
+	tt, err := time.Parse("2006-01-02", to)
+	if err != nil {
+		app.errorResponse(w, r, http.StatusBadRequest, "from and to must be dates in YYYY-MM-DD format")
+		return "", "", false
+	}
+	if tt.Before(ft) {
+		app.errorResponse(w, r, http.StatusBadRequest, "from must not be after to")
+		return "", "", false
+	}
+	if tt.Sub(ft) > maxReportRangeDays*24*time.Hour {
+		app.errorResponse(w, r, http.StatusBadRequest,
+			fmt.Sprintf("range must not exceed %d days", maxReportRangeDays))
+		return "", "", false
+	}
+	return from, to, true
+}
+
+// GET /v1/reports/range?from=YYYY-MM-DD&to=YYYY-MM-DD
+func (app *application) rangeReportHandler(w http.ResponseWriter, r *http.Request) {
+	from, to, ok := app.reportDateRange(w, r)
+	if !ok {
+		return
+	}
+
+	rep, err := app.models.Issues.GetReport(from, to, -1)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.writeJSON(w, http.StatusOK, envelope{"report": rep}, nil)
+}
+
+// GET /v1/reports/range.pdf?from=YYYY-MM-DD&to=YYYY-MM-DD
+func (app *application) rangeReportPDFHandler(w http.ResponseWriter, r *http.Request) {
+	from, to, ok := app.reportDateRange(w, r)
+	if !ok {
+		return
+	}
+
+	if app.browser == nil {
+		reason := "no chromium-based browser was found on this server"
+		if app.browserErr != nil && !errors.Is(app.browserErr, report.ErrNoBrowser) {
+			reason = "the configured pdf report browser could not be used: " + app.browserErr.Error()
+		}
+		app.errorResponse(w, r, http.StatusNotImplemented, "pdf reports are unavailable: "+reason)
+		return
+	}
+
+	rep, err := app.models.Issues.GetReport(from, to, 0)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	html, err := report.RenderRangeHTML(rep)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	pdf, err := app.browser.Render(r.Context(), html)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", contentDisposition("attachment",
+		fmt.Sprintf("LIRA-Report-%s-to-%s.pdf", from, to)))
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Length", strconv.Itoa(len(pdf)))
 	w.WriteHeader(http.StatusOK)

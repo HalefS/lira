@@ -629,7 +629,9 @@ type RecurringGroupIssue struct {
 // ── Daily Report ──────────────────────────────────────────────────────────────
 
 type DailyReport struct {
-	Date         string         `json:"date"`
+	Date         string         `json:"date,omitempty"`
+	FromDate     string         `json:"from_date"`
+	ToDate       string         `json:"to_date"`
 	GeneratedAt  time.Time      `json:"generated_at"`
 	Summary      ReportSummary  `json:"summary"`
 	AptIssues    []*Issue       `json:"apt_issues"`
@@ -645,6 +647,11 @@ type DailyReport struct {
 	TypeColors map[string]string `json:"type_colors"`
 }
 
+// Report is the new name for DailyReport, used by the monthly and range reports.
+// DailyReport is retained as an alias so every existing caller, handler and
+// test keeps compiling while the name change settles.
+type Report = DailyReport
+
 type ReportSummary struct {
 	TotalIssues    int     `json:"total_issues"`
 	AptIssues      int     `json:"apt_issues"`
@@ -659,37 +666,83 @@ type ReportSummary struct {
 	FalsePositives int     `json:"false_positives"`
 }
 
-// GetDailyReport builds one day's report. limit caps each of the two issue
-// lists independently; the summary, the breakdown maps and the per-technician
-// table are all aggregates over the whole day and ignore it, so the headline
-// numbers and the charts keep describing the day as more rows are loaded.
-func (m IssueModel) GetDailyReport(date string, limit int) (*DailyReport, error) {
+// GetDailyReport builds one day's report. It is now a thin wrapper over GetReport
+// so that every aggregate, every breakdown and every query lives in one place.
+// A day is just a range whose ends are the same date.
+func (m IssueModel) GetDailyReport(date string, limit int) (*Report, error) {
 	if date == "" {
 		date = time.Now().Format("2006-01-02")
 	}
+	return m.GetReport(date, date, limit)
+}
 
-	dt, err := time.Parse("2006-01-02", date)
-	if err != nil {
-		return nil, fmt.Errorf("invalid date format: %w", err)
+// GetReport builds a report over an inclusive range of days [from, to].
+//
+// limit caps each of the two issue lists independently; the summary, the
+// breakdown maps and the per-technician table are all aggregates over the whole
+// range and ignore it, so the headline numbers and the charts keep describing
+// the period whatever is loaded. A limit of 0 means every row, which is what the
+// printed report asks for: a PDF is an archive of the period, so quietly capping
+// it would produce a document that looks complete and is not.
+//
+// A limit of -1 means AGGREGATES ONLY: no issue rows are fetched and
+// loadIssueChildren is not called. That is what monthly and range reports use,
+// because listing hundreds or thousands of rows in a browser is not reading
+// them, it is loading them.
+func (m IssueModel) GetReport(from, to string, limit int) (*Report, error) {
+	if from == "" {
+		from = time.Now().Format("2006-01-02")
 	}
-	nextDay := dt.AddDate(0, 0, 1).Format("2006-01-02")
-	dtStr := dt.Format("2006-01-02")
+	if to == "" {
+		to = from
+	}
+
+	fromT, err := time.Parse("2006-01-02", from)
+	if err != nil {
+		return nil, fmt.Errorf("invalid from date: %w", err)
+	}
+	toT, err := time.Parse("2006-01-02", to)
+	if err != nil {
+		return nil, fmt.Errorf("invalid to date: %w", err)
+	}
+	if toT.Before(fromT) {
+		return nil, fmt.Errorf("to date must not be before from date")
+	}
+
+	// Half-open on the way out: the inclusive `to` becomes an exclusive bound at
+	// midnight of the following day, so every instant of every day in the range
+	// is counted exactly once. This is the same convention the daily query used;
+	// it is correct for timestamptz and it is the reason there is no off-by-one
+	// at midnight.
+	nextDay := toT.AddDate(0, 0, 1).Format("2006-01-02")
+	fromStr := fromT.Format("2006-01-02")
+	toStr := toT.Format("2006-01-02")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	report := &DailyReport{
-		Date:        date,
+	report := &Report{
 		GeneratedAt: time.Now(),
 		ByType:      make(map[string]int),
 		ByMode:      make(map[string]int),
 		ByStatus:    make(map[string]int),
 		TypeColors:  make(map[string]string),
+		AptIssues:   []*Issue{},
+		DeptIssues:  []*Issue{},
+	}
+	report.FromDate = fromStr
+	report.ToDate = toStr
+	// Backwards-compatible single-day alias. Set only when the range is one day,
+	// so that /v1/reports/daily keeps answering exactly what it always answered
+	// and a consumer that reads `date` instead of from_date/to_date is not
+	// surprised by a 30-day value.
+	if fromStr == toStr {
+		report.Date = fromStr
 	}
 
 	// ── Issue type colors ──
-	// Fetched up front and unconditionally: a type that logged no issues today
-	// can still be drawn in the type breakdown of a previous day, and a type
+	// Fetched up front and unconditionally: a type that logged no issues in the
+	// range can still be drawn in the type breakdown of a previous day, and a type
 	// deleted from the catalog keeps whatever color it had.
 	colorRows, err := m.DB.QueryContext(ctx, `SELECT name, color FROM issue_types`)
 	if err != nil {
@@ -726,7 +779,7 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*DailyReport, error)
 		WHERE created_at >= $1 AND created_at < $2`
 
 	var s ReportSummary
-	err = m.DB.QueryRowContext(ctx, summaryQ, dtStr, nextDay).Scan(
+	err = m.DB.QueryRowContext(ctx, summaryQ, fromStr, nextDay).Scan(
 		&s.TotalIssues, &s.AptIssues, &s.DeptIssues,
 		&s.Resolved, &s.Pending,
 		&s.AvgMinutes, &s.TotalMinutes, &s.FastestMinutes, &s.SlowestMinutes, &s.FalsePositives,
@@ -739,21 +792,21 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*DailyReport, error)
 	}
 	report.Summary = s
 
-	// ── Breakdown maps, over every issue on the day ──
+	// ── Breakdown maps, over every issue in the range ──
 	//
 	// Kept out of the row query below on purpose. They used to be counted while
 	// scanning the rows the report lists, which was fine when that was every
 	// issue of the day -- and silently wrong the moment the lists stopped being
 	// every issue of the day, because the charts would have described only the
-	// rows that happened to be on screen. Aggregated separately, they describe the
-	// day whatever is loaded.
+	// rows that happened to be on screen. Aggregated separately, they describe
+	// the period whatever is loaded.
 	breakdownQ := `
 		SELECT mode, type, status, COUNT(*)
 		FROM issues
 		WHERE created_at >= $1 AND created_at < $2
 		GROUP BY mode, type, status`
 
-	breakdownRows, err := m.DB.QueryContext(ctx, breakdownQ, dtStr, nextDay)
+	breakdownRows, err := m.DB.QueryContext(ctx, breakdownQ, fromStr, nextDay)
 	if err != nil {
 		return nil, err
 	}
@@ -774,13 +827,18 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*DailyReport, error)
 	}
 	breakdownRows.Close()
 
-	// ── The issue lists, one query per mode ──
+	// ── The issue lists ──
 	//
-	// Split rather than one combined query with a single LIMIT: the two tables
-	// are read independently, so one shared limit would fill the apartment table
-	// to the brim and leave the department table showing nothing at all while
-	// the server was holding dozens of rows it was told not to send.
-	issueQ := `
+	// limit of zero or less means every row. That is what the printed report
+	// asks for: a PDF is an archive of the period, so quietly capping it would
+	// produce a document that looks complete and is not.
+	//
+	// A limit of -1 means AGGREGATES ONLY: no issue rows are fetched and
+	// loadIssueChildren is not called. That is what monthly and range reports use,
+	// because listing hundreds or thousands of rows in a browser is not reading
+	// them, it is loading them.
+	if limit >= 0 {
+		issueQ := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
 		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
 		       u.name, u.avatar_idx, i.version, i.false_positive
@@ -789,55 +847,49 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*DailyReport, error)
 		WHERE i.created_at >= $1 AND i.created_at < $2 AND i.mode = $3
 		ORDER BY i.created_at DESC, i.id DESC`
 
-	// limit of zero or less means every row. That is what the printed report
-	// asks for: a PDF is an archive of the day, so quietly capping it would
-	// produce a document that looks complete and is not.
-	if limit > 0 {
-		issueQ += "\n\t\tLIMIT $4"
-	}
-
-	reportIssues := []*Issue{}
-	// Empty rather than nil so the JSON is always an array: the report page reads
-	// .length on both, and a null there takes the whole page down.
-	report.AptIssues = []*Issue{}
-	report.DeptIssues = []*Issue{}
-	for _, mode := range []string{"apt", "dept"} {
-		var rows *sql.Rows
-		var err error
 		if limit > 0 {
-			rows, err = m.DB.QueryContext(ctx, issueQ, dtStr, nextDay, mode, limit)
-		} else {
-			rows, err = m.DB.QueryContext(ctx, issueQ, dtStr, nextDay, mode)
+			issueQ += "\n\t\tLIMIT $4"
 		}
-		if err != nil {
-			return nil, err
-		}
-		for rows.Next() {
-			var i Issue
-			if err := rows.Scan(
-				&i.ID, &i.CreatedAt, &i.Mode, &i.Location, &i.Type,
-				&i.Problem, &i.Resolution, &i.TimeMinutes, &i.StartTime, &i.EndTime, &i.ReportedByAgent, &i.ConfirmedByAgent, &i.Status,
-				&i.LoggedBy, &i.LoggedByName, &i.LoggedByIdx, &i.Version, &i.FalsePositive,
-			); err != nil {
+
+		reportIssues := []*Issue{}
+		for _, mode := range []string{"apt", "dept"} {
+			var rows *sql.Rows
+			var err error
+			if limit > 0 {
+				rows, err = m.DB.QueryContext(ctx, issueQ, fromStr, nextDay, mode, limit)
+			} else {
+				rows, err = m.DB.QueryContext(ctx, issueQ, fromStr, nextDay, mode)
+			}
+			if err != nil {
+				return nil, err
+			}
+			for rows.Next() {
+				var i Issue
+				if err := rows.Scan(
+					&i.ID, &i.CreatedAt, &i.Mode, &i.Location, &i.Type,
+					&i.Problem, &i.Resolution, &i.TimeMinutes, &i.StartTime, &i.EndTime, &i.ReportedByAgent, &i.ConfirmedByAgent, &i.Status,
+					&i.LoggedBy, &i.LoggedByName, &i.LoggedByIdx, &i.Version, &i.FalsePositive,
+				); err != nil {
+					rows.Close()
+					return nil, err
+				}
+				reportIssues = append(reportIssues, &i)
+				if mode == "apt" {
+					report.AptIssues = append(report.AptIssues, &i)
+				} else {
+					report.DeptIssues = append(report.DeptIssues, &i)
+				}
+			}
+			if err := rows.Err(); err != nil {
 				rows.Close()
 				return nil, err
 			}
-			reportIssues = append(reportIssues, &i)
-			if mode == "apt" {
-				report.AptIssues = append(report.AptIssues, &i)
-			} else {
-				report.DeptIssues = append(report.DeptIssues, &i)
-			}
-		}
-		if err := rows.Err(); err != nil {
 			rows.Close()
+		}
+
+		if err = loadIssueChildren(ctx, m.DB, reportIssues); err != nil {
 			return nil, err
 		}
-		rows.Close()
-	}
-
-	if err = loadIssueChildren(ctx, m.DB, reportIssues); err != nil {
-		return nil, err
 	}
 
 	// ── By technician ──
@@ -857,7 +909,7 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*DailyReport, error)
 		HAVING u.role = 'technician' OR COUNT(i.id) > 0
 		ORDER BY total DESC`
 
-	techRows, err := m.DB.QueryContext(ctx, techQ, dtStr, nextDay)
+	techRows, err := m.DB.QueryContext(ctx, techQ, fromStr, nextDay)
 	if err != nil {
 		return nil, err
 	}

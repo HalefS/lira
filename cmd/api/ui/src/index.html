@@ -3492,6 +3492,26 @@ const T = {
     deptIssues: 'Dept. Issues',
     history: 'History',
     historyPickDate: 'Select a date',
+
+    // Reports. The page used to hardcode every label in English, so a Portuguese
+    // session saw a Portuguese app with an English report page. Moving the new
+    // controls to keys is the occasion to move the existing ones too -- the
+    // alternative is a page that is half translated, which is worse than either.
+    reportModeLabel: 'Report period',
+    reportModeDaily: 'Daily',
+    reportModeMonthly: 'Monthly',
+    reportModeRange: 'Date range',
+    reportPickMonth: 'Select a month',
+    reportRangeFrom: 'From',
+    reportRangeTo: 'To',
+    reportThisMonth: 'This month',
+    reportRefresh: 'Refresh',
+    reportDownloadPdf: 'Download PDF',
+    reportEmptyDay: 'No issues logged on {date}.',
+    reportEmptyMonth: 'No issues logged in {month}.',
+    reportEmptyRange: 'No issues logged between {from} and {to}.',
+    reportAggregatesOnly: 'This report shows aggregates. Download the PDF for the full issue list.',
+    reportTitle: 'Issues report',
     historyShowingAll: 'Showing all dates',
     historyTodayCarriesPending: 'Today also carries anything still pending from earlier days, until it is solved',
     historyToday: 'Today',
@@ -4428,6 +4448,22 @@ const T = {
     deptIssues: 'Avarias Dept.',
     history: 'Histórico',
     historyPickDate: 'Selecionar uma data',
+
+    reportModeLabel: 'Período do relatório',
+    reportModeDaily: 'Diário',
+    reportModeMonthly: 'Mensal',
+    reportModeRange: 'Intervalo de datas',
+    reportPickMonth: 'Selecionar um mês',
+    reportRangeFrom: 'De',
+    reportRangeTo: 'Até',
+    reportThisMonth: 'Este mês',
+    reportRefresh: 'Atualizar',
+    reportDownloadPdf: 'Descarregar PDF',
+    reportEmptyDay: 'Nenhuma avaria registada em {date}.',
+    reportEmptyMonth: 'Nenhuma avaria registada em {month}.',
+    reportEmptyRange: 'Nenhuma avaria registada entre {from} e {to}.',
+    reportAggregatesOnly: 'Este relatório mostra agregados. Descarregue o PDF para a lista completa.',
+    reportTitle: 'Relatório de avarias',
     historyShowingAll: 'A mostrar todas as datas',
     historyTodayCarriesPending: 'Hoje traz também tudo o que continua pendente de dias anteriores, até ser resolvido',
     historyToday: 'Hoje',
@@ -11521,27 +11557,54 @@ function MaintenanceHistoryDialog({ schedule, token, t, onClose }) {
 function ReportsPage({ token, slaMinutes }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
-  const [date,    setDate]    = useState(localISODate(new Date()));
+  // Three modes, one page. Daily is the original; monthly and range aggregate
+  // over a longer period. Each mode keeps its OWN date state, so switching back
+  // and forth does not wipe a selection the user was building up -- a manager
+  // flipping from "October" to "this week" and back expects October to still be
+  // there.
+  const [mode, setMode] = useState('daily');
+  const [date, setDate]   = useState(localISODate(new Date()));
+  const [month, setMonth] = useState(localISODate(new Date()).slice(0, 7));
+  const todayISO = localISODate(new Date());
+  const [from, setFrom]   = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 6);
+    return localISODate(d);
+  });
+  const [to, setTo]       = useState(todayISO);
   const [error,   setError]   = useState('');
   const [downloading, setDownloading] = useState(false);
-  // Re-asks for the same date. setDate(d => d) cannot do this: it sets the state
-  // to the identical value, React bails out of the re-render, filterKey never
-  // changes and the fetch effect never runs -- which left this button, and the
-  // retry below it, doing nothing at all. A counter in the filter key is how
+  // Re-asks for the same selection. setDate(d => d) cannot do this: it sets the
+  // state to the identical value, React bails out of the re-render, filterKey
+  // never changes and the fetch effect never runs -- which left this button, and
+  // the retry below it, doing nothing at all. A counter in the filter key is how
   // AlertsPage refreshes, and the point of it is that the path comes back
   // byte-identical, so the key is the only thing that can carry the request.
   const [epoch,   setEpoch]   = useState(0);
+
+  // The period the current mode is actually reporting on, as a single string the
+  // rest of the page can switch on without re-deriving it. Kept in sync with the
+  // inputs above rather than computed, because the inputs are the source of truth
+  // and the derived form would have to be rebuilt on every render.
+  const filterKey = mode === 'daily'   ? `daily|${date}|${epoch}`
+                  : mode === 'monthly' ? `monthly|${month}|${epoch}`
+                  :                      `range|${from}|${to}|${epoch}`;
+
+  function buildPath(limit) {
+    if (mode === 'daily')   return `/reports/daily?date=${date}&limit=${limit}`;
+    if (mode === 'monthly') return `/reports/monthly?month=${month}&limit=${limit}`;
+    return `/reports/range?from=${from}&to=${to}&limit=${limit}`;
+  }
 
   /* The two issue tables page; everything else on this page does not.
      The summary tiles, the by-type and by-technician charts are aggregates over
      the whole day and the server computes them without regard to the limit, so
      the figures stay true while a busy day's rows are still being loaded. */
-  const paged = usePagedList(limit => `/reports/daily?date=${date}&limit=${limit}`, token, {
+  const paged = usePagedList(buildPath, token, {
     // The report is one object rather than an array of rows, so `rows` holds that
     // object and the two tables inside it are what page. An object is not an
     // array, so it arrives as-is rather than being coerced.
     rowsKey: 'report',
-    filterKey: `${date}|${epoch}`,
+    filterKey,
     onError: ex => setError(ex.message),
   });
   const report = paged.res && paged.res.report;
@@ -11560,7 +11623,12 @@ function ReportsPage({ token, slaMinutes }) {
     if (!report || downloading) return;
     setDownloading(true);
     try {
-      const res = await fetch(`${API}/reports/daily.pdf?date=${date}`, {
+      // The PDF endpoint matches the mode, so the downloaded file is the period
+      // on screen and not a daily report wearing a different name.
+      const pdfUrl = mode === 'daily'   ? `${API}/reports/daily.pdf?date=${date}`
+                   : mode === 'monthly' ? `${API}/reports/monthly.pdf?month=${month}`
+                   :                      `${API}/reports/range.pdf?from=${from}&to=${to}`;
+      const res = await fetch(pdfUrl, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -11575,7 +11643,10 @@ function ReportsPage({ token, slaMinutes }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `LIRA-Daily-Report-${report.date}.pdf`;
+      const dlName = mode === 'daily'   ? `LIRA-Daily-Report-${report.date || date}.pdf`
+                   : mode === 'monthly' ? `LIRA-Monthly-Report-${month}.pdf`
+                   :                      `LIRA-Report-${from}-to-${to}.pdf`;
+      a.download = dlName;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -11616,22 +11687,72 @@ function ReportsPage({ token, slaMinutes }) {
 
   return (
     <div>
-      {/* Toolbar */}
-      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:22,flexWrap:'wrap'}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
-          {Ic.calendar}
-          <input
-            type="date" value={date} onChange={e=>setDate(e.target.value)}
-            aria-label={t.historyPickDate}
-            style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}
-          />
+      {/* Mode selector. One page, three periods: the page shell, the summary
+          cards and the charts are the same for all three, so the only thing that
+          changes is the period and the issue lists that come with it. Reusing
+          .team-segmented keeps the control identical to the consumables page. */}
+      <div className="team-viewbar" style={{marginBottom:12}}>
+        <div className="team-segmented" role="radiogroup" aria-label={t.reportModeLabel}>
+          <button type="button" role="radio" aria-checked={mode==='daily'}
+            className={mode==='daily' ? 'active' : ''} onClick={()=>setMode('daily')}>
+            {Ic.calendar}<span>{t.reportModeDaily}</span>
+          </button>
+          <button type="button" role="radio" aria-checked={mode==='monthly'}
+            className={mode==='monthly' ? 'active' : ''} onClick={()=>setMode('monthly')}>
+            {Ic.calendar}<span>{t.reportModeMonthly}</span>
+          </button>
+          <button type="button" role="radio" aria-checked={mode==='range'}
+            className={mode==='range' ? 'active' : ''} onClick={()=>setMode('range')}>
+            {Ic.calendar}<span>{t.reportModeRange}</span>
+          </button>
         </div>
+      </div>
+
+      {/* One toolbar. The left cluster swaps by mode; Refresh and Download PDF
+          are fixed on the right, so the page does not become three toolbars. */}
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:22,flexWrap:'wrap'}}>
+        {mode === 'daily' && (
+          <div style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
+            {Ic.calendar}
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)}
+              aria-label={t.historyPickDate}
+              style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}/>
+          </div>
+        )}
+        {mode === 'monthly' && (
+          <>
+            <div style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
+              {Ic.calendar}
+              <input type="month" value={month} onChange={e=>setMonth(e.target.value)}
+                aria-label={t.reportPickMonth}
+                style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}/>
+            </div>
+            <button className="btn btn-ghost" onClick={()=>setMonth(localISODate(new Date()).slice(0,7))}>{t.reportThisMonth}</button>
+          </>
+        )}
+        {mode === 'range' && (
+          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
+              {Ic.calendar}
+              <input type="date" value={from} onChange={e=>setFrom(e.target.value)}
+                aria-label={t.reportRangeFrom}
+                style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}/>
+            </div>
+            <span style={{color:'var(--gray-400)',fontSize:13}}>→</span>
+            <div style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
+              {Ic.calendar}
+              <input type="date" value={to} onChange={e=>setTo(e.target.value)}
+                aria-label={t.reportRangeTo}
+                style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent'}}/>
+            </div>
+          </div>
+        )}
         <button className="btn btn-ghost" onClick={reload} disabled={loading}>
-          {loading ? '…' : 'Refresh'}
+          {loading ? '…' : t.reportRefresh}
         </button>
         <button className="btn btn-primary" onClick={downloadPDF} disabled={!report || loading || downloading}
           style={{marginLeft:'auto'}}>
-          {Ic.download} {downloading ? 'Generating…' : 'Download PDF'}
+          {Ic.download} {downloading ? t.generatingPdf : t.reportDownloadPdf}
         </button>
       </div>
 
@@ -11692,6 +11813,20 @@ function ReportsPage({ token, slaMinutes }) {
               }
             </div>
           </div>
+
+          {/* Monthly and range reports are aggregates on screen: the summary cards
+              and the two charts above are the whole story, and the issue rows live
+              in the PDF. Showing them here would mean paging through hundreds of
+              rows for a month, which is not reading them. The note says where the
+              detail went so the missing tables are not mistaken for a failed load. */}
+          {mode !== 'daily' && report.summary.total_issues > 0 && (
+            <div className="table-card" style={{marginBottom:20}}>
+              <div className="empty-state" style={{padding:'20px 0'}}>
+                {Ic.report}
+                <p>{t.reportAggregatesOnly}</p>
+              </div>
+            </div>
+          )}
 
           {/* Apt issues table */}
           {(report.apt_issues||[]).length > 0 && (
@@ -11770,7 +11905,11 @@ function ReportsPage({ token, slaMinutes }) {
             <div className="table-card">
               <div className="empty-state">
                 {Ic.report}
-                <p>No issues logged on {report.date}.</p>
+                <p>
+              {mode === 'daily'   && t.reportEmptyDay.replace('{date}', report.date || date)}
+              {mode === 'monthly' && t.reportEmptyMonth.replace('{month}', new Date(month + '-01').toLocaleDateString(undefined, {month:'long', year:'numeric'}))}
+              {mode === 'range'   && t.reportEmptyRange.replace('{from}', from).replace('{to}', to)}
+            </p>
               </div>
             </div>
           )}

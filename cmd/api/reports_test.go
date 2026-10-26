@@ -119,6 +119,130 @@ func TestDailyReportPDFRejectsMalformedDate(t *testing.T) {
 	}
 }
 
+// Monthly and range reports share the daily report's guard shape, so the same
+// guard clauses are exercised here. They are separate tests rather than a loop
+// because each one names a different parameter and a different format, and a
+// loop that hides which one failed is worse than three lines of repetition.
+func TestMonthlyReportRejectsMalformedMonth(t *testing.T) {
+	app := &application{}
+
+	for _, endpoint := range []string{
+		"/v1/reports/monthly?month=nope",
+		"/v1/reports/monthly?month=2026-13",
+		"/v1/reports/monthly?month=2026-1",
+		"/v1/reports/monthly?month=2026-01-01",
+	} {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, endpoint, nil)
+		app.monthlyReportHandler(w, r)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want %d", endpoint, w.Code, http.StatusBadRequest)
+		}
+		if !strings.Contains(w.Body.String(), "YYYY-MM") {
+			t.Errorf("%s: body = %q, want it to name the expected month format", endpoint, w.Body.String())
+		}
+	}
+}
+
+func TestMonthlyReportPDFRejectsMalformedMonth(t *testing.T) {
+	app := &application{}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/reports/monthly.pdf?month=not-a-month", nil)
+	app.monthlyReportPDFHandler(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	if !strings.Contains(w.Body.String(), "YYYY-MM") {
+		t.Errorf("body = %q, want it to name the expected month format", w.Body.String())
+	}
+}
+
+func TestMonthlyReportPDFReportsMissingBrowser(t *testing.T) {
+	app := &application{browserErr: report.ErrNoBrowser}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/reports/monthly.pdf?month=2026-10", nil)
+	app.monthlyReportPDFHandler(w, r)
+
+	if w.Code != http.StatusNotImplemented {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+	}
+	if !strings.Contains(w.Body.String(), "chromium") {
+		t.Errorf("body = %q, want it to explain that no browser was found", w.Body.String())
+	}
+}
+
+func TestRangeReportRejectsMalformedRange(t *testing.T) {
+	app := &application{}
+
+	cases := []struct {
+		endpoint string
+		wantCode int
+	}{
+		{"/v1/reports/range?from=nope&to=2026-10-05", http.StatusBadRequest},
+		{"/v1/reports/range?from=2026-10-01", http.StatusBadRequest},
+		{"/v1/reports/range?to=2026-10-05", http.StatusBadRequest},
+		{"/v1/reports/range?from=2026-10-01&to=2026-13-45", http.StatusBadRequest},
+		{"/v1/reports/range?from=2026-10-05&to=2026-10-01", http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, tc.endpoint, nil)
+		app.rangeReportHandler(w, r)
+		if w.Code != tc.wantCode {
+			t.Errorf("%s: status = %d, want %d", tc.endpoint, w.Code, tc.wantCode)
+		}
+	}
+}
+
+func TestRangeReportRejectsOverLongRange(t *testing.T) {
+	app := &application{}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/reports/range?from=2026-01-01&to=2026-06-01", nil)
+	app.rangeReportHandler(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	if !strings.Contains(w.Body.String(), "90 days") {
+		t.Errorf("body = %q, want it to name the 90-day limit", w.Body.String())
+	}
+}
+
+func TestRangeReportPDFRejectsMalformedRange(t *testing.T) {
+	app := &application{}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/reports/range.pdf?from=not-a-date&to=2026-10-05", nil)
+	app.rangeReportPDFHandler(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	if !strings.Contains(w.Body.String(), "YYYY-MM-DD") {
+		t.Errorf("body = %q, want it to name the expected date format", w.Body.String())
+	}
+}
+
+func TestRangeReportPDFReportsMissingBrowser(t *testing.T) {
+	app := &application{browserErr: report.ErrNoBrowser}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/reports/range.pdf?from=2026-10-01&to=2026-10-05", nil)
+	app.rangeReportPDFHandler(w, r)
+
+	if w.Code != http.StatusNotImplemented {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+	}
+	if !strings.Contains(w.Body.String(), "chromium") {
+		t.Errorf("body = %q, want it to explain that no browser was found", w.Body.String())
+	}
+}
+
 // A missing browser is a deployment problem, and the rest of the app must keep
 // working without one, so this must not be a 500.
 func TestDailyReportPDFReportsMissingBrowser(t *testing.T) {

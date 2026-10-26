@@ -159,8 +159,9 @@ type issueRow struct {
 	FalsePositive bool
 }
 
-// dailyView is the whole template's data.
-type dailyView struct {
+// reportView is the whole template's data.
+type reportView struct {
+	Title       string
 	Date        string
 	DateLong    string
 	GeneratedAt string
@@ -173,20 +174,41 @@ type dailyView struct {
 	Empty       bool
 }
 
+// dailyView is retained as an alias so existing callers and tests keep compiling.
+type dailyView = reportView
+
 // RenderDailyHTML renders the daily report as a standalone HTML document.
-func RenderDailyHTML(r *data.DailyReport) (string, error) {
+func RenderDailyHTML(r *data.Report) (string, error) {
+	return RenderReportHTML(r, "Daily Report")
+}
+
+// RenderMonthlyHTML renders a calendar month's report.
+func RenderMonthlyHTML(r *data.Report) (string, error) {
+	return RenderReportHTML(r, "Monthly Report")
+}
+
+// RenderRangeHTML renders an arbitrary range's report.
+func RenderRangeHTML(r *data.Report) (string, error) {
+	return RenderReportHTML(r, "Range Report")
+}
+
+// RenderReportHTML renders a report as a standalone HTML document. `title` is the
+// document's own name and is NOT derived from the period, because the period is
+// printed separately as DateLong and the title has to be one of those three words
+// in every language the template is shipped in.
+func RenderReportHTML(r *data.Report, title string) (string, error) {
 	if r == nil {
-		return "", fmt.Errorf("report: nil daily report")
+		return "", fmt.Errorf("report: nil report")
 	}
 
 	var buf bytes.Buffer
-	if err := dailyTemplate.Execute(&buf, newDailyView(r)); err != nil {
-		return "", fmt.Errorf("report: rendering daily template: %w", err)
+	if err := dailyTemplate.Execute(&buf, newReportView(r, title)); err != nil {
+		return buf.String(), fmt.Errorf("report: rendering report template: %w", err)
 	}
 	return buf.String(), nil
 }
 
-func newDailyView(r *data.DailyReport) dailyView {
+func newReportView(r *data.Report, title string) reportView {
 	s := r.Summary
 
 	fpCount := s.FalsePositives
@@ -196,13 +218,38 @@ func newDailyView(r *data.DailyReport) dailyView {
 		fpRate = int(math.Round(float64(fpCount) / float64(s.TotalIssues) * 100))
 	}
 
-	dateLong := r.Date
-	if t, err := time.Parse("2006-01-02", r.Date); err == nil {
-		dateLong = t.Format("Monday, 2 January 2006")
+	// Date and DateLong describe the PERIOD, not a single day.
+	//
+	// A single-day report says "Monday, 2 January 2006". A multi-day report says
+	// "01 Oct 2026 - 31 Oct 2026" in the same slot, because the template has one
+	// line for this and the reader needs to know what the period was. Reusing the
+	// single-day format for a range would print "Monday, 1 October 2026" and
+	// silently imply the report covered one day.
+	fromDate := r.FromDate
+	if fromDate == "" {
+		fromDate = r.Date
+	}
+	toDate := r.ToDate
+	if toDate == "" {
+		toDate = fromDate
 	}
 
-	return dailyView{
-		Date:        r.Date,
+	dateLong := fromDate
+	if fromDate == toDate {
+		if t, err := time.Parse("2006-01-02", fromDate); err == nil {
+			dateLong = t.Format("Monday, 2 January 2006")
+		}
+	} else {
+		if f, err := time.Parse("2006-01-02", fromDate); err == nil {
+			if t, err := time.Parse("2006-01-02", toDate); err == nil {
+				dateLong = f.Format("2 Jan 2006") + " - " + t.Format("2 Jan 2006")
+			}
+		}
+	}
+
+	return reportView{
+		Title:       title,
+		Date:        fromDate,
 		DateLong:    dateLong,
 		GeneratedAt: r.GeneratedAt.Format("2 Jan 2006, 15:04"),
 		TotalIssues: s.TotalIssues,
