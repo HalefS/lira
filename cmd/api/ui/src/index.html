@@ -2474,6 +2474,11 @@ select.form-control { cursor: pointer; }
   background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-md);
   box-shadow: var(--shadow-md); padding: 4px;
 }
+html.dark .room-picker-panel { background: var(--gray-50) !important; border-color: var(--gray-300) !important; }
+html.dark .room-option { color: var(--gray-900) !important; }
+html.dark .room-option:hover, html.dark .room-option.active { background: var(--blue-light) !important; color: var(--blue) !important; }
+html.dark .room-picker-foot { border-top-color: var(--gray-300) !important; color: var(--gray-400) !important; }
+html.dark .room-picker-empty { color: var(--gray-400) !important; }
 /* The selected-or-typed value, and the keyboard cursor over the options. Both are
    the same tint, because both mean "this is where you are". */
 .room-option {
