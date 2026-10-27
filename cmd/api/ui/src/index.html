@@ -52,7 +52,7 @@
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA-02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 </style>
-<script>try{if(localStorage.getItem('lira_theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
+<script>try{if(localStorage.getItem('lira_theme')==='dark'){document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark'}}catch(e){}</script>
 <!-- React is served from this binary rather than a CDN, in its production
      build: the development builds are ~8x larger and carry warnings that are
      never seen in production. The version is in the filename so that upgrading
@@ -2892,7 +2892,18 @@ html.dark .form-control { background: var(--gray-50) !important; }
    opened list -- in the theme's own palette. */
 html { color-scheme: light; }
 html.dark { color-scheme: dark !important; }
-html.dark select { color-scheme: dark !important; }
+/* The Reports page's type filter is the one <select> on a dark surface that
+   is not a .form-control, so it needs its own dark-mode rule. The native
+   dropdown is the OS's to draw; color-scheme is the hint that makes it dark,
+   and the background/color rules below keep the closed box readable. */
+html.dark select,
+html.dark select:focus,
+html.dark select:active {
+  color-scheme: dark !important;
+  background: var(--gray-50) !important;
+  color: var(--gray-900) !important;
+  border-color: var(--gray-300) !important;
+}
 
 html.dark .sidebar { border-color: var(--gray-200) !important; }
 html.dark .topbar  { border-color: var(--gray-200) !important; }
@@ -11587,6 +11598,19 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
   // that chart into one bar, which is honest rather than useful, but the rest of
   // the report (summary, by technician) is still worth having for one type.
   const [typeFilter, setTypeFilter] = useState('');
+  // The native <select> dropdown is drawn by the OS and ignores color-scheme on
+  // Windows, so it opens as a white list with light text on it in dark mode.
+  // A custom dropdown is the only way to control its palette, hence this.
+  const [typeOpen, setTypeOpen] = useState(false);
+  const typeRef = useRef(null);
+  useEffect(() => {
+    if (!typeOpen) return;
+    function onDoc(e) {
+      if (typeRef.current && !typeRef.current.contains(e.target)) setTypeOpen(false);
+    }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [typeOpen]);
   const [error,   setError]   = useState('');
   const [downloading, setDownloading] = useState(false);
   // Re-asks for the same selection. setDate(d => d) cannot do this: it sets the
@@ -11770,15 +11794,31 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
             that chart into one bar, which is honest rather than useful, but the
             rest of the report (summary, by technician) is still worth having for
             one type. */}
-        <div style={{display:'flex',alignItems:'center',gap:8,background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px'}}>
-          <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}
+        <div ref={typeRef} style={{position:'relative'}}>
+          <button type="button"
+            onClick={()=>setTypeOpen(o=>!o)}
+            aria-haspopup="listbox" aria-expanded={typeOpen}
             aria-label={t.reportTypeFilter}
-            style={{border:'none',outline:'none',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',background:'transparent',colorScheme: theme==='dark' ? 'dark' : 'light'}}>
-            <option value="">{t.reportAllTypes}</option>
-            {(issueTypes||[]).map(it => (
-              <option key={it.id} value={it.name}>{it.name}</option>
-            ))}
-          </select>
+            style={{display:'flex',alignItems:'center',gap:6,background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',padding:'6px 12px',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'var(--gray-900)',cursor:'pointer'}}>
+            <span>{typeFilter || t.reportAllTypes}</span>
+            <span style={{fontSize:10,color:'var(--gray-400)'}}>▾</span>
+          </button>
+          {typeOpen && (
+            <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:20,minWidth:'100%',maxHeight:260,overflowY:'auto',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:'var(--radius-md)',boxShadow:'0 4px 16px rgba(0,0,0,0.12)',padding:4}}>
+              <button type="button"
+                onClick={()=>{setTypeFilter(''); setTypeOpen(false);}}
+                style={{display:'block',width:'100%',textAlign:'left',padding:'6px 10px',border:'none',background: typeFilter==='' ? 'var(--blue-light)' : 'transparent',color: typeFilter==='' ? 'var(--blue)' : 'var(--gray-900)',borderRadius:'var(--radius-sm)',cursor:'pointer',fontSize:13,fontFamily:'DM Sans,sans-serif'}}>
+                {t.reportAllTypes}
+              </button>
+              {(issueTypes||[]).map(it => (
+                <button type="button" key={it.id}
+                  onClick={()=>{setTypeFilter(it.name); setTypeOpen(false);}}
+                  style={{display:'block',width:'100%',textAlign:'left',padding:'6px 10px',border:'none',background: typeFilter===it.name ? 'var(--blue-light)' : 'transparent',color: typeFilter===it.name ? 'var(--blue)' : 'var(--gray-900)',borderRadius:'var(--radius-sm)',cursor:'pointer',fontSize:13,fontFamily:'DM Sans,sans-serif'}}>
+                  {it.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <button className="btn btn-ghost" onClick={reload} disabled={loading}>
           {loading ? '…' : t.reportRefresh}
@@ -16888,6 +16928,12 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
   useEffect(()=>{
     saveLS('lira_theme', theme);
     document.documentElement.classList.toggle('dark', theme === 'dark');
+    // Native form controls -- <select> dropdowns, <input type="date"> calendar
+    // popups -- are drawn by the OS and do not follow CSS variables. Setting
+    // color-scheme on the root element is what tells the browser to render
+    // them in the app's own palette rather than the system one. Without this,
+    // a dark-mode select opens as a white list with light text on it.
+    document.documentElement.style.colorScheme = theme === 'dark' ? 'dark' : 'light';
   }, [theme]);
   useEffect(()=>{ saveLS('lira_session', session); }, [session]);
 
