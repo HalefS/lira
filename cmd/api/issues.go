@@ -5,14 +5,18 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/HalefS/lira/internal/data"
 	"github.com/HalefS/lira/internal/validator"
 )
 
-// normaliseClockTime drops a blank submitted clock time, so an issue with no
-// time at all stores NULL rather than an empty string. A Pending issue has no
-// end time -- the job has not been fixed, so it has not ended.
+// normaliseClockTime drops a blank submitted time, so an issue with no time at
+// all stores NULL rather than an empty string. A Pending issue has no end time
+// -- the job has not been fixed, so it has not ended.
+//
+// Values may be "HH:MM" (legacy) or "YYYY-MM-DDTHH:MM" (dated). Both are kept
+// as-is; the timestamp form is parsed server-side.
 func normaliseClockTime(v *string) *string {
 	if v == nil || strings.TrimSpace(*v) == "" {
 		return nil
@@ -24,8 +28,9 @@ func normaliseClockTime(v *string) *string {
 // has to tell three cases apart that would otherwise be indistinguishable:
 //
 //	nil      the client did not mention the field, so the stored value stands
-//	""       an explicit "there is no time here", which clears the column
-//	"HH:MM"  a real value, which replaces it
+//	""                    an explicit "there is no time here", which clears the column
+//	"HH:MM"               a legacy clock-only value, which replaces it
+//	"YYYY-MM-DDTHH:MM"    a dated value, which replaces it
 //
 // Without the middle case, switching a resolved issue to Pending would leave its
 // old end time on the row, so the issue would read as ended while its status
@@ -225,16 +230,49 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 	// when both are supplied, rather than trusted verbatim from the
 	// client — this guarantees time_minutes stays consistent with the
 	// times shown when the issue is later reopened for editing.
-	if issue.StartTime != nil && issue.EndTime != nil {
-		data.ValidateClockTime(v, "start_time", *issue.StartTime)
-		data.ValidateClockTime(v, "end_time", *issue.EndTime)
-		if v.Valid() {
-			minutes, ok := data.ComputeDurationMinutes(*issue.StartTime, *issue.EndTime)
-			if !ok {
-				v.AddError("end_time", "must result in a duration greater than zero")
-			} else {
-				issue.TimeMinutes = minutes
+	baseDate := issue.CreatedAt
+	if baseDate.IsZero() {
+		baseDate = time.Now()
+	}
+	if issue.StartTime != nil {
+		s := strings.TrimSpace(*issue.StartTime)
+		if s == "" {
+			issue.StartTime = nil
+			issue.StartedAt = nil
+		} else {
+			data.ValidateIssueTime(v, "start_time", s)
+			if v.Valid() {
+				t, ok := data.ParseIssueTimeWithBase(s, baseDate)
+				if !ok {
+					v.AddError("start_time", "must be a time, or a date and time, in 24-hour format")
+				} else {
+					issue.StartedAt = &t
+				}
 			}
+		}
+	}
+	if issue.EndTime != nil {
+		s := strings.TrimSpace(*issue.EndTime)
+		if s == "" {
+			issue.EndTime = nil
+			issue.ResolvedAt = nil
+		} else {
+			data.ValidateIssueTime(v, "end_time", s)
+			if v.Valid() {
+				t, ok := data.ParseIssueTimeWithBase(s, baseDate)
+				if !ok {
+					v.AddError("end_time", "must be a time, or a date and time, in 24-hour format")
+				} else {
+					issue.ResolvedAt = &t
+				}
+			}
+		}
+	}
+	if issue.StartedAt != nil && issue.ResolvedAt != nil {
+		if !issue.ResolvedAt.After(*issue.StartedAt) {
+			v.AddError("end_time", "must be after the start time")
+		} else {
+			issue.TimeMinutes = int(issue.ResolvedAt.Sub(*issue.StartedAt).Minutes())
 		}
 	}
 
@@ -409,9 +447,38 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 	}
 	if input.StartTime != nil {
 		applyClockTime(&issue.StartTime, input.StartTime)
+		// Keep the canonical timestamp in sync with the text field. A blank
+		// clears it; a value parses it; an absent field (nil) leaves it alone,
+		// which is what applyClockTime already decided above.
+		if input.StartTime == nil {
+			// not mentioned -- leave StartedAt as it is
+		} else if strings.TrimSpace(*input.StartTime) == "" {
+			issue.StartedAt = nil
+		} else {
+			baseDate := issue.CreatedAt
+			if baseDate.IsZero() {
+				baseDate = time.Now()
+			}
+			if t, ok := data.ParseIssueTimeWithBase(*input.StartTime, baseDate); ok {
+				issue.StartedAt = &t
+			}
+		}
 	}
 	if input.EndTime != nil {
 		applyClockTime(&issue.EndTime, input.EndTime)
+		if input.EndTime == nil {
+			// not mentioned -- leave ResolvedAt as it is
+		} else if strings.TrimSpace(*input.EndTime) == "" {
+			issue.ResolvedAt = nil
+		} else {
+			baseDate := issue.CreatedAt
+			if baseDate.IsZero() {
+				baseDate = time.Now()
+			}
+			if t, ok := data.ParseIssueTimeWithBase(*input.EndTime, baseDate); ok {
+				issue.ResolvedAt = &t
+			}
+		}
 	}
 	if input.ReportedByAgent != nil {
 		issue.ReportedByAgent = input.ReportedByAgent
@@ -480,16 +547,49 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 
 	// Same rule as creation: if both clock times are present, they are the
 	// source of truth for the stored duration.
-	if issue.StartTime != nil && issue.EndTime != nil {
-		data.ValidateClockTime(v, "start_time", *issue.StartTime)
-		data.ValidateClockTime(v, "end_time", *issue.EndTime)
-		if v.Valid() {
-			minutes, ok := data.ComputeDurationMinutes(*issue.StartTime, *issue.EndTime)
-			if !ok {
-				v.AddError("end_time", "must result in a duration greater than zero")
-			} else {
-				issue.TimeMinutes = minutes
+	baseDate := issue.CreatedAt
+	if baseDate.IsZero() {
+		baseDate = time.Now()
+	}
+	if issue.StartTime != nil {
+		s := strings.TrimSpace(*issue.StartTime)
+		if s == "" {
+			issue.StartTime = nil
+			issue.StartedAt = nil
+		} else {
+			data.ValidateIssueTime(v, "start_time", s)
+			if v.Valid() {
+				t, ok := data.ParseIssueTimeWithBase(s, baseDate)
+				if !ok {
+					v.AddError("start_time", "must be a time, or a date and time, in 24-hour format")
+				} else {
+					issue.StartedAt = &t
+				}
 			}
+		}
+	}
+	if issue.EndTime != nil {
+		s := strings.TrimSpace(*issue.EndTime)
+		if s == "" {
+			issue.EndTime = nil
+			issue.ResolvedAt = nil
+		} else {
+			data.ValidateIssueTime(v, "end_time", s)
+			if v.Valid() {
+				t, ok := data.ParseIssueTimeWithBase(s, baseDate)
+				if !ok {
+					v.AddError("end_time", "must be a time, or a date and time, in 24-hour format")
+				} else {
+					issue.ResolvedAt = &t
+				}
+			}
+		}
+	}
+	if issue.StartedAt != nil && issue.ResolvedAt != nil {
+		if !issue.ResolvedAt.After(*issue.StartedAt) {
+			v.AddError("end_time", "must be after the start time")
+		} else {
+			issue.TimeMinutes = int(issue.ResolvedAt.Sub(*issue.StartedAt).Minutes())
 		}
 	}
 

@@ -2445,6 +2445,13 @@ html.dark .lcu-resting-table td { border-color: var(--gray-200); }
   word-break: break-word;
 }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* Two datetime-local inputs side by side are cramped on a phone, so the row
+   stacks below 640px. Applied globally because every .form-row is a pair of
+   fields that reads fine stacked, and a second rule scoped to one form would
+   have to be remembered by whoever adds the next one. */
+@media (max-width: 639px) {
+  .form-row { grid-template-columns: 1fr; }
+}
 .form-group { display: flex; flex-direction: column; gap: 5px; }
 .form-group label { font-size: 11px; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.07em; }
 .form-group .form-group-h { font-size: 11px; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.07em; }
@@ -3443,6 +3450,13 @@ function today(lang) {
 function localISODate(d) {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
+// Hoisted from SupportRequestModal so the issue form can use it too. One
+// implementation, two callers, and the alternative -- a second copy -- is how
+// the two formats drift.
+function localDateTimeValue(d) {
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 function initials(name) {
   return name.trim().split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase();
 }
@@ -3958,10 +3972,10 @@ const T = {
     resolutionPlaceholder: 'What was done to fix it?',
     // Written into the resolution of a Pending issue, which nobody may edit.
     stillWaiting: 'Still waiting',
-    startTime: 'Start time',
-    endTime: 'End time',
+    startTime: 'Start date & time',
+    endTime: 'End date & time',
     duration: 'Duration',
-    invalidTimeRange: 'End time must be after start time',
+    invalidTimeRange: 'End date & time must be after start date & time',
     reportedByAgent: 'Reported by (Connecta Agent)',
     confirmedByAgent: 'Confirmed with (Connecta Agent)',
     noAgentSelected: 'None selected',
@@ -4879,10 +4893,10 @@ const T = {
     resolutionPlaceholder: 'O que foi feito para resolver?',
     // Escrito na resolução de uma avaria Pendente, que ninguém pode editar.
     stillWaiting: 'Ainda à espera',
-    startTime: 'Hora de início',
-    endTime: 'Hora de fim',
+    startTime: 'Data e hora de início',
+    endTime: 'Data e hora de fim',
     duration: 'Duração',
-    invalidTimeRange: 'A hora de fim deve ser depois da hora de início',
+    invalidTimeRange: 'A data e hora de fim deve ser depois da data e hora de início',
     reportedByAgent: 'Reportado por (Agente Connecta)',
     confirmedByAgent: 'Confirmado com (Agente Connecta)',
     noAgentSelected: 'Nenhum selecionado',
@@ -6031,11 +6045,19 @@ function duplicateAlertMessage(lang, count, location, windowHours) {
    inputs are missing or the duration works out to zero. */
 function computeDurationMinutes(startTime, endTime) {
   if (!startTime || !endTime) return null;
+  const hasDate = startTime.includes('T') || endTime.includes('T');
+  if (hasDate) {
+    if (!startTime.includes('T') || !endTime.includes('T')) return null;
+    const s = new Date(startTime), e = new Date(endTime);
+    if (isNaN(s) || isNaN(e)) return null;
+    const diff = Math.round((e - s) / 60000);
+    return diff > 0 ? diff : null;
+  }
   const [sh, sm] = startTime.split(':').map(Number);
   const [eh, em] = endTime.split(':').map(Number);
   if ([sh,sm,eh,em].some(n => Number.isNaN(n))) return null;
   let diff = (eh*60+em) - (sh*60+sm);
-  if (diff < 0) diff += 24*60; // crossed midnight
+  if (diff < 0) diff += 24*60; // crossed midnight, legacy clock-only
   return diff > 0 ? diff : null;
 }
 
@@ -6940,16 +6962,32 @@ function ConfirmDeleteIssue({ issue, onCancel, onConfirm, deleting }) {
      this the duration line would be blank on every legacy issue.
 */
 function initialClockTimes(issue) {
+  // A value that already carries a date (new format) is used as-is. A legacy
+  // clock-only value is attached to the issue's own day, so an overnight issue
+  // keeps its duration instead of going negative.
+  const attach = v => (v && v.includes('T')) ? v
+    : (v ? `${issue.createdAt || localISODate(new Date())}T${v}` : '');
+  const nextDay = iso => {
+    const d = new Date(iso.slice(0,10) + 'T00:00:00');
+    d.setDate(d.getDate() + 1);
+    return localISODate(d);
+  };
+
   if (issue.startTime && issue.endTime) {
-    return { startTime: issue.startTime, endTime: issue.endTime };
+    const s = attach(issue.startTime);
+    let e = attach(issue.endTime);
+    if (!issue.endTime.includes('T') && issue.endTime < issue.startTime) {
+      e = `${nextDay(issue.startTime)}T${issue.endTime}`;
+    }
+    return { startTime: s, endTime: e };
   }
   if (issue.status === 'Pending') {
-    return { startTime: issue.startTime || '', endTime: '' };
+    return { startTime: issue.startTime ? attach(issue.startTime) : '', endTime: '' };
   }
+  // Legacy: nothing ever recorded -- rebuild a placeholder pair ending now.
   const end = new Date();
-  const start = new Date(end.getTime() - issue.time*60000);
-  const toHM = d => String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-  return { startTime: toHM(start), endTime: toHM(end) };
+  const start = new Date(end.getTime() - (issue.time || 0) * 60000);
+  return { startTime: localDateTimeValue(start), endTime: localDateTimeValue(end) };
 }
 
 /* The apartment room field: a typeahead over the room inventory.
@@ -7172,9 +7210,10 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
   }
   const firstType = typeNames[0] || '';
   const catalogById = Object.fromEntries((consumableItems || []).map(ci => [ci.id, ci]));
+  const nowStr = localDateTimeValue(new Date());
   const defaults = issueMode==='apt'
-    ? {apt:'', type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[], supportRequests:[], tvSwaps:[]}
-    : {dept:'',type:firstType, problem:'', resolution:'', startTime:'', endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[], supportRequests:[], tvSwaps:[]};
+    ? {apt:'', type:firstType, problem:'', resolution:'', startTime: nowStr, endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[], supportRequests:[], tvSwaps:[]}
+    : {dept:'',type:firstType, problem:'', resolution:'', startTime: nowStr, endTime:'', status:'Ok', reportedByAgent:'', confirmedByAgent:'', falsePositive:false, consumables:[], supportRequests:[], tvSwaps:[]};
   // prefill lets another page open this form with some of it already answered --
   // the Maintenance page does, so a fault found during a check does not have to
   // have its department and equipment type typed out again.
@@ -7327,11 +7366,11 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="issue-start">{t.startTime}</label>
-              <input id="issue-start" className="form-control" type="time" lang="sv-SE" value={form.startTime} onChange={e=>set('startTime',e.target.value)} />
+              <input id="issue-start" className="form-control" type="datetime-local" step="60" lang="sv-SE" value={form.startTime} onChange={e=>set('startTime',e.target.value)} />
             </div>
             <div className="form-group">
               <label htmlFor="issue-end">{t.endTime}</label>
-              <input id="issue-end" className="form-control" type="time" lang="sv-SE" disabled={isPending}
+              <input id="issue-end" className="form-control" type="datetime-local" step="60" lang="sv-SE" disabled={isPending}
                 value={form.endTime} onChange={e=>set('endTime',e.target.value)} />
             </div>
           </div>
@@ -7441,7 +7480,7 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
           {timeRangeInvalid ? (
             <div style={{fontSize:12.5,color:'var(--red)',marginTop:-8}}>{t.invalidTimeRange}</div>
           ) : duration !== null && !isPending ? (
-            <div style={{fontSize:12.5,color:'var(--gray-400)',marginTop:-8}}>{t.duration}: <strong style={{color:'var(--gray-600)'}}>{duration}m</strong></div>
+            <div style={{fontSize:12.5,color:'var(--gray-400)',marginTop:-8}}>{t.duration}: <strong style={{color:'var(--gray-600)'}}>{formatSupportDuration(duration)}</strong></div>
           ) : null}
         </div>
         <div className="modal-footer">

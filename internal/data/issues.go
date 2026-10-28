@@ -21,9 +21,15 @@ type Issue struct {
 	Type        string    `json:"type"`
 	Problem     string    `json:"problem"`
 	Resolution  string    `json:"resolution"`
-	TimeMinutes int       `json:"time_minutes"`
-	StartTime   *string   `json:"start_time"`
-	EndTime     *string   `json:"end_time"`
+	TimeMinutes int        `json:"time_minutes"` // derived duration, 0 = none recorded
+	// Work window. Pointers so a missing bound round-trips as null, matching
+	// SupportRequest.StartedAt/ResolvedAt.
+	StartedAt  *time.Time `json:"started_at"`
+	ResolvedAt *time.Time `json:"resolved_at"`
+	// Deprecated legacy HH:MM-only fields. Retained for one release so old
+	// rows/clients keep rendering; new code reads StartedAt/ResolvedAt only.
+	StartTime *string `json:"start_time,omitempty"`
+	EndTime   *string `json:"end_time,omitempty"`
 	// Which Melia Connecta Agent reported this issue, and which one we
 	// confirmed the fix with. Deliberately excluded from any table/list
 	// rendering in the UI — only the add/edit issue form surfaces these.
@@ -86,12 +92,44 @@ func ValidateIssue(v *validator.Validator, issue *Issue) {
 	v.Check(issue.Status == "Ok" || issue.Status == "Pending", "status", "must be 'Ok' or 'Pending'")
 }
 
+var issueTimePattern = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}T)?([01]\d|2[0-3]):([0-5]\d)$`)
+
+// clockTimePattern is retained for the shift module, which only ever deals with
+// "HH:MM" wall-clock times. Issues now accept a date too, via issueTimePattern.
 var clockTimePattern = regexp.MustCompile(`^([01]\d|2[0-3]):([0-5]\d)$`)
 
-// ValidateClockTime checks a "HH:MM" 24-hour string, matching exactly what
-// an <input type="time"> element produces.
-func ValidateClockTime(v *validator.Validator, field, value string) {
-	v.Check(clockTimePattern.MatchString(value), field, "must be a time in HH:MM 24-hour format")
+// issueTimeLayout is the format an <input type="datetime-local"> produces.
+const issueTimeLayout = "2006-01-02T15:04"
+
+func ParseIssueTime(s string) (time.Time, bool) {
+	return ParseIssueTimeWithBase(s, time.Now())
+}
+
+// ParseIssueTimeWithBase parses a value that is either "HH:MM" or
+// "YYYY-MM-DDTHH:MM". A clock-only value is attached to base, so a legacy
+// "08:00" on an issue logged on the 12th lands on the 12th rather than on
+// today. This is the path the issue handlers use; ParseIssueTime (today) is
+// the convenience form for new issues, matching the form's default.
+func ParseIssueTimeWithBase(s string, base time.Time) (time.Time, bool) {
+	if s == "" {
+		return time.Time{}, false
+	}
+	if t, err := time.ParseInLocation(issueTimeLayout, s, time.Local); err == nil {
+		return t, true
+	}
+	m := issueTimePattern.FindStringSubmatch(s)
+	if m == nil || m[1] != "" {
+		return time.Time{}, false
+	}
+	h, _ := strconv.Atoi(m[2])
+	mn, _ := strconv.Atoi(m[3])
+	return time.Date(base.Year(), base.Month(), base.Day(), h, mn, 0, 0, time.Local), true
+}
+
+// ValidateIssueTime checks a value that is either "HH:MM" or
+// "YYYY-MM-DDTHH:MM", matching what the form can submit.
+func ValidateIssueTime(v *validator.Validator, field, value string) {
+	v.Check(issueTimePattern.MatchString(value), field, "must be a time, or a date and time, in 24-hour format")
 }
 
 func parseClockTime(s string) (hour, minute int, ok bool) {
@@ -111,6 +149,26 @@ func parseClockTime(s string) (hour, minute int, ok bool) {
 // the same rule the frontend applies, kept in sync here since this is the
 // authoritative, server-side calculation that actually gets stored.
 func ComputeDurationMinutes(start, end string) (minutes int, ok bool) {
+	startHasDate := strings.Contains(start, "T")
+	endHasDate := strings.Contains(end, "T")
+	if startHasDate || endHasDate {
+		// Mixed formats cannot be compared: one side has a date and the other
+		// does not, so there is no honest answer. Refuse rather than guess.
+		if !startHasDate || !endHasDate {
+			return 0, false
+		}
+		st, ok1 := ParseIssueTime(start)
+		et, ok2 := ParseIssueTime(end)
+		if !ok1 || !ok2 {
+			return 0, false
+		}
+		diff := int(et.Sub(st).Minutes())
+		if diff <= 0 {
+			return 0, false
+		}
+		return diff, true
+	}
+
 	sh, sm, ok1 := parseClockTime(start)
 	eh, em, ok2 := parseClockTime(end)
 	if !ok1 || !ok2 {
@@ -146,15 +204,16 @@ func loadIssueChildren(ctx context.Context, db *sql.DB, issues []*Issue) error {
 
 func (m IssueModel) Insert(issue *Issue) error {
 	query := `
-		INSERT INTO issues (mode, location, type, problem, resolution, time_minutes, status, logged_by, start_time, end_time, reported_by_agent, confirmed_by_agent, false_positive)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		INSERT INTO issues (mode, location, type, problem, resolution, time_minutes, status, logged_by,
+			start_time, end_time, started_at, resolved_at, reported_by_agent, confirmed_by_agent, false_positive)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, created_at, version`
 
 	args := []any{
 		issue.Mode, issue.Location, issue.Type, issue.Problem,
 		issue.Resolution, issue.TimeMinutes, issue.Status, issue.LoggedBy,
-		issue.StartTime, issue.EndTime, issue.ReportedByAgent, issue.ConfirmedByAgent,
-		issue.FalsePositive,
+		issue.StartTime, issue.EndTime, issue.StartedAt, issue.ResolvedAt,
+		issue.ReportedByAgent, issue.ConfirmedByAgent, issue.FalsePositive,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -166,7 +225,7 @@ func (m IssueModel) Insert(issue *Issue) error {
 func (m IssueModel) Get(id int64) (*Issue, error) {
 	query := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
-		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
+		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.started_at, i.resolved_at, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
 		       u.name, u.avatar_idx, i.version, i.false_positive
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
@@ -178,7 +237,7 @@ func (m IssueModel) Get(id int64) (*Issue, error) {
 
 	err := m.DB.QueryRowContext(ctx, query, id).Scan(
 		&issue.ID, &issue.CreatedAt, &issue.Mode, &issue.Location, &issue.Type,
-		&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.ReportedByAgent, &issue.ConfirmedByAgent, &issue.Status,
+		&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.StartedAt, &issue.ResolvedAt, &issue.ReportedByAgent, &issue.ConfirmedByAgent, &issue.Status,
 		&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version, &issue.FalsePositive,
 	)
 	if err != nil {
@@ -262,9 +321,9 @@ func (m IssueModel) GetAll(f IssueFilters, limit int) ([]*Issue, int, error) {
 
 		if carryPendingOntoToday(f.Date, Today()) {
 			conditions = append(conditions, fmt.Sprintf(
-				"(i.created_at >= $%d AND i.created_at < $%d OR i.status = 'Pending')", argIdx, argIdx+1))
+				"(COALESCE(i.started_at, i.created_at) >= $%d AND COALESCE(i.started_at, i.created_at) < $%d OR i.status = 'Pending')", argIdx, argIdx+1))
 		} else {
-			conditions = append(conditions, fmt.Sprintf("i.created_at >= $%d AND i.created_at < $%d", argIdx, argIdx+1))
+			conditions = append(conditions, fmt.Sprintf("COALESCE(i.started_at, i.created_at) >= $%d AND COALESCE(i.started_at, i.created_at) < $%d", argIdx, argIdx+1))
 		}
 		args = append(args, dtStr, nextDay)
 		argIdx += 2
@@ -297,7 +356,7 @@ func (m IssueModel) GetAll(f IssueFilters, limit int) ([]*Issue, int, error) {
 	// cannot become part of the query.
 	query := fmt.Sprintf(`
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
-		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
+		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.started_at, i.resolved_at, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
 		       u.name, u.avatar_idx, i.version, i.false_positive
 		%s
 		ORDER BY i.created_at DESC, i.id DESC
@@ -314,7 +373,7 @@ func (m IssueModel) GetAll(f IssueFilters, limit int) ([]*Issue, int, error) {
 		var issue Issue
 		err := rows.Scan(
 			&issue.ID, &issue.CreatedAt, &issue.Mode, &issue.Location, &issue.Type,
-			&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.ReportedByAgent, &issue.ConfirmedByAgent, &issue.Status,
+			&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.StartedAt, &issue.ResolvedAt, &issue.ReportedByAgent, &issue.ConfirmedByAgent, &issue.Status,
 			&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version, &issue.FalsePositive,
 		)
 		if err != nil {
@@ -337,14 +396,15 @@ func (m IssueModel) Update(issue *Issue) error {
 		UPDATE issues
 		SET mode=$1, location=$2, type=$3, problem=$4, resolution=$5,
 		    time_minutes=$6, status=$7, start_time=$8, end_time=$9,
-		    reported_by_agent=$10, confirmed_by_agent=$11, false_positive=$12, version=version+1
-		WHERE id=$13 AND version=$14
+		    started_at=$10, resolved_at=$11,
+		    reported_by_agent=$12, confirmed_by_agent=$13, false_positive=$14, version=version+1
+		WHERE id=$15 AND version=$16
 		RETURNING version`
 
 	args := []any{
 		issue.Mode, issue.Location, issue.Type, issue.Problem,
 		issue.Resolution, issue.TimeMinutes, issue.Status,
-		issue.StartTime, issue.EndTime,
+		issue.StartTime, issue.EndTime, issue.StartedAt, issue.ResolvedAt,
 		issue.ReportedByAgent, issue.ConfirmedByAgent, issue.FalsePositive,
 		issue.ID, issue.Version,
 	}
@@ -431,7 +491,7 @@ func (m IssueModel) GetStats(date string) (*Stats, error) {
 			COUNT(*) FILTER (WHERE status = 'Pending') AS pending,
 			COALESCE(AVG(time_minutes), 0) AS avg_minutes
 		FROM issues
-		WHERE created_at >= $1 AND created_at < $2`
+		WHERE COALESCE(started_at, created_at) >= $1 AND COALESCE(started_at, created_at) < $2`
 
 	err = m.DB.QueryRowContext(ctx, summaryQuery, dtStr, nextDay).Scan(
 		&stats.TotalIssues, &stats.Resolved, &stats.Pending, &stats.AvgMinutes,
@@ -443,7 +503,7 @@ func (m IssueModel) GetStats(date string) (*Stats, error) {
 	// By type
 	typeQuery := `
 		SELECT type, COUNT(*) FROM issues
-		WHERE created_at >= $1 AND created_at < $2
+		WHERE COALESCE(started_at, created_at) >= $1 AND COALESCE(started_at, created_at) < $2
 		GROUP BY type ORDER BY COUNT(*) DESC`
 
 	typeRows, err := m.DB.QueryContext(ctx, typeQuery, dtStr, nextDay)
@@ -469,7 +529,7 @@ func (m IssueModel) GetStats(date string) (*Stats, error) {
 	techQuery := `
 		SELECT u.id, u.name, u.avatar_idx, COUNT(i.id) AS cnt
 		FROM users u
-		LEFT JOIN issues i ON i.logged_by = u.id AND i.created_at >= $1 AND i.created_at < $2
+		LEFT JOIN issues i ON i.logged_by = u.id AND COALESCE(i.started_at, i.created_at) >= $1 AND COALESCE(i.started_at, i.created_at) < $2
 		GROUP BY u.id, u.name, u.avatar_idx, u.role
 		HAVING u.role = 'technician' OR COUNT(i.id) > 0
 		ORDER BY cnt DESC`
@@ -507,8 +567,8 @@ func (m IssueModel) GetUserStats(userID int64) (*UserStats, error) {
 			COUNT(*) FILTER (WHERE status = 'Ok')               AS resolved,
 			COUNT(*) FILTER (WHERE status = 'Pending')          AS pending,
 			COALESCE(AVG(time_minutes), 0)                      AS avg_minutes,
-			COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')  AS this_week,
-			COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') AS this_month
+			COUNT(*) FILTER (WHERE COALESCE(started_at, created_at) >= NOW() - INTERVAL '7 days')  AS this_week,
+			COUNT(*) FILTER (WHERE COALESCE(started_at, created_at) >= NOW() - INTERVAL '30 days') AS this_month
 		FROM issues
 		WHERE logged_by = $1`
 
@@ -529,7 +589,7 @@ func (m IssueModel) GetUserStats(userID int64) (*UserStats, error) {
 func (m IssueModel) GetByUser(userID int64, limit int) ([]*Issue, error) {
 	query := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
-		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
+		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.started_at, i.resolved_at, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
 		       u.name, u.avatar_idx, i.version, i.false_positive
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
@@ -551,7 +611,7 @@ func (m IssueModel) GetByUser(userID int64, limit int) ([]*Issue, error) {
 		var issue Issue
 		err := rows.Scan(
 			&issue.ID, &issue.CreatedAt, &issue.Mode, &issue.Location, &issue.Type,
-			&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.ReportedByAgent, &issue.ConfirmedByAgent, &issue.Status,
+			&issue.Problem, &issue.Resolution, &issue.TimeMinutes, &issue.StartTime, &issue.EndTime, &issue.StartedAt, &issue.ResolvedAt, &issue.ReportedByAgent, &issue.ConfirmedByAgent, &issue.Status,
 			&issue.LoggedBy, &issue.LoggedByName, &issue.LoggedByIdx, &issue.Version, &issue.FalsePositive,
 		)
 		if err != nil {
@@ -592,7 +652,7 @@ func (m IssueModel) GetRecentDuplicates(mode, location, issueType string, window
 		  AND i.type = $3
 		  AND i.created_at >= NOW() - ($4 * INTERVAL '1 hour')
 		  AND i.id != $5
-		ORDER BY i.created_at DESC`
+		ORDER BY COALESCE(i.started_at, i.created_at) DESC, i.id DESC`
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -779,7 +839,7 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 			COALESCE(MAX(time_minutes), 0)                        AS slowest,
 			COUNT(*) FILTER (WHERE false_positive)                AS false_positives
 		FROM issues
-		WHERE created_at >= $1 AND created_at < $2
+		WHERE COALESCE(started_at, created_at) >= $1 AND COALESCE(started_at, created_at) < $2
 		  AND ($3 = '' OR type = $3)`
 
 	var s ReportSummary
@@ -807,7 +867,7 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 	breakdownQ := `
 		SELECT mode, type, status, COUNT(*)
 		FROM issues
-		WHERE created_at >= $1 AND created_at < $2
+		WHERE COALESCE(started_at, created_at) >= $1 AND COALESCE(started_at, created_at) < $2
 		  AND ($3 = '' OR type = $3)
 		GROUP BY mode, type, status`
 
@@ -845,13 +905,13 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 	if limit >= 0 {
 		issueQ := `
 		SELECT i.id, i.created_at, i.mode, i.location, i.type, i.problem,
-		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
+		       i.resolution, i.time_minutes, i.start_time, i.end_time, i.started_at, i.resolved_at, i.reported_by_agent, i.confirmed_by_agent, i.status, i.logged_by,
 		       u.name, u.avatar_idx, i.version, i.false_positive
 		FROM issues i
 		INNER JOIN users u ON i.logged_by = u.id
-		WHERE i.created_at >= $1 AND i.created_at < $2 AND i.mode = $3
+		WHERE COALESCE(i.started_at, i.created_at) >= $1 AND COALESCE(i.started_at, i.created_at) < $2 AND i.mode = $3
 		  AND ($4 = '' OR i.type = $4)
-		ORDER BY i.created_at DESC, i.id DESC`
+		ORDER BY COALESCE(i.started_at, i.created_at) DESC, i.id DESC`
 
 		if limit > 0 {
 			issueQ += "\n\t\tLIMIT $5"
@@ -873,7 +933,7 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 				var i Issue
 				if err := rows.Scan(
 					&i.ID, &i.CreatedAt, &i.Mode, &i.Location, &i.Type,
-					&i.Problem, &i.Resolution, &i.TimeMinutes, &i.StartTime, &i.EndTime, &i.ReportedByAgent, &i.ConfirmedByAgent, &i.Status,
+					&i.Problem, &i.Resolution, &i.TimeMinutes, &i.StartTime, &i.EndTime, &i.StartedAt, &i.ResolvedAt, &i.ReportedByAgent, &i.ConfirmedByAgent, &i.Status,
 					&i.LoggedBy, &i.LoggedByName, &i.LoggedByIdx, &i.Version, &i.FalsePositive,
 				); err != nil {
 					rows.Close()
@@ -910,7 +970,7 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 		       COUNT(i.id) FILTER (WHERE i.status = 'Ok')        AS resolved,
 		       COALESCE(AVG(i.time_minutes), 0)                   AS avg_min
 		FROM users u
-		LEFT JOIN issues i ON i.logged_by = u.id AND i.created_at >= $1 AND i.created_at < $2
+		LEFT JOIN issues i ON i.logged_by = u.id AND COALESCE(i.started_at, i.created_at) >= $1 AND COALESCE(i.started_at, i.created_at) < $2
 		                   AND ($3 = '' OR i.type = $3)
 		GROUP BY u.id, u.name, u.avatar_idx, u.role
 		HAVING u.role = 'technician' OR COUNT(i.id) > 0
