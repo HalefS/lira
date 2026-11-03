@@ -76,10 +76,17 @@ func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dst any
 }
 
 func (app *application) readIDParam(r *http.Request) (int64, error) {
+	return app.readIDParamNamed(r, "id")
+}
+
+// readIDParamNamed reads a numeric route parameter by name. Most handlers only
+// need "id", but a nested resource has two ids in one path and they must not be
+// confused: reading the wrong one would delete another issue's photo.
+func (app *application) readIDParamNamed(r *http.Request, name string) (int64, error) {
 	params := httprouter.ParamsFromContext(r.Context())
-	id, err := strconv.ParseInt(params.ByName("id"), 10, 64)
+	id, err := strconv.ParseInt(params.ByName(name), 10, 64)
 	if err != nil || id < 1 {
-		return 0, errors.New("invalid id parameter")
+		return 0, errors.New("invalid " + name + " parameter")
 	}
 	return id, nil
 }

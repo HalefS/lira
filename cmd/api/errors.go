@@ -60,6 +60,18 @@ func (app *application) notPermittedResponse(w http.ResponseWriter, r *http.Requ
 	app.errorResponse(w, r, http.StatusForbidden, "your user account doesn't have the necessary permissions to access this resource")
 }
 
+// payloadTooLargeResponse is 413, deliberately distinct from 422: the body was
+// refused before it was understood, so no field can be named in the error.
+func (app *application) payloadTooLargeResponse(w http.ResponseWriter, r *http.Request) {
+	app.errorResponse(w, r, http.StatusRequestEntityTooLarge, "the request body is too large")
+}
+
+// unsupportedMediaTypeResponse is 415. It is used for an upload whose bytes are
+// not an image this server can store, and for a body that is not multipart.
+func (app *application) unsupportedMediaTypeResponse(w http.ResponseWriter, r *http.Request, message any) {
+	app.errorResponse(w, r, http.StatusUnsupportedMediaType, message)
+}
+
 func (app *application) editConflictResponse(w http.ResponseWriter, r *http.Request) {
 	app.errorResponse(w, r, http.StatusConflict, "unable to update the record due to an edit conflict, please try again")
 }

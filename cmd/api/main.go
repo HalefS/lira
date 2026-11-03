@@ -126,12 +126,18 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.port),
-		Handler:      app.routes(),
-		IdleTimeout:  time.Minute,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
+		Addr:    fmt.Sprintf(":%d", cfg.port),
+		Handler: app.routes(),
+		// Photo uploads are the reason these are not 5s/10s any more. A phone
+		// on hotel wifi takes tens of seconds to send a few megabytes, and on
+		// HTTP/1.1 WriteTimeout covers reading the body as well as writing the
+		// response, so both have to move. ReadHeaderTimeout still bounds the
+		// slow-header attack that a large ReadTimeout would otherwise allow.
+		IdleTimeout:       time.Minute,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
 
 	logger.Info("starting server", "addr", srv.Addr, "env", cfg.env)

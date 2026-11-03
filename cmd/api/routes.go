@@ -80,6 +80,19 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPatch, "/v1/issues/:id", app.requireAuth(app.updateIssueHandler))
 	router.HandlerFunc(http.MethodDelete, "/v1/issues/:id", app.requireAuth(app.deleteIssueHandler))
 
+	// Issue photos. Nested under /v1/issues/:id, which httprouter permits: it
+	// is a child of the existing :id wildcard, not a literal sibling of it. A
+	// sibling such as /v1/issues/photos would panic at boot the way
+	// /v1/schedule/roster did, so it must never be added.
+	//
+	// Adding is owner-or-manager (checked in the handler, like editing the
+	// issue). Reading is any authenticated user, matching the issue read. The
+	// bytes are served with private, immutable caching and an ETag that is the
+	// SHA-256 of the image, so a reopened issue costs no image fetches.
+	router.HandlerFunc(http.MethodPost, "/v1/issues/:id/attachments", app.requireAuth(app.createIssueAttachmentHandler))
+	router.HandlerFunc(http.MethodGet, "/v1/issues/:id/attachments/:attachment_id", app.requireAuth(app.showIssueAttachmentHandler))
+	router.HandlerFunc(http.MethodDelete, "/v1/issues/:id/attachments/:attachment_id", app.requireAuth(app.requireManager(app.deleteIssueAttachmentHandler)))
+
 	// Recurring-issue check (protected) — used while logging a new issue.
 	// Named issue-duplicates (not nested under /v1/issues/) to avoid
 	// colliding with the /v1/issues/:id wildcard route above.

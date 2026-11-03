@@ -387,7 +387,7 @@ func (app *application) updateIssueHandler(w http.ResponseWriter, r *http.Reques
 
 	// Permission: only the owner or a manager can edit
 	currentUser := app.contextGetUser(r)
-	if currentUser.Role != "manager" && issue.LoggedBy != currentUser.ID {
+	if !canMutateIssue(currentUser, issue) {
 		app.notPermittedResponse(w, r)
 		return
 	}
@@ -677,7 +677,7 @@ func (app *application) deleteIssueHandler(w http.ResponseWriter, r *http.Reques
 
 	// Permission: only owner or manager can delete
 	currentUser := app.contextGetUser(r)
-	if currentUser.Role != "manager" && issue.LoggedBy != currentUser.ID {
+	if !canMutateIssue(currentUser, issue) {
 		app.notPermittedResponse(w, r)
 		return
 	}

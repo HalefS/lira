@@ -21,7 +21,7 @@ type Issue struct {
 	Type        string    `json:"type"`
 	Problem     string    `json:"problem"`
 	Resolution  string    `json:"resolution"`
-	TimeMinutes int        `json:"time_minutes"` // derived duration, 0 = none recorded
+	TimeMinutes int       `json:"time_minutes"` // derived duration, 0 = none recorded
 	// Work window. Pointers so a missing bound round-trips as null, matching
 	// SupportRequest.StartedAt/ResolvedAt.
 	StartedAt  *time.Time `json:"started_at"`
@@ -54,6 +54,11 @@ type Issue struct {
 	// room's own set was unusable and no spare was in stock. Always an array in
 	// the JSON, empty when nothing was swapped.
 	TVSwaps []*TVSwap `json:"tv_swaps"`
+	// Photos attached to this issue, oldest first -- the fault as found and the
+	// fix as left. Metadata only: the bytes are fetched one at a time from
+	// /v1/issues/:id/attachments/:attachment_id and cached by the browser.
+	// Always an array in the JSON, empty when there are none.
+	Attachments []*IssueAttachment `json:"attachments"`
 }
 
 type IssueFilters struct {
@@ -199,7 +204,10 @@ func loadIssueChildren(ctx context.Context, db *sql.DB, issues []*Issue) error {
 	if err := loadIssueSupportRequests(ctx, db, issues); err != nil {
 		return err
 	}
-	return loadIssueTVSwaps(ctx, db, issues)
+	if err := loadIssueTVSwaps(ctx, db, issues); err != nil {
+		return err
+	}
+	return loadIssueAttachments(ctx, db, issues)
 }
 
 func (m IssueModel) Insert(issue *Issue) error {

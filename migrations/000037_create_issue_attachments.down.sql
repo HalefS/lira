@@ -1,0 +1,15 @@
+-- Drops every photo attached to every issue, and the bytes with them. There is
+-- no other copy: the images are not on disk and no report embeds them, so this
+-- is NOT reversible by re-running the up migration. Issue rows themselves are
+-- untouched, as are consumables, handovers and TV swaps.
+--
+-- Export first if the photos matter, on the machine that will run this:
+--
+--   \copy (SELECT id, issue_id, created_by, created_at, mime_type, byte_size,
+--                width, height, sha256, encode(data, 'base64')
+--          FROM issue_attachments ORDER BY id)
+--     TO 'issue_attachments.csv' CSV HEADER
+--
+-- That dump is then the only surviving copy. The index goes with the table;
+-- STORAGE EXTERNAL needs no reverting because the column ceases to exist.
+DROP TABLE IF EXISTS issue_attachments;

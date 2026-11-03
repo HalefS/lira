@@ -95,6 +95,10 @@
   --red:         #C13A3A;
   --red-light:   #FBEAEA;
   --red-mid:     #F0B8B8;
+  /* Hover fill for destructive buttons. --red-mid is a wash for borders and
+     badges, not a background to put white text on: it measured under 2:1. This
+     is a shade of the same hue, dark enough for the white label. */
+  --red-strong:  #A32E2E;
   /* -- shift tints and absences -------------------------------------------------
      Two new hues and one wash, for three reasons each.
      --violet carries "holiday" in the absence set and appears nowhere else, so a
@@ -156,6 +160,7 @@ html.dark {
   --red:         #E8817E;
   --red-light:   #4A1E1E;
   --red-mid:     #7A3232;
+  --red-strong:  #5E2424;
   --violet:     #A78BFA;
   --abs-wash:   #272244;
   --gray-50:     #1B1F25;
@@ -393,7 +398,7 @@ img.avatar-circle { object-fit: cover; background: var(--gray-100); }
 .btn-ghost:hover { background: var(--gray-100); color: var(--gray-900); }
 /* Destructive action that needs a deliberate click (the delete confirmation). */
 .btn-danger { background: var(--red); color: #fff; }
-.btn-danger:hover { background: var(--red-mid); }
+.btn-danger:hover { background: var(--red-strong); }
 .btn-danger:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-full { width: 100%; justify-content: center; padding: 10px 14px; font-size: 14px; }
 .btn svg { width: 14px; height: 14px; }
@@ -2429,6 +2434,25 @@ html.dark .lcu-resting-table td { border-color: var(--gray-200); }
 .modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
 .modal-footer { padding: 14px 24px 20px; border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px; }
 
+/* The issue form is taller than a phone screen. .modal is the scroll container,
+   so its footer scrolls away with the body and "Log issue" ends up several
+   screens below the first field. Pinning it keeps the action reachable without
+   turning the body into a second scroll area -- the footer still sits at the
+   end of the content, it just stops disappearing on the way down.
+   `inherit` picks up .modal's own background, including the html.dark override,
+   so this introduces no second colour. */
+.issue-modal .modal-footer {
+  position: sticky; bottom: 0; z-index: 2; background: inherit;
+}
+/* Shown between the body and the footer when the issue saved but a photo did
+   not upload, or when the issue itself did not save. */
+.issue-submit-error {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 10px 24px; background: var(--red-light); color: var(--red);
+  font-size: 13px; line-height: 1.4;
+}
+.issue-submit-error svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 2px; }
+
 /* ── Delete confirmation ── */
 .confirm-modal { max-width: 420px; }
 .confirm-body { display: flex; gap: 14px; align-items: flex-start; }
@@ -2609,6 +2633,60 @@ html.dark .room-picker-empty { color: var(--gray-400) !important; }
 .tp-strip-item svg { width: 11px; height: 11px; }
 /* The arrow is what makes the pair read as a movement rather than two rooms. */
 .tp-swap-arrow { opacity: .7; font-weight: 400; margin: 0 1px; }
+
+/* Issue photos. The well matches the consumables and third-party boxes so the
+   issue form reads as one set of optional blocks; the tiles themselves are new
+   because there is nothing else in the app that holds an image. Every colour
+   comes from a token that already has an html.dark value, so no dark rules. */
+.ph-box {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 10px; border: 1.5px dashed var(--gray-300); border-radius: var(--radius-md);
+  background: var(--gray-100);
+}
+.ph-box.has-items { border-style: solid; border-color: var(--gray-200); }
+.ph-strip { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+.ph-tile {
+  position: relative; width: 68px; height: 68px; padding: 0; flex-shrink: 0;
+  border: 1px solid var(--gray-200); border-radius: var(--radius-sm);
+  background: var(--gray-100); overflow: hidden; cursor: pointer;
+}
+.ph-tile:hover { border-color: var(--blue-mid); }
+.ph-tile:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.ph-tile.busy { opacity: .55; }
+.ph-tile.error { border: 2px solid var(--red); }
+.ph-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ph-thumb-loading, .ph-thumb-error {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%; color: var(--gray-400); background: var(--gray-100);
+}
+.ph-thumb-error svg { width: 16px; height: 16px; }
+/* The two add buttons own a full row so the empty-state hint sits underneath
+   them rather than squeezing them into a column. */
+.ph-actions { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 100%; }
+.ph-actions .consumable-add-btn { padding: 8px 12px; }
+.ph-hint, .ph-note { font-size: 12px; color: var(--gray-400); }
+.ph-box .ph-hint { flex-basis: 100%; }
+.ph-count { float: right; font-weight: 500; color: var(--gray-400); letter-spacing: 0; }
+.ph-progress { display: flex; flex-direction: column; gap: 5px; width: 100%; }
+.ph-progress-text { font-size: 12px; color: var(--gray-600); }
+.ph-errors { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.ph-error { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; color: var(--red); }
+.ph-error svg { width: 13px; height: 13px; flex-shrink: 0; margin-top: 1px; }
+
+/* The full-size viewer. It reuses the dialog overlay and opens above the issue
+   form, like the pickers nested in that form (z-index 110). */
+.ph-viewer { max-width: 860px; }
+.ph-viewer-body { align-items: center; }
+.ph-viewer-img {
+  max-width: 100%; max-height: 70vh; object-fit: contain;
+  background: var(--gray-100); border-radius: var(--radius-sm);
+}
+.ph-viewer-footer { flex-wrap: wrap; align-items: center; }
+.ph-confirm { flex: 1; font-size: 13px; color: var(--red); }
+
+/* The photo count in the issue table. Neutral, because a photo is neither a
+   company nor a swap and both of those hues are already spoken for. */
+.tp-strip-item.photo { background: var(--gray-200); color: var(--gray-600); }
 
 /* The company picker inside the third-party support dialog. */
 .tp-company { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -2971,7 +3049,7 @@ html.dark .btn-ghost:hover { background: var(--gray-200) !important; color: var(
    legible. Flip the pairing to a dark red fill with the light red as the text,
    the same way .icon-btn.danger:hover does it. */
 html.dark .btn-danger        { background: var(--red-light) !important; color: var(--red) !important; }
-html.dark .btn-danger:hover  { background: var(--red-mid) !important; }
+html.dark .btn-danger:hover  { background: var(--red-strong) !important; }
 
 /* The count of outstanding alerts, on the nav item a technician checks first.
    Dark --red is a pale salmon, so white on it measured 2.67:1 at 10px. Dark ink
@@ -3126,6 +3204,114 @@ async function apiFetch(path, { method='GET', body, token } = {}) {
     throw err;
   }
   return data;
+}
+
+/* Photos are the one thing this app fetches as bytes rather than JSON.
+   <img src="/v1/..."> cannot send the bearer token, so every photo is fetched
+   with fetch() and turned into an object URL by the component that shows it;
+   that component revokes the URL when it unmounts. */
+async function apiFetchBlob(path, token) {
+  const res = await fetch(API + path, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const err = new Error('Could not load image');
+    err.status = res.status;
+    throw err;
+  }
+  return res.blob();
+}
+
+/* The client half of the photo contract: shrink before sending.
+   A phone writes a 4-8 MB JPEG with EXIF; six of those over hotel wifi is not
+   an upload, it is a wait. The image is drawn onto a canvas at no more than
+   1600 px on its long edge, flattened onto white (so a transparent PNG does not
+   turn black), and encoded as JPEG. The browser's own EXIF orientation is
+   applied by createImageBitmap/Image, and every other tag -- GPS included -- is
+   discarded by the canvas.
+
+   Throws Error('type') when the file cannot be decoded, Error('large') when it
+   is over the hard cap. The caller turns those into distinct messages because
+   neither can be fixed by pressing Retry. */
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+// Mirrors data.MaxAttachmentsPerIssue on the server. Six is two rows of tiles
+// on a 360 px phone and one row on the desktop modal.
+const MAX_PHOTOS = 6;
+
+async function shrinkImage(file) {
+  if (!file || !file.type || file.type.indexOf('image/') !== 0) throw new Error('type');
+  if (file.size > 20 * 1024 * 1024) throw new Error('large');
+
+  let source;
+  try {
+    if (window.createImageBitmap) {
+      source = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } else {
+      source = await new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('type')); };
+        img.src = url;
+      });
+    }
+  } catch (_) {
+    throw new Error('type');
+  }
+
+  const sw = source.width, sh = source.height;
+  if (!sw || !sh) {
+    if (source.close) source.close();
+    throw new Error('type');
+  }
+  const scale = Math.min(1, 1600 / Math.max(sw, sh));
+  const w = Math.max(1, Math.round(sw * scale));
+  const h = Math.max(1, Math.round(sh * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(source, 0, 0, w, h);
+  if (source.close) source.close();
+
+  let blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.78));
+  if (!blob) throw new Error('type');
+  if (blob.size > 1024 * 1024) {
+    const smaller = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.65));
+    if (smaller && smaller.size < blob.size) blob = smaller;
+  }
+  if (blob.size > MAX_PHOTO_BYTES) throw new Error('large');
+  return new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+}
+
+/* Multipart upload, one photo per request. This deliberately does not use
+   apiFetch: that helper forces Content-Type: application/json, which would stop
+   the browser writing the multipart boundary. Setting only Authorization lets
+   fetch set the boundary itself. */
+async function uploadIssuePhoto(issueId, file, token) {
+  const fd = new FormData();
+  fd.append('photo', file, 'photo.jpg');
+  const res = await fetch(`${API}/issues/${issueId}/attachments`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` },
+    body: fd,
+  });
+
+  const raw = await res.text();
+  let data = {};
+  if (raw) { try { data = JSON.parse(raw); } catch (_) { data = {}; } }
+  if (!res.ok) {
+    const msg = data.error
+      ? (typeof data.error === 'object' ? Object.values(data.error).join(', ') : data.error)
+      : 'Upload failed';
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
+  }
+  return data.attachment;
 }
 
 /* ════════════════ MOTION ════════════════ */
@@ -3516,6 +3702,13 @@ function mapIssue(i) {
     loggedByIdx:   i.logged_by_idx,
     createdAt:     i.created_at?.slice(0,10),
     version:       i.version,
+    // Photos on the issue, oldest first. Metadata only -- the bytes are fetched
+    // per photo by PhotoImage, never carried in the list JSON.
+    attachments: (i.attachments || []).map(p => ({
+      id: p.id, mimeType: p.mime_type, byteSize: p.byte_size,
+      width: p.width, height: p.height, createdAt: p.created_at,
+      createdByName: p.created_by_name || '',
+    })),
   };
 }
 
@@ -3797,6 +3990,30 @@ const T = {
     falsePositiveBadge: 'False positive',
     falsePositivesMetric: 'False positives',
     falsePositiveRateMetric: 'False positive rate',
+    photosLabel: 'Photos',
+    photoTake: 'Take photo',
+    photoChoose: 'Choose photo',
+    photosHint: 'Up to {n} photos. They are resized before upload.',
+    photosLimit: '{n} photos is the limit for one issue.',
+    photoCountOne: '1 photo',
+    photoCountMany: '{n} photos',
+    photoOpen: 'Open photo {n}',
+    photoAlt: 'Issue photo {n}',
+    photoViewerTitle: 'Photo {n} of {total}',
+    photoClose: 'Close',
+    photoRemove: 'Remove photo',
+    photoRemoveConfirm: 'Remove this photo? This cannot be undone.',
+    photoRemoveFailed: 'That photo could not be removed. Try again.',
+    photoErrType: 'That file is not an image this device can read. Try a JPG or PNG.',
+    photoErrTooLarge: 'That photo is too large. Add it from the gallery, which usually shares a smaller copy.',
+    photoErrUpload: 'Could not upload. Check the connection.',
+    photoErrLoad: 'Could not load this photo.',
+    photoUploading: 'Uploading photo {done} of {total}…',
+    photoUploadPartial: 'The issue was saved, but {failed} of {total} photos did not upload.',
+    photoPartialHint: 'The issue is saved. You can add the missing photos later by opening it again.',
+    photoSaveFailed: 'The issue was not saved. Nothing was uploaded.',
+    photosRetry: 'Retry photo upload',
+    issueSaving: 'Saving…',
     consumablesLabel: 'Consumables used',
     addConsumables: 'Add consumables',
     editConsumables: 'Edit',
@@ -4721,6 +4938,30 @@ const T = {
     falsePositiveBadge: 'Falso positivo',
     falsePositivesMetric: 'Falsos positivos',
     falsePositiveRateMetric: 'Taxa de falsos positivos',
+    photosLabel: 'Fotografias',
+    photoTake: 'Tirar fotografia',
+    photoChoose: 'Escolher fotografia',
+    photosHint: 'Até {n} fotografias. São reduzidas antes de enviar.',
+    photosLimit: 'O limite é {n} fotografias por avaria.',
+    photoCountOne: '1 fotografia',
+    photoCountMany: '{n} fotografias',
+    photoOpen: 'Abrir fotografia {n}',
+    photoAlt: 'Fotografia da avaria {n}',
+    photoViewerTitle: 'Fotografia {n} de {total}',
+    photoClose: 'Fechar',
+    photoRemove: 'Remover fotografia',
+    photoRemoveConfirm: 'Remover esta fotografia? Não pode ser anulada.',
+    photoRemoveFailed: 'Não foi possível remover a fotografia. Tente de novo.',
+    photoErrType: 'Esse ficheiro não é uma imagem que este dispositivo consiga ler. Tente JPG ou PNG.',
+    photoErrTooLarge: 'Essa fotografia é demasiado grande. Adicione-a a partir da galeria, que normalmente partilha uma cópia mais pequena.',
+    photoErrUpload: 'Não foi possível enviar. Verifique a ligação.',
+    photoErrLoad: 'Não foi possível carregar esta fotografia.',
+    photoUploading: 'A enviar fotografia {done} de {total}…',
+    photoUploadPartial: 'A avaria foi guardada, mas {failed} de {total} fotografias não foram enviadas.',
+    photoPartialHint: 'A avaria está guardada. Pode acrescentar as fotografias em falta mais tarde, abrindo-a novamente.',
+    photoSaveFailed: 'A avaria não foi guardada. Nada foi enviado.',
+    photosRetry: 'Tentar enviar as fotografias',
+    issueSaving: 'A guardar…',
     consumablesLabel: 'Consumíveis usados',
     addConsumables: 'Adicionar consumíveis',
     editConsumables: 'Editar',
@@ -7128,7 +7369,7 @@ function RoomPicker({ value, onChange, token, t, id }) {
           // one from the list, so the box and the form cannot disagree.
           if (next.trim() !== chosen) onChange('');
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => { if (!chosen) setOpen(true); }}
         onKeyDown={onKeyDown}/>
 
       {open && (
@@ -7182,7 +7423,156 @@ function RoomPicker({ value, onChange, token, t, id }) {
   );
 }
 
-function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, departments, connectaAgents, consumableItems, token, onClose, onSave }) {
+/* One photo in a tile or in the viewer. The bytes are fetched here rather than
+   put in an <img src> because the endpoint needs a bearer token, which an <img>
+   cannot send. An object URL is created once per photo and revoked when this
+   component unmounts, so a closed issue leaves no blobs behind. */
+function PhotoImage({ issueId, photo, token, t, alt, className }) {
+  const [url, setUrl] = useState('');
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl = '';
+    setUrl('');
+    setFailed(false);
+
+    function adopt(blob) {
+      if (cancelled) return;
+      objectUrl = URL.createObjectURL(blob);
+      setUrl(objectUrl);
+    }
+
+    if (photo.file) {
+      // Staged, not uploaded yet: show the local file. After an upload this
+      // still points at the same picture, so a reopened viewer costs no fetch.
+      adopt(photo.file);
+    } else if (photo.id && token) {
+      apiFetchBlob(`/issues/${issueId}/attachments/${photo.id}`, token)
+        .then(adopt)
+        .catch(() => { if (!cancelled) setFailed(true); });
+    }
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [issueId, photo.key, photo.file, photo.id, token]);
+
+  if (failed) {
+    return <span className={`ph-thumb-error ${className || ''}`} title={t.photoErrLoad} aria-hidden="true">{Ic.info}</span>;
+  }
+  if (!url) {
+    return <span className={`ph-thumb-loading ${className || ''}`} aria-hidden="true"/>;
+  }
+  return <img className={`ph-thumb ${className || ''}`} src={url} alt={alt}
+    width={photo.width || undefined} height={photo.height || undefined}/>;
+}
+
+function photoCountLabel(t, n) {
+  return (n === 1 ? t.photoCountOne : t.photoCountMany).replace('{n}', n);
+}
+
+/* The issue table's photo marker. It sits in the problem cell next to the
+   consumables, swaps and handovers, and carries no image -- twenty rows of
+   thumbnails is not a table. */
+function PhotoStrip({ photos, t }) {
+  const n = (photos || []).length;
+  if (!n) return null;
+  const label = photoCountLabel(t, n);
+  return (
+    <div className="tp-strip">
+      <span className="tp-strip-item photo" title={label}>
+        <span aria-hidden="true">{Ic.camera} {n}</span>
+        <span className="sr-only">{label}</span>
+      </span>
+    </div>
+  );
+}
+
+/* Full-size viewer, opened from a tile. It is a sibling of the issue modal,
+   not a child, so it is not clipped by the 520 px form. Removing a saved photo
+   is manager-only and asks once; removing a staged one is just a discard and
+   does not. */
+function PhotoViewer({ issueId, photos, viewKey, token, t, currentUser, onClose, onRemove }) {
+  const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [error, setError] = useState('');
+  const panelRef = useDialog({ onClose, initialFocus: '#ph-viewer-close', preventClose: removing });
+
+  const idx = (photos || []).findIndex(p => p.key === viewKey);
+  const photo = idx >= 0 ? photos[idx] : null;
+
+  useEffect(() => {
+    setConfirming(false);
+    setError('');
+    setRemoving(false);
+  }, [viewKey]);
+
+  if (!photo) return null;
+
+  const canRemove = photo.status !== 'saved' || currentUser.role === 'manager';
+
+  async function remove() {
+    if (photo.status !== 'saved') {
+      onRemove(photo.key);
+      return;
+    }
+    setRemoving(true);
+    setError('');
+    try {
+      const res = await fetch(`${API}/issues/${issueId}/attachments/${photo.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('remove');
+      onRemove(photo.key);
+    } catch (_) {
+      setError(t.photoRemoveFailed);
+      setRemoving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay picker-overlay"
+      onClick={e => e.target === e.currentTarget && !removing && onClose()}>
+      <div className="modal ph-viewer" ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="ph-viewer-title">
+        <div className="modal-header">
+          <h2 id="ph-viewer-title">
+            {t.photoViewerTitle.replace('{n}', idx + 1).replace('{total}', photos.length)}
+          </h2>
+          <button id="ph-viewer-close" className="icon-btn" onClick={onClose} aria-label={t.photoClose}>{Ic.x}</button>
+        </div>
+        <div className="modal-body ph-viewer-body">
+          <PhotoImage issueId={issueId} photo={photo} token={token} t={t}
+            alt={t.photoAlt.replace('{n}', idx + 1)} className="ph-viewer-img"/>
+          {error && <div className="ph-error" role="alert">{Ic.info} <span>{error}</span></div>}
+        </div>
+        <div className="modal-footer ph-viewer-footer">
+          {confirming ? (
+            <>
+              <span className="ph-confirm" role="alert">{t.photoRemoveConfirm}</span>
+              <button className="btn btn-ghost" disabled={removing} onClick={() => setConfirming(false)}>{t.cancel}</button>
+              <button className="btn btn-danger" disabled={removing} onClick={remove}>{t.photoRemove}</button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-ghost" onClick={onClose}>{t.photoClose}</button>
+              {canRemove && (
+                <button className="btn btn-danger"
+                  onClick={() => photo.status === 'saved' ? setConfirming(true) : onRemove(photo.key)}>
+                  {t.photoRemove}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, departments, connectaAgents, consumableItems, token, onClose, onSave, onPhotosChanged }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const isEdit = !!editIssue;
@@ -7247,6 +7637,31 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
   const [pickerOpen, setPickerOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
+
+  // Photos are deliberately outside `form`. `form` is what addIssue/saveEdit
+  // serialise, and a File object cannot go into that JSON. These tiles have
+  // their own lifecycle: staged (ready), in flight (busy), stored (saved), or
+  // failed with a retryable flag.
+  const [photos, setPhotos] = useState(() => (isEdit && editIssue.attachments ? editIssue.attachments : []).map(p => ({
+    key: `img-${p.id}`,
+    status: 'saved',
+    id: p.id,
+    file: null,
+    error: '',
+    retryable: false,
+    mimeType: p.mimeType,
+    width: p.width,
+    height: p.height,
+  })));
+  const [viewing, setViewing] = useState(null);   // photo key
+  const [submitting, setSubmitting] = useState(false);
+  const [upload, setUpload] = useState(null);     // {done, total}
+  const [submitError, setSubmitError] = useState('');
+  const [savedId, setSavedId] = useState(null);   // set once the issue exists
+  const [photoNotice, setPhotoNotice] = useState('');
+  const cameraRef = useRef(null);
+  const galleryRef = useRef(null);
+  const photoKeyRef = useRef(0);
   // Only offered on an issue type flagged tracks_swaps. Swaps already recorded
   // stay visible if the flag is later turned off, so the record isn't hidden
   // from someone editing that issue — but no new one can be added.
@@ -7266,6 +7681,10 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
   const panelRef = useDialog({
     onClose,
     initialFocus: issueMode==='apt' ? '#apt-room' : '#issue-dept',
+    // While the issue or its photos are being saved, Escape must not unmount
+    // the form and lose the staged files and the id of an issue that already
+    // exists.
+    preventClose: submitting,
   });
 
   // A Pending issue has not been fixed yet, so the two fields that say the work
@@ -7282,12 +7701,146 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
       : {...f, status: next, resolution: ''});
   }
 
+  function addPhotos(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const room = MAX_PHOTOS - photos.length;
+    if (room <= 0) {
+      setPhotoNotice(t.photosLimit.replace('{n}', MAX_PHOTOS));
+      return;
+    }
+    const accepted = files.slice(0, room);
+    setPhotoNotice(files.length > accepted.length ? t.photosLimit.replace('{n}', MAX_PHOTOS) : '');
+    setPhotos(prev => [...prev, ...accepted.map(f => ({
+      key: `new-${++photoKeyRef.current}`,
+      status: 'ready',
+      id: null,
+      file: f,
+      error: '',
+      retryable: false,
+    }))]);
+  }
+
+  function removePhoto(key) {
+    const removed = photos.find(p => p.key === key);
+    setPhotos(prev => prev.filter(p => p.key !== key));
+    setViewing(null);
+    // A saved photo was deleted on the server by the viewer before this runs;
+    // the table's count is now stale.
+    if (removed && removed.status === 'saved' && onPhotosChanged) onPhotosChanged();
+    // The tile that had focus is gone. Hand focus to the next sensible place
+    // rather than letting it fall to <body>.
+    setTimeout(() => {
+      const target = document.getElementById('ph-add-camera') || document.querySelector('.ph-tile');
+      if (target) target.focus();
+    }, 0);
+  }
+
+  // Upload one photo at a time, in order. Sequential rather than parallel: the
+  // progress line stays honest, and a phone uplink split four ways is slower in
+  // wall time than the same bytes sent one after another.
+  async function runUploads(issueId) {
+    const pending = photos.filter(p =>
+      p.status === 'ready' || (p.status === 'error' && p.retryable && p.file));
+    if (!pending.length) {
+      return { ok: photos.every(p => p.status !== 'error'), failed: 0, total: 0 };
+    }
+
+    let failed = 0;
+    for (let i = 0; i < pending.length; i++) {
+      const p = pending[i];
+      setUpload({ done: i + 1, total: pending.length });
+      setPhotos(prev => prev.map(x => x.key === p.key
+        ? {...x, status: 'busy', error: '', retryable: false}
+        : x));
+      try {
+        const file = await shrinkImage(p.file);
+        const att = await uploadIssuePhoto(issueId, file, token);
+        setPhotos(prev => prev.map(x => x.key === p.key ? {
+          ...x,
+          status: 'saved',
+          id: att.id,
+          mimeType: att.mime_type,
+          width: att.width,
+          height: att.height,
+          error: '',
+          retryable: false,
+        } : x));
+      } catch (ex) {
+        failed++;
+        // 'type' and 'large' cannot be fixed by retrying, so those tiles keep
+        // the file only so the user can see what failed, and the footer does
+        // not offer Retry for them.
+        const kind = (ex && ex.message === 'type') ? 'type'
+          : (ex && (ex.message === 'large' || ex.status === 413)) ? 'large'
+          : (ex && ex.status === 409) ? 'limit'
+          : 'upload';
+        const message = kind === 'type' ? t.photoErrType
+          : kind === 'large' ? t.photoErrTooLarge
+          : kind === 'limit' ? t.photosLimit.replace('{n}', MAX_PHOTOS)
+          : t.photoErrUpload;
+        setPhotos(prev => prev.map(x => x.key === p.key
+          ? {...x, status: 'error', error: message, retryable: kind === 'upload'}
+          : x));
+      }
+    }
+    return { ok: failed === 0, failed, total: pending.length };
+  }
+
+  async function handleSubmit() {
+    if (submitting) return;
+    setSubmitError('');
+    setSubmitting(true);
+
+    let issueId = savedId;
+    if (!issueId) {
+      const id = await onSave({
+        ...form,
+        resolution: resolution,
+        time: isPending ? 0 : duration,
+        reportedByAgent: form.reportedByAgent || null,
+        confirmedByAgent: form.confirmedByAgent || null,
+      });
+      if (!id) {
+        // The issue POST/PATCH failed. Nothing was uploaded, the staged files
+        // are intact, and pressing Save again is safe because no id was issued.
+        setSubmitError(t.photoSaveFailed);
+        setSubmitting(false);
+        return;
+      }
+      setSavedId(id);
+      issueId = id;
+    }
+
+    const result = await runUploads(issueId);
+    setUpload(null);
+    setSubmitting(false);
+    if (onPhotosChanged) onPhotosChanged();
+
+    if (result.ok) {
+      onClose();
+      return;
+    }
+    // Partial success: the issue exists, some photos do not. Keep the modal
+    // open so Retry can upload only the failures -- and never re-POST the issue,
+    // which savedId now prevents.
+    setSubmitError(
+      t.photoUploadPartial
+        .replace('{failed}', result.failed)
+        .replace('{total}', result.total)
+      + ' ' + t.photoPartialHint
+    );
+  }
+
   // A pending issue is logged without an end time, so there is no duration to
   // compute and none is required; everything else still has to be filled in.
   const valid = (issueMode==='apt'
     ? form.apt && form.type && form.problem && resolution
     : form.dept && form.type && form.problem && resolution
   ) && (isPending || duration !== null);
+
+  const failedPhotos = photos.filter(p => p.status === 'error');
+  const retryableFailures = failedPhotos.some(p => p.retryable);
 
   // Recurring-issue check: once a location + type are picked, ask the
   // backend (debounced) whether this same issue type has already happened
@@ -7308,13 +7861,13 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
 
   return (
     <>
-    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&!submitting&&onClose()}>
       {/* aria-labelledby rather than aria-label because the title is already in
           the DOM and reads better with its own wording than a copy of it. */}
-      <div className="modal" ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="issue-modal-title">
+      <div className="modal issue-modal" ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="issue-modal-title" aria-busy={submitting || undefined}>
         <div className="modal-header">
           <h2 id="issue-modal-title">{isEdit ? t.editIssue : (issueMode==='apt' ? t.logAptIssue : t.logDeptIssue)}</h2>
-          <button className="icon-btn" onClick={onClose}>{Ic.x}</button>
+          <button className="icon-btn" onClick={onClose} disabled={submitting}>{Ic.x}</button>
         </div>
         <div className="modal-body">
           <div className="form-row">
@@ -7389,6 +7942,81 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
               <span className="fp-sub">{t.falsePositiveHint}</span>
             </span>
           </label>
+          {/* Photos: the fault as found and the fix as left. They sit with the
+              fields that describe the issue rather than just above the footer,
+              where a filled strip would park itself in front of the save
+              button. No collapsible section: the empty state is one row, and a
+              disclosure hides the only control that makes evidence get added. */}
+          <div className="form-group">
+            <div className="form-group-h" id="issue-photos-h">
+              {t.photosLabel}
+              {photos.length > 0 && <span className="ph-count">{photos.length} / {MAX_PHOTOS}</span>}
+            </div>
+            <div className={`ph-box ${photos.length ? 'has-items' : ''}`}
+                 role="group" aria-labelledby="issue-photos-h">
+              {photos.length > 0 && (
+                <div className="ph-strip">
+                  {photos.map((p, i) => (
+                    <button type="button" key={p.key} className={`ph-tile ${p.status}`}
+                      title={p.error || undefined}
+                      onClick={() => setViewing(p.key)}
+                      aria-label={t.photoOpen.replace('{n}', i + 1)}>
+                      <PhotoImage issueId={savedId || editIssue?.id} photo={p}
+                        token={token} t={t} alt=""/>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {photos.length < MAX_PHOTOS && (
+                <div className="ph-actions">
+                  <button type="button" id="ph-add-camera" className="consumable-add-btn"
+                    onClick={() => cameraRef.current && cameraRef.current.click()}>
+                    {Ic.camera} {t.photoTake}
+                  </button>
+                  <button type="button" className="consumable-add-btn"
+                    onClick={() => galleryRef.current && galleryRef.current.click()}>
+                    {Ic.upload} {t.photoChoose}
+                  </button>
+                </div>
+              )}
+              {photos.length >= MAX_PHOTOS && (
+                <div className="ph-hint">{t.photosLimit.replace('{n}', MAX_PHOTOS)}</div>
+              )}
+              {photos.length === 0 && (
+                <div className="ph-hint">{t.photosHint.replace('{n}', MAX_PHOTOS)}</div>
+              )}
+              {upload && (
+                <div className="ph-progress" role="status" aria-live="polite">
+                  <div className="ph-progress-text">
+                    {t.photoUploading.replace('{done}', upload.done).replace('{total}', upload.total)}
+                  </div>
+                  <div className="bar-track">
+                    <div className="bar-fill"
+                      style={{width: `${upload.total ? Math.round(upload.done / upload.total * 100) : 0}%`, background: 'var(--blue)'}}/>
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* The inputs are hidden; the buttons above are real buttons so they
+                are keyboard reachable. capture=environment opens the camera on a
+                phone and is ignored on desktop; the gallery input is separate
+                because a technician may already have the photo. */}
+            <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{display:'none'}}
+              onChange={e => { addPhotos(e.target.files); e.target.value = ''; }}/>
+            <input ref={galleryRef} type="file" accept="image/*" multiple style={{display:'none'}}
+              onChange={e => { addPhotos(e.target.files); e.target.value = ''; }}/>
+            {photoNotice && <div className="ph-note">{photoNotice}</div>}
+            {failedPhotos.length > 0 && (
+              <div className="ph-errors">
+                {failedPhotos.map(p => (
+                  <div key={p.key} className="ph-error" role="alert">{Ic.info} <span>{p.error}</span></div>
+                ))}
+              </div>
+            )}
+            {photos.length > 0 && (
+              <span className="sr-only" role="status" aria-live="polite">{photoCountLabel(t, photos.length)}</span>
+            )}
+          </div>
           <div className="form-group">
             {/* A caption, not a label. What is below is a row of chips and one button,
                 so there is no single control for a <label for> to name -- the
@@ -7483,11 +8111,20 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
             <div style={{fontSize:12.5,color:'var(--gray-400)',marginTop:-8}}>{t.duration}: <strong style={{color:'var(--gray-600)'}}>{formatSupportDuration(duration)}</strong></div>
           ) : null}
         </div>
+        {submitError && (
+          <div className="issue-submit-error" role="alert">{Ic.info}<span>{submitError}</span></div>
+        )}
         <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>{t.cancel}</button>
-          <button className="btn btn-primary" disabled={!valid} onClick={()=>{onSave({...form,resolution:resolution,time:isPending?0:duration,reportedByAgent:form.reportedByAgent||null,confirmedByAgent:form.confirmedByAgent||null});onClose();}}>
-            {Ic.check} {isEdit ? t.saveChanges : t.logIssue}
-          </button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>{t.cancel}</button>
+          {savedId && !submitting && !retryableFailures ? (
+            <button className="btn btn-primary" onClick={onClose}>{t.photoClose}</button>
+          ) : (
+            <button className="btn btn-primary" disabled={submitting || (!savedId && !valid)} onClick={handleSubmit}>
+              {submitting ? t.issueSaving
+                : savedId ? <>{Ic.upload} {t.photosRetry}</>
+                : <>{Ic.check} {isEdit ? t.saveChanges : t.logIssue}</>}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -7505,6 +8142,11 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
       <SupportRequestModal requests={form.supportRequests}
         onCancel={()=>setSupportOpen(false)}
         onDone={sel=>{ set('supportRequests', sel); setSupportOpen(false); }}/>
+    )}
+    {viewing && (
+      <PhotoViewer issueId={savedId || editIssue?.id} photos={photos} viewKey={viewing}
+        token={token} t={t} currentUser={currentUser}
+        onClose={()=>setViewing(null)} onRemove={removePhoto}/>
     )}
     </>
   );
@@ -8062,7 +8704,7 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
                   title={canAct(issue) ? t.editIssue : undefined}>
                 <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{issue.apt||issue.dept}</strong></td>
                 <td><TypeBadge type={issue.type}/></td>
-                <td style={{maxWidth:150}}>{issue.problem}{issue.falsePositive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}<TVSwapStrip swaps={issue.tvSwaps} t={t}/><ConsumableStrip items={issue.consumables}/><SupportRequestStrip requests={issue.supportRequests} t={t}/></td>
+                <td style={{maxWidth:150}}>{issue.problem}{issue.falsePositive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}<PhotoStrip photos={issue.attachments} t={t}/><TVSwapStrip swaps={issue.tvSwaps} t={t}/><ConsumableStrip items={issue.consumables}/><SupportRequestStrip requests={issue.supportRequests} t={t}/></td>
                 <td style={{maxWidth:190,color:'var(--gray-600)',fontSize:13}}>{issue.resolution}</td>
                 <td><IssueTime minutes={issue.time} sla={slaMinutes} t={t}/></td>
                 <td><span className={`badge ${issue.status==='Ok'?'badge-ok':'badge-pending'} ${issue.id===newIssueId ? 'status-highlight' : ''}`}>{issue.status}</span></td>
@@ -17209,6 +17851,10 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
       const todayStr = localISODate(new Date());
       apiFetch(`/stats?date=${todayStr}`, {token}).then(r=>setStats(r.stats)).catch(()=>{});
       setToast(t.toastUpdated);
+      // Returned for the same reason addIssue returns its id: the issue modal
+      // keeps itself open to upload staged photos and must not re-PATCH the
+      // issue if that pass is retried.
+      return id;
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
@@ -17492,7 +18138,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
         </div>
 
         {modal && (
-          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)}/>
+          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)} onPhotosChanged={bumpIssues}/>
         )}
         {/* Opened by the Maintenance page when a check found a fault worth logging.
             onLinked runs once the issue exists, with its id, so the check that
@@ -17507,11 +18153,15 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
           consumableItems={consumableItems}
           token={token}
           onClose={()=>setMaintIssue(null)}
+          onPhotosChanged={bumpIssues}
           onSave={async form => {
             const id = await addIssue(form, 'dept');
             const linked = maintIssue.onLinked;
-            setMaintIssue(null);
+            // The modal owns its own close now: it stays open while any photos
+            // upload, so unmounting it here would cancel that pass. Linking the
+            // maintenance check happens as soon as the issue exists.
             if (id && linked) await linked(id);
+            return id;
           }}
         />}
         {lcuPrompt && (
@@ -17521,7 +18171,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
         )}
         {editing && (
           <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token}
-            onClose={()=>setEditing(null)} onSave={form=>saveEdit(form,editing.mode,editing.issue.id)}/>
+            onClose={()=>setEditing(null)} onSave={form=>saveEdit(form,editing.mode,editing.issue.id)} onPhotosChanged={bumpIssues}/>
         )}
         {pending && (
           <ConfirmDeleteIssue issue={pending.issue} deleting={!!pending.busy}
