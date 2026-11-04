@@ -2926,6 +2926,75 @@ tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
 .empty-state svg { width: 36px; height: 36px; opacity: 0.25; }
 .empty-state p { font-size: 13.5px; }
 
+/* ── Notification centre ──
+   The feed is a queue of current conditions, not an activity timeline. The
+   digest above it answers "what happened today" and the list answers "what
+   needs somebody now". Every colour here is an existing token: critical uses
+   --red, warning uses --orange (never --amber for text), unread uses the same
+   --blue-light/--blue pair as every other "you are here" state. */
+.notif-intro { margin-bottom:16px; padding:14px 20px; }
+.notif-intro p { font-size:13px; color:var(--gray-400); margin:0; }
+.notif-note { margin-top:5px !important; color:var(--gray-600) !important; font-size:12.5px !important; }
+.notif-toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+.notif-toolbar-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
+.notif-card { overflow:hidden; }
+.notif-list-head { padding:11px 16px; border-bottom:1px solid var(--gray-200); font-size:11px; font-weight:600; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.07em; }
+.notif-list { list-style:none; margin:0; padding:0; }
+.notif-item { position:relative; display:grid; grid-template-columns:30px minmax(0,1fr) auto; gap:12px; align-items:start; padding:12px 16px; border-top:1px solid var(--gray-200); }
+.notif-item:first-child { border-top:none; }
+.notif-item.is-unread { background:var(--blue-light); }
+.notif-item.is-unread::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--blue); }
+.notif-item:hover { background:var(--gray-100); }
+.notif-item.is-unread:hover { background:var(--blue-light); }
+.notif-icon { width:30px; height:30px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; flex-shrink:0; background:var(--gray-100); color:var(--gray-600); }
+.notif-icon svg { width:16px; height:16px; }
+.notif-icon.is-critical { background:var(--red-light); color:var(--red); }
+.notif-icon.is-warning { background:var(--orange-light); color:var(--orange); }
+.notif-icon.is-info { background:var(--blue-light); color:var(--blue); }
+.notif-main { min-width:0; width:100%; text-align:left; background:none; border:none; padding:0; font:inherit; color:inherit; cursor:pointer; display:flex; flex-direction:column; gap:2px; }
+.notif-main.is-static { cursor:default; }
+.notif-title { font-size:13.5px; font-weight:500; color:var(--gray-900); display:flex; align-items:center; gap:7px; min-width:0; }
+.notif-title-text { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+.notif-detail { font-size:12.5px; color:var(--gray-600); line-height:1.45; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+.notif-meta { font-size:11.5px; color:var(--gray-400); margin-top:2px; }
+.notif-dot { width:7px; height:7px; border-radius:50%; background:var(--blue); flex-shrink:0; }
+.notif-actions { display:flex; align-items:center; gap:4px; }
+.notif-mark { width:30px; height:30px; border:none; border-radius:var(--radius-sm); background:transparent; color:var(--gray-400); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
+.notif-mark:hover { background:var(--blue-light); color:var(--blue); }
+.notif-mark:disabled { opacity:.55; cursor:default; }
+.notif-mark svg { width:15px; height:15px; }
+.notif-main:focus-visible, .notif-mark:focus-visible { outline:2px solid var(--blue); outline-offset:-2px; border-radius:var(--radius-sm); }
+.notif-skel { padding:14px 16px; border-top:1px solid var(--gray-200); }
+.notif-skel:first-child { border-top:none; }
+.notif-skel-line { height:11px; border-radius:6px; background:var(--gray-100); margin-bottom:7px; }
+.notif-skel-line:last-child { margin-bottom:0; width:45%; }
+
+.digest-card { margin-bottom:16px; }
+.digest-head { display:flex; align-items:baseline; gap:8px; padding:14px 20px; border-bottom:1px solid var(--gray-200); }
+.digest-title { font-size:15px; margin:0; }
+.digest-asof { font-size:12px; color:var(--gray-400); margin-left:auto; }
+.digest-body { padding:14px 20px; }
+.digest-grid { display:flex; flex-wrap:wrap; gap:8px; }
+.digest-stat { background:var(--gray-100); border:1px solid var(--gray-200); border-radius:var(--radius-md); padding:9px 12px; min-width:118px; max-width:230px; flex:0 1 auto; }
+.digest-stat-value { font-family:'DM Mono',monospace; font-size:18px; color:var(--gray-900); font-variant-numeric:tabular-nums; line-height:1.15; }
+.digest-stat-label { font-size:11.5px; color:var(--gray-400); margin-top:2px; }
+.digest-note { font-size:13px; color:var(--gray-600); margin:0; display:flex; align-items:center; gap:8px; line-height:1.5; }
+.digest-note svg { width:16px; height:16px; flex-shrink:0; color:var(--gray-400); }
+.digest-foot { display:flex; align-items:center; gap:12px; padding:0 20px 14px; font-size:12px; color:var(--gray-400); flex-wrap:wrap; }
+.digest-foot .digest-link { margin-left:auto; }
+.digest-link { background:none; border:none; padding:0; font:inherit; color:var(--blue); cursor:pointer; font-size:12.5px; font-weight:500; }
+.digest-link:hover { text-decoration:underline; }
+.digest-skel { height:72px; margin:14px 20px; border-radius:var(--radius-md); background:var(--gray-100); }
+@media (max-width: 560px) {
+  .notif-item { grid-template-columns:26px minmax(0,1fr); }
+  .notif-actions { grid-column:2; }
+  .digest-asof { margin-left:0; }
+  .digest-foot .digest-link { margin-left:0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .notif-item, .notif-mark, .digest-stat { transition:none; }
+}
+
 /* ── Toast ── */
 .toast {
   position: fixed; bottom: 24px; right: 24px; background: var(--gray-900); color: #fff;
@@ -3835,6 +3904,73 @@ const T = {
     alertsSolved: 'Solved',
     alertsSolvedEmpty: 'No solved recurring issues yet.',
     alertsRecurringTitle: 'Recurring issues',
+
+    // ── Notification centre ──
+    // The feed carries a structured kind and params, never a server sentence.
+    // These are the only words the reader sees for an item.
+    notifNav: 'Inbox',
+    notifNavUnread: '{label}, {count} unread',
+    notifSubtitle: 'Everything that needs you now.',
+    notifNote: 'Read is not done — opening an item takes you to the page where it is handled.',
+    notifListTitle: 'Outstanding now',
+    notifFilterAll: 'All',
+    notifFilterUnread: 'Unread',
+    notifMarkAllRead: 'Mark all as read',
+    notifMarkRead: 'Mark as read',
+    notifMarkReadFor: 'Mark {title} as read',
+    notifUnreadSr: 'Unread.',
+    notifUnreadOf: '{count} unread',
+    notifReadAnnounce: 'Marked as read.',
+    notifAllReadAnnounce: 'All notifications marked as read.',
+    notifEmptyTitle: 'You are all caught up.',
+    notifEmptyBody: 'Nothing in your inbox right now.',
+    notifEmptyUnread: 'Nothing unread.',
+    notifShowAll: 'Show all',
+    notifLoading: 'Loading notifications…',
+    notifError: 'Could not load notifications.',
+    notifActionFailed: 'Could not update notifications. Try again.',
+    notifCapped: 'That is as many as one request returns.',
+    notifDigestTitle: 'Today',
+    notifDigestLogged: 'Issues logged',
+    notifDigestResolved: 'Issues resolved',
+    notifDigestFaults: 'Faults found',
+    notifDigestTvSwaps: 'TV swaps opened',
+    notifDigestOpen: 'Still open',
+    notifDigestDueToday: 'Checks due today',
+    notifDigestOverdue: 'Overdue checks',
+    notifDigestLowStock: 'Low stock',
+    notifDigestNoActivity: 'No activity today.',
+    notifDigestQuiet: 'A quiet day — nothing logged and nothing outstanding.',
+    notifDigestActivityElsewhere: 'Activity today — see Reports for the full picture.',
+    notifDigestUnavailable: 'The daily summary is not available.',
+    notifDigestSeeAll: 'See all notifications',
+    notifKindMaintDue: 'Maintenance due: {device_name}',
+    notifMaintDueToday: 'Due today',
+    notifMaintDueIn: 'Due in {days} days',
+    notifMaintDueInOne: 'Due in 1 day',
+    notifMaintDueOverdue: '{days} days overdue',
+    notifMaintDueOn: 'Due {date}',
+    notifKindMaintFault: 'Fault found: {device_name}',
+    notifMaintFaultChecked: 'Found on {date}',
+    notifKindRecurring: 'Recurring {issue_type} issue in {location}',
+    notifRecurringLastFix: 'Last fix: {solution}',
+    notifRecurringRepeat: 'Repeated at the same location',
+    notifKindTvSwap: 'Faulty equipment still in {from_room}',
+    notifTvSwapDetail: 'Working set moved to {to_room}',
+    notifKindLowStock: 'Low stock: {item_name}',
+    notifLowStockDetail: '{stock} left · reorder at {reorder_level}',
+    notifLowStockOverdrawn: '{count} over · reorder at {reorder_level}',
+    notifKindSla: 'SLA breached in {location}',
+    notifSlaDetail: '{issue_type} · {minutes_over} min over the {sla_minutes} min SLA',
+    notifKindUnknown: 'Update',
+    notifSeverityCritical: 'Urgent.',
+    notifSeverityWarning: 'Warning.',
+    notifTimeNow: 'just now',
+    notifTimeMinutes: '{count} min ago',
+    notifTimeHours: '{count} h ago',
+    notifTimeYesterday: 'yesterday',
+    notifTimeDaysOne: '1 day ago',
+    notifTimeDays: '{count} days ago',
   // ── Preventive maintenance ──
   maintenance: 'Maintenance',
   maintenanceSubtitle: 'Department printers and phones, looked at on a schedule. A check that finds nothing is recorded here and nowhere else — it does not become an issue.',
@@ -4773,6 +4909,71 @@ const T = {
     alertsSolved: 'Resolvidas',
     alertsSolvedEmpty: 'Ainda não há avarias recorrentes resolvidas.',
     alertsRecurringTitle: 'Avarias recorrentes',
+
+    // ── Caixa de entrada ──
+    notifNav: 'Caixa de entrada',
+    notifNavUnread: '{label}, {count} por ler',
+    notifSubtitle: 'Tudo o que precisa de si agora.',
+    notifNote: 'Lido não é resolvido — abrir um item leva-o à página onde é tratado.',
+    notifListTitle: 'Em aberto agora',
+    notifFilterAll: 'Todas',
+    notifFilterUnread: 'Por ler',
+    notifMarkAllRead: 'Marcar tudo como lido',
+    notifMarkRead: 'Marcar como lido',
+    notifMarkReadFor: 'Marcar {title} como lido',
+    notifUnreadSr: 'Por ler.',
+    notifUnreadOf: '{count} por ler',
+    notifReadAnnounce: 'Marcado como lido.',
+    notifAllReadAnnounce: 'Todas as notificações foram marcadas como lidas.',
+    notifEmptyTitle: 'Está tudo em dia.',
+    notifEmptyBody: 'Nada na sua caixa de entrada neste momento.',
+    notifEmptyUnread: 'Nada por ler.',
+    notifShowAll: 'Mostrar tudo',
+    notifLoading: 'A carregar notificações…',
+    notifError: 'Não foi possível carregar as notificações.',
+    notifActionFailed: 'Não foi possível atualizar as notificações. Tente de novo.',
+    notifCapped: 'É o máximo que um pedido devolve.',
+    notifDigestTitle: 'Hoje',
+    notifDigestLogged: 'Avarias registadas',
+    notifDigestResolved: 'Avarias resolvidas',
+    notifDigestFaults: 'Falhas encontradas',
+    notifDigestTvSwaps: 'Trocas de TV abertas',
+    notifDigestOpen: 'Ainda em aberto',
+    notifDigestDueToday: 'Verificações para hoje',
+    notifDigestOverdue: 'Verificações em atraso',
+    notifDigestLowStock: 'Stock baixo',
+    notifDigestNoActivity: 'Sem atividade hoje.',
+    notifDigestQuiet: 'Um dia calmo — nada registado e nada em aberto.',
+    notifDigestActivityElsewhere: 'Há atividade hoje — veja os Relatórios para o quadro completo.',
+    notifDigestUnavailable: 'O resumo diário não está disponível.',
+    notifDigestSeeAll: 'Ver todas as notificações',
+    notifKindMaintDue: 'Manutenção pendente: {device_name}',
+    notifMaintDueToday: 'Para hoje',
+    notifMaintDueIn: 'Para daqui a {days} dias',
+    notifMaintDueInOne: 'Para daqui a 1 dia',
+    notifMaintDueOverdue: '{days} dias em atraso',
+    notifMaintDueOn: 'Para {date}',
+    notifKindMaintFault: 'Falha encontrada: {device_name}',
+    notifMaintFaultChecked: 'Encontrada em {date}',
+    notifKindRecurring: 'Avaria recorrente de {issue_type} em {location}',
+    notifRecurringLastFix: 'Última solução: {solution}',
+    notifRecurringRepeat: 'Repetiu-se no mesmo local',
+    notifKindTvSwap: 'Equipamento avariado ainda em {from_room}',
+    notifTvSwapDetail: 'Equipamento bom levado para {to_room}',
+    notifKindLowStock: 'Stock baixo: {item_name}',
+    notifLowStockDetail: 'Restam {stock} · repor em {reorder_level}',
+    notifLowStockOverdrawn: '{count} em falta · repor em {reorder_level}',
+    notifKindSla: 'SLA excedido em {location}',
+    notifSlaDetail: '{issue_type} · {minutes_over} min acima do SLA de {sla_minutes} min',
+    notifKindUnknown: 'Atualização',
+    notifSeverityCritical: 'Urgente.',
+    notifSeverityWarning: 'Atenção.',
+    notifTimeNow: 'agora mesmo',
+    notifTimeMinutes: 'há {count} min',
+    notifTimeHours: 'há {count} h',
+    notifTimeYesterday: 'ontem',
+    notifTimeDaysOne: 'há 1 dia',
+    notifTimeDays: 'há {count} dias',
   // ── Manutenção preventiva ──
   maintenance: 'Manutenção',
   maintenanceSubtitle: 'Impressoras e telefones dos serviços, verificados com regularidade. Uma verificação que não encontra nada fica registada aqui e em mais lado nenhum — não vira avaria.',
@@ -5635,6 +5836,9 @@ const Ic = {
   upload: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 10V3M5 6l3-3 3 3"/><path d="M2 13h12"/></svg>,
   camera: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 5a1 1 0 011-1h1.5l1-2h5l1 2H13a1 1 0 011 1v7a1 1 0 01-1 1H2a1 1 0 01-1-1z"/><circle cx="8" cy="8.5" r="2.5"/></svg>,
   bell:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2a3 3 0 00-3 3v2c0 1-.5 2-1.3 2.7A.8.8 0 004 11h8a.8.8 0 00.3-1.3C11.5 9 11 8 11 7V5a3 3 0 00-3-3z"/><path d="M6.5 13a1.5 1.5 0 003 0"/></svg>,
+  // A tray, not a bell: Alerts already owns the bell, and the inbox is a
+  // personal unread state rather than a second queue of recurring issues.
+  inbox:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2.2 8.2h3.2l1 1.8h3.2l1-1.8h3.2"/><path d="M4.1 3h7.8l2 5.2v3.6a1.2 1.2 0 01-1.2 1.2H3.3a1.2 1.2 0 01-1.2-1.2V8.2z"/></svg>,
   // A set on a stand, for the TV swap strip. Kept small and legible at the
   // 11px the strips render at.
   tv:     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="8" rx="1.6"/><path d="M8 11.5v1.8M5.6 14.2h4.8"/></svg>,
@@ -8413,7 +8617,7 @@ function AttentionBand({ t, items, onGoToPage }) {
   );
 }
 
-function Dashboard({ users, stats, consumableItems, onGoToPage }) {
+function Dashboard({ users, stats, consumableItems, onGoToPage, digest, notifUnread, onRetryDigest }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
 
@@ -8519,6 +8723,13 @@ function Dashboard({ users, stats, consumableItems, onGoToPage }) {
           content where people are looking. */}
       <TodayBand t={t} lang={lang} rota={rota} onGoToPage={onGoToPage}/>
       <AttentionBand t={t} items={consumableItems} onGoToPage={onGoToPage}/>
+
+      {/* What happened today, after what is true now. The bands above are
+          perishable and answer "what needs somebody this minute"; this answers
+          "what has the day done so far" and links into the inbox, which is
+          where the outstanding items themselves live. */}
+      <NotificationDigest digest={digest} unreadCount={notifUnread} showLink
+        onOpenInbox={()=>onGoToPage('inbox')} onRetry={onRetryDigest} t={t}/>
 
       <div className="bottom-grid">
         <div className="mini-card">
@@ -9168,6 +9379,476 @@ function AlertsPage({ currentUser, token, onCountsUpdate, setToast }) {
 /* Renders a number of minutes the way the support page shows it: days first
    once a handover runs past a day, then hours and minutes. Returns null for a
    missing duration, so callers can show a dash rather than a misleading "0m". */
+/* ── Notification centre ──
+   The server sends a structured kind and parameters, never a sentence. These
+   helpers are the only place an item becomes words, which is what keeps both
+   languages honest and lets the API stay language-free. */
+
+const NOTIF_PAGE = {
+  maintenance_due:   'maintenance',
+  maintenance_fault: 'maintenance',
+  recurring_alert:   'alerts',
+  tv_swap_alert:     'alerts',
+  low_stock:         'consumables',
+  sla_breach:        'apt',
+};
+
+const NOTIF_ICON = {
+  maintenance_due:   'tool',
+  maintenance_fault: 'tool',
+  recurring_alert:   'bell',
+  tv_swap_alert:     'tv',
+  low_stock:         'box',
+  sla_breach:        'clock',
+};
+
+// The identity the read mark is written against. source_id alone is not enough:
+// the same item can be low against two different reorder levels.
+function notifReadKey(item) {
+  return item.kind + '|' + item.source_id + '|' + (item.variant || '');
+}
+
+function notifPage(item) {
+  if (item.kind === 'sla_breach') return item.data?.mode === 'dept' ? 'dept' : 'apt';
+  return NOTIF_PAGE[item.kind] || null;
+}
+
+function notifDate(value, lang) {
+  if (!value) return '';
+  const d = new Date(String(value).length === 10 ? value + 'T00:00:00' : value);
+  if (isNaN(d)) return '';
+  return d.toLocaleDateString(lang === 'pt' ? 'pt-PT' : 'en-GB', {day:'numeric', month:'short'});
+}
+
+function notifCopy(item, t, lang) {
+  const d = item.data || {};
+  switch (item.kind) {
+    case 'maintenance_due': {
+      const title = t.notifKindMaintDue.replace('{device_name}', d.device_name || '—');
+      const equip = d.equipment_type === 'phone' ? t.maintenancePhone : t.maintenancePrinter;
+      let due = '';
+      if (typeof d.days_until_due === 'number') {
+        if (d.days_until_due < 0) due = t.notifMaintDueOverdue.replace('{days}', Math.abs(d.days_until_due));
+        else if (d.days_until_due === 0) due = t.notifMaintDueToday;
+        else if (d.days_until_due === 1) due = t.notifMaintDueInOne;
+        else due = t.notifMaintDueIn.replace('{days}', d.days_until_due);
+      } else if (d.due_on) {
+        due = t.notifMaintDueOn.replace('{date}', notifDate(d.due_on, lang));
+      }
+      return {title, detail: [equip, due].filter(Boolean).join(' · ')};
+    }
+    case 'maintenance_fault': {
+      const title = t.notifKindMaintFault.replace('{device_name}', d.device_name || '—');
+      const detail = d.note ? d.note : (d.done_on ? t.notifMaintFaultChecked.replace('{date}', notifDate(d.done_on, lang)) : '');
+      return {title, detail};
+    }
+    case 'recurring_alert': {
+      const title = t.notifKindRecurring
+        .replace('{issue_type}', d.issue_type || '—')
+        .replace('{location}', d.location || '—');
+      const detail = d.solution ? t.notifRecurringLastFix.replace('{solution}', d.solution) : t.notifRecurringRepeat;
+      return {title, detail};
+    }
+    case 'tv_swap_alert': {
+      const title = t.notifKindTvSwap.replace('{from_room}', d.from_room || '—');
+      const detail = d.to_room ? t.notifTvSwapDetail.replace('{to_room}', d.to_room) : (d.notes || '');
+      return {title, detail};
+    }
+    case 'low_stock': {
+      const title = t.notifKindLowStock.replace('{item_name}', d.item_name || '—');
+      const detail = (typeof d.stock === 'number' && d.stock < 0)
+        ? t.notifLowStockOverdrawn
+            .replace('{count}', Math.abs(d.stock))
+            .replace('{reorder_level}', d.reorder_level ?? '—')
+        : t.notifLowStockDetail
+            .replace('{stock}', d.stock ?? '—')
+            .replace('{reorder_level}', d.reorder_level ?? '—');
+      return {title, detail};
+    }
+    case 'sla_breach': {
+      const title = t.notifKindSla.replace('{location}', d.location || '—');
+      const detail = t.notifSlaDetail
+        .replace('{issue_type}', d.issue_type || '—')
+        .replace('{minutes_over}', d.minutes_over ?? '—')
+        .replace('{sla_minutes}', d.sla_minutes ?? '—');
+      return {title, detail};
+    }
+    default:
+      return {title: t.notifKindUnknown, detail: ''};
+  }
+}
+
+function notifAgo(iso, t, lang, now) {
+  const d = new Date(iso);
+  if (isNaN(d)) return {text: '', absolute: ''};
+  const absolute = d.toLocaleString(lang === 'pt' ? 'pt-PT' : 'en-GB');
+  const diff = Math.max(0, now - d.getTime());
+  const mins = Math.floor(diff / 60000);
+  let text;
+  if (mins < 1) {
+    text = t.notifTimeNow;
+  } else if (mins < 60) {
+    text = t.notifTimeMinutes.replace('{count}', mins);
+  } else {
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) {
+      text = t.notifTimeHours.replace('{count}', hours);
+    } else {
+      const days = Math.floor(hours / 24);
+      if (days === 1) text = t.notifTimeYesterday;
+      else if (days < 7) text = t.notifTimeDays.replace('{count}', days);
+      else text = d.toLocaleDateString(lang === 'pt' ? 'pt-PT' : 'en-GB', {day:'numeric', month:'short'});
+    }
+  }
+  return {text, absolute};
+}
+
+// A minute tick for the relative times. Paused while the tab is hidden so a
+// background tab does not wake up to re-render a list nobody is looking at.
+function useNowTick(ms) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, ms);
+    return () => clearInterval(id);
+  }, [ms]);
+  return now;
+}
+
+function NotifIcon({ kind, severity }) {
+  const name = NOTIF_ICON[kind] || 'info';
+  return <span className={`notif-icon is-${severity || 'info'}`} aria-hidden="true">{Ic[name] || Ic.info}</span>;
+}
+
+function NotificationItem({ item, read, busy, now, t, lang, onOpen, onMarkRead }) {
+  const copy = notifCopy(item, t, lang);
+  const ago = notifAgo(item.occurred_at, t, lang, now);
+  const page = notifPage(item);
+  const severityLabel = item.severity === 'critical' ? t.notifSeverityCritical
+                      : item.severity === 'warning'  ? t.notifSeverityWarning : '';
+
+  const body = (
+    <>
+      <span className="notif-title">
+        {!read && <span className="notif-dot" aria-hidden="true"/>}
+        {severityLabel && <span className="sr-only">{severityLabel} </span>}
+        {!read && <span className="sr-only">{t.notifUnreadSr} </span>}
+        <span className="notif-title-text">{copy.title}</span>
+      </span>
+      {copy.detail && <span className="notif-detail">{copy.detail}</span>}
+      <span className="notif-meta">
+        <time dateTime={item.occurred_at} aria-hidden="true">{ago.text}</time>
+        <span className="sr-only">{ago.absolute}</span>
+      </span>
+    </>
+  );
+
+  return (
+    <li className={`notif-item ${read ? '' : 'is-unread'}`} data-key={notifReadKey(item)}>
+      <NotifIcon kind={item.kind} severity={item.severity}/>
+      {page ? (
+        <button type="button" className="notif-main" onClick={onOpen}>{body}</button>
+      ) : (
+        <div className="notif-main is-static">{body}</div>
+      )}
+      <div className="notif-actions">
+        {!read && (
+          <button type="button" className="notif-mark" disabled={busy} aria-busy={busy}
+            aria-label={t.notifMarkReadFor.replace('{title}', copy.title)}
+            onClick={onMarkRead}>
+            {busy ? '…' : Ic.check}
+          </button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function NotificationDigest({ digest, unreadCount, showLink, onOpenInbox, onRetry, t }) {
+  const lang = React.useContext(LangCtx);
+  if (digest === undefined) {
+    return (
+      <div className="mini-card digest-card" aria-busy="true">
+        <div className="digest-head"><h2 className="digest-title">{t.notifDigestTitle}</h2></div>
+        <div className="digest-skel"/>
+      </div>
+    );
+  }
+
+  if (digest === null) {
+    return (
+      <div className="mini-card digest-card">
+        <div className="digest-head"><h2 className="digest-title">{t.notifDigestTitle}</h2></div>
+        <div className="digest-body">
+          <p className="digest-note">
+            {Ic.info}<span>{t.notifDigestUnavailable}</span>
+            {onRetry && <button className="digest-link" onClick={onRetry}>{t.tryAgain}</button>}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const tiles = [
+    {value: digest.issues?.logged || 0,           label: t.notifDigestLogged},
+    {value: digest.issues?.resolved || 0,         label: t.notifDigestResolved},
+    {value: digest.maintenance?.faults_found || 0, label: t.notifDigestFaults},
+    {value: digest.tv_swaps?.opened || 0,         label: t.notifDigestTvSwaps},
+    {value: digest.issues?.open || 0,             label: t.notifDigestOpen},
+    {value: digest.maintenance?.due_today || 0,   label: t.notifDigestDueToday},
+    {value: digest.maintenance?.overdue || 0,     label: t.notifDigestOverdue},
+    {value: digest.stock?.low || 0,               label: t.notifDigestLowStock},
+  ];
+  const shown = tiles.filter(x => x.value > 0);
+
+  let body;
+  if (!digest.has_activity) {
+    if (shown.length) {
+      // Outstanding work is not activity, so it is named separately rather than
+      // dressed up as something that happened today.
+      body = (
+        <>
+          <p className="digest-note">{Ic.check}<span>{t.notifDigestNoActivity}</span></p>
+          <div className="digest-grid" style={{marginTop:10}}>
+            {shown.map(x => (
+              <div className="digest-stat" key={x.label}>
+                <div className="digest-stat-value">{x.value}</div>
+                <div className="digest-stat-label">{x.label}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      );
+    } else {
+      body = <p className="digest-note">{Ic.check}<span>{t.notifDigestQuiet}</span></p>;
+    }
+  } else if (shown.length) {
+    body = (
+      <div className="digest-grid">
+        {shown.map(x => (
+          <div className="digest-stat" key={x.label}>
+            <div className="digest-stat-value">{x.value}</div>
+            <div className="digest-stat-label">{x.label}</div>
+          </div>
+        ))}
+      </div>
+    );
+  } else {
+    body = <p className="digest-note">{Ic.info}<span>{t.notifDigestActivityElsewhere}</span></p>;
+  }
+
+  const asOf = digest.window?.to ? new Date(digest.window.to) : new Date();
+  const asOfText = isNaN(asOf) ? '' : asOf.toLocaleTimeString(lang === 'pt' ? 'pt-PT' : 'en-GB', {hour:'2-digit', minute:'2-digit'});
+
+  return (
+    <div className="mini-card digest-card">
+      <div className="digest-head">
+        <h2 className="digest-title">{t.notifDigestTitle}</h2>
+        {asOfText && <span className="digest-asof">{t.todayAsOf.replace('{time}', asOfText)}</span>}
+      </div>
+      <div className="digest-body">{body}</div>
+      {(unreadCount > 0 || showLink) && (
+        <div className="digest-foot">
+          {unreadCount > 0 && <span>{t.notifUnreadOf.replace('{count}', unreadCount)}</span>}
+          {showLink && <button className="digest-link" onClick={onOpenInbox}>{t.notifDigestSeeAll}</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotifLoadMore({ list, t }) {
+  if (!list.rows) return null;
+  const more = !!(list.res && list.res.has_more);
+  if (!more) return null;
+  if (list.capped) {
+    return <div className="loadmore"><span className="loadmore-note">{t.notifCapped}</span></div>;
+  }
+  return (
+    <div className="loadmore">
+      <button className="btn btn-ghost" style={{padding:'6px 14px',fontSize:12.5}}
+        onClick={list.loadMore} disabled={list.loading}>
+        {list.loading ? '…' : t.loadMore}
+      </button>
+    </div>
+  );
+}
+
+function NotificationsPage({ token, digest, unreadCount, onUnreadChange, onRetryDigest, setToast, onGoToPage }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const [filter, setFilter] = useState('all');
+  const [epoch, setEpoch] = useState(0);
+  const [readKeys, setReadKeys] = useState(() => new Set());
+  const [pendingKey, setPendingKey] = useState('');
+  const [markingAll, setMarkingAll] = useState(false);
+  const [live, setLive] = useState('');
+  const now = useNowTick(60000);
+  const lastGood = useRef([]);
+  const listRef = useRef(null);
+
+  const paged = usePagedList(limit => `/notifications?limit=${limit}${filter==='unread' ? '&unread=true' : ''}`,
+    token, {rowsKey:'notifications', filterKey: `${filter}|${epoch}`});
+
+  if (paged.rows) lastGood.current = paged.rows;
+  const data = paged.res;
+  // A failed load-more must not blank the rows already on screen, so the last
+  // good page is kept beside usePagedList's null.
+  const rows = paged.rows || lastGood.current;
+  const loadedOnce = paged.rows !== null;
+
+  useEffect(() => {
+    if (data && onUnreadChange && typeof data.unread_count === 'number') {
+      onUnreadChange(data.unread_count);
+    }
+  }, [data, onUnreadChange]);
+
+  const isRead = n => n.unread === false || readKeys.has(notifReadKey(n));
+  const visible = filter === 'unread' ? rows.filter(n => !isRead(n)) : rows;
+  // The prop, not the loaded page's count: marking one read leaves the feed
+  // response that produced the list stale, and a chip reading 13 beside a badge
+  // reading 12 is the sort of disagreement that makes people distrust both.
+  const liveUnread = typeof unreadCount === 'number' ? unreadCount : 0;
+
+  function refresh() { setEpoch(n => n + 1); }
+
+  async function markRead(item) {
+    const key = notifReadKey(item);
+    if (pendingKey === key || isRead(item)) return;
+    setReadKeys(prev => { const next = new Set(prev); next.add(key); return next; });
+    setPendingKey(key);
+    try {
+      const res = await apiFetch('/notifications/read', {
+        method: 'POST', token,
+        body: {kind: item.kind, source_id: item.source_id, variant: item.variant || ''},
+      });
+      if (onUnreadChange && typeof res.unread_count === 'number') onUnreadChange(res.unread_count);
+      setLive(t.notifReadAnnounce);
+    } catch (ex) {
+      setReadKeys(prev => { const next = new Set(prev); next.delete(key); return next; });
+      setToast(t.notifActionFailed);
+    } finally {
+      setPendingKey('');
+    }
+  }
+
+  async function markAll() {
+    if (!liveUnread || markingAll) return;
+    setMarkingAll(true);
+    try {
+      const res = await apiFetch('/notifications/read-all', {method:'POST', token});
+      if (onUnreadChange && typeof res.unread_count === 'number') onUnreadChange(res.unread_count);
+      setLive(t.notifAllReadAnnounce);
+      refresh();
+    } catch (ex) {
+      setToast(t.notifActionFailed);
+    } finally {
+      setMarkingAll(false);
+    }
+  }
+
+  function openItem(item) {
+    const page = notifPage(item);
+    if (!page) return;
+    markRead(item);
+    onGoToPage(page);
+  }
+
+  if (paged.error && !loadedOnce) {
+    return (
+      <div>
+        <div className="table-card notif-intro">
+          <p>{t.notifSubtitle}</p>
+          <p className="notif-note">{t.notifNote}</p>
+        </div>
+        <NotificationDigest digest={digest} unreadCount={unreadCount} onRetry={onRetryDigest} t={t}/>
+        <div style={{background:'var(--red-light)',color:'var(--red)',borderRadius:'var(--radius-md)',padding:'10px 16px',fontSize:13,display:'flex',alignItems:'center',gap:10}}>
+          <span style={{flex:1}}>{t.notifError}</span>
+          <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}} onClick={refresh}>{t.tryAgain}</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={listRef}>
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{live}</p>
+
+      <div className="table-card notif-intro">
+        <p>{t.notifSubtitle}</p>
+        <p className="notif-note">{t.notifNote}</p>
+      </div>
+
+      <NotificationDigest digest={digest} unreadCount={unreadCount} onRetry={onRetryDigest} t={t}/>
+
+      <div className="notif-toolbar">
+        <button className={`chip ${filter==='all'?'active':''}`} onClick={()=>setFilter('all')}>
+          {t.notifFilterAll}
+        </button>
+        <button className={`chip ${filter==='unread'?'active':''}`} onClick={()=>setFilter('unread')}>
+          {t.notifFilterUnread}{liveUnread > 0 ? ` (${liveUnread})` : ''}
+        </button>
+        <div className="notif-toolbar-right">
+          <button className="btn btn-ghost" style={{padding:'6px 14px',fontSize:12.5}}
+            disabled={!liveUnread || markingAll} onClick={markAll}>
+            {markingAll ? '…' : t.notifMarkAllRead}
+          </button>
+        </div>
+      </div>
+
+      {paged.error && loadedOnce && (
+        <div style={{background:'var(--red-light)',color:'var(--red)',borderRadius:'var(--radius-md)',padding:'10px 16px',fontSize:13,marginBottom:12,display:'flex',alignItems:'center',gap:10}}>
+          <span style={{flex:1}}>{t.notifError}</span>
+          <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}} onClick={refresh}>{t.tryAgain}</button>
+        </div>
+      )}
+
+      <div className="table-card notif-card">
+        <div className="notif-list-head">{t.notifListTitle}</div>
+        {!loadedOnce ? (
+          <div aria-busy="true">
+            <span className="sr-only">{t.notifLoading}</span>
+            {[0,1,2,3].map(i => (
+              <div className="notif-skel" key={i} aria-hidden="true">
+                <div className="notif-skel-line" style={{width:'42%'}}/>
+                <div className="notif-skel-line" style={{width:'68%'}}/>
+              </div>
+            ))}
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="empty-state">
+            {Ic.inbox}
+            <p>{filter==='unread' ? t.notifEmptyUnread : t.notifEmptyBody}</p>
+            {filter==='unread'
+              ? <button className="btn btn-ghost" style={{padding:'6px 14px',fontSize:12.5}} onClick={()=>setFilter('all')}>{t.notifShowAll}</button>
+              : <span style={{fontSize:12}}>{t.notifEmptyTitle}</span>}
+          </div>
+        ) : (
+          <ul className="notif-list">
+            {visible.map(item => {
+              const key = notifReadKey(item);
+              return (
+                <NotificationItem
+                  key={key}
+                  item={item}
+                  read={isRead(item)}
+                  busy={pendingKey === key}
+                  now={now}
+                  t={t}
+                  lang={lang}
+                  onOpen={() => openItem(item)}
+                  onMarkRead={() => markRead(item)}
+                />
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <NotifLoadMore list={paged} t={t}/>
+    </div>
+  );
+}
+
 function formatSupportDuration(minutes) {
   if (minutes == null) return null;
   const total = Math.round(minutes);
@@ -17550,6 +18231,12 @@ function App() {
   // over the whole active set rather than taken from whatever the Maintenance page
   // last loaded, so the badge and the page can never disagree.
   const [maintenanceDueCount, setMaintenanceDueCount] = useState(0);
+  // The inbox's own numbers. `unread` is the sidebar badge and comes back on
+  // every feed and digest answer, so the two can never disagree. `digest` is
+  // undefined while it has never loaded, null when the request failed, and the
+  // object once it has -- three states the card has to tell apart.
+  const [notifUnread, setNotifUnread] = useState(0);
+  const [notifDigest, setNotifDigest] = useState(undefined);
   // Set while the Maintenance page wants an issue opened on its behalf: the
   // prefill to apply, and what to do once the issue exists. The modal itself stays
   // rendered here, where every other one is.
@@ -17598,6 +18285,29 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
   const t     = T[lang];
   const token = session?.token;
   const me    = session?.user;
+
+  /* The digest is also the badge's source: it carries unread_count, so one
+     request keeps the sidebar and the card on the same answer. A failure is
+     confined to the card (set to null, which renders a retry) and leaves the
+     rest of the app alone. */
+  function refreshNotifSummary() {
+    if (!token) return;
+    apiFetch('/notifications/digest', {token})
+      .then(res => {
+        const d = res.digest || null;
+        setNotifDigest(d);
+        if (d && typeof d.unread_count === 'number') setNotifUnread(d.unread_count);
+      })
+      .catch(() => setNotifDigest(null));
+  }
+
+  /* Asked for on arrival at the two surfaces that show it, never on a timer.
+     The inbox feed already reports the count after every mark, and a poll would
+     keep asking for a number nobody is looking at. */
+  useEffect(() => {
+    if (!token) return;
+    if (page === 'dashboard' || page === 'inbox') refreshNotifSummary();
+  }, [page, token]);
 
   useEffect(()=>{
     if ((page === 'settings' || page === 'system') && me?.role !== 'manager') setPage('dashboard');
@@ -17735,7 +18445,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     setSession(null);
     setIdleWarning(false);
     setSignedOutIdle(reason === 'idle');
-    setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlertsPendingCount(0); setUserIssueStats([]); setMaintenanceDueCount(0); setMaintIssue(null);
+    setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlertsPendingCount(0); setUserIssueStats([]); setMaintenanceDueCount(0); setMaintIssue(null); setNotifUnread(0); setNotifDigest(undefined);
   }
 
   useIdleSignOut(!!session, {
@@ -17932,6 +18642,10 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
 
   const nav = [
     {id:'dashboard', label:t.dashboard,  icon:Ic.grid },
+    // The inbox is a personal read state over everything below it, not a third
+    // queue of recurring issues, so it sits with the dashboard rather than
+    // beside Alerts -- and it carries a tray, not a second bell.
+    {id:'inbox',     label:t.notifNav,   icon:Ic.inbox},
     {id:'apt',       label:t.aptIssues,  icon:Ic.list },
     {id:'dept',      label:t.deptIssues, icon:Ic.edit },
     {id:'history',   label:t.history,    icon:Ic.clock},
@@ -18002,12 +18716,18 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
                 )}
               </div>
             ) : (
-              <button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>setPage(n.id)}>
+              <button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>setPage(n.id)}
+                aria-label={n.id === 'inbox' && notifUnread > 0
+                  ? t.notifNavUnread.replace('{label}', n.label).replace('{count}', notifUnread)
+                  : undefined}>
                 {(() => {
                   // Alerts counts outstanding recurring issues; Maintenance counts
                   // devices due or overdue. Different questions, so each nav entry
-                  // asks for its own rather than sharing one number.
-                  const badge = n.id === 'alerts' ? alertsPendingCount
+                  // asks for its own rather than sharing one number. The inbox
+                  // counts what this person has not read, which is the only one of
+                  // the three that changes by looking at it.
+                  const badge = n.id === 'inbox' ? notifUnread
+                              : n.id === 'alerts' ? alertsPendingCount
                               : n.id === 'maintenance' ? maintenanceDueCount : 0;
                   return badge > 0 ? (
                     <span className="nav-icon-wrap">
@@ -18073,7 +18793,11 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             <PageErrorBoundary resetKey={page}>
             <PageShell page={page}>
             {page==='dashboard' && <Dashboard users={users} stats={stats}
-        consumableItems={consumableItems} onGoToPage={setPage}/>}
+        consumableItems={consumableItems} onGoToPage={setPage}
+        digest={notifDigest} notifUnread={notifUnread} onRetryDigest={refreshNotifSummary}/>}
+            {page==='inbox' && <NotificationsPage token={token} digest={notifDigest}
+              unreadCount={notifUnread} onUnreadChange={setNotifUnread}
+              onRetryDigest={refreshNotifSummary} setToast={setToast} onGoToPage={setPage}/>}
             {/* The issue tables fetch and paginate themselves. App used to hold
                 every issue ever logged and hand the same array to all three of
                 these pages at once, which meant the History page needed the whole

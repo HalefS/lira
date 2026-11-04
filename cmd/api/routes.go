@@ -109,6 +109,20 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPatch, "/v1/tv-swap-alerts/:id/solve", app.requireAuth(app.requireManager(app.solveTVSwapAlertHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/tv-swap-alerts/:id", app.requireAuth(app.requireManager(app.deleteTVSwapAlertHandler)))
 
+	// Notification centre. Everything in the feed is derived at read time from
+	// the domain tables; the only stored state is the caller's read marks. The
+	// path is static, so it cannot collide with the /v1/alerts/:id wildcards
+	// above. The two POSTs act on the caller's own read state, not on a
+	// notification row: there is no notification row to PATCH.
+	//
+	// /digest is a static child of /notifications -- no wildcard sits at that
+	// position, so httprouter registers both without the panic that
+	// /v1/schedule/roster caused.
+	router.HandlerFunc(http.MethodGet, "/v1/notifications", app.requireAuth(app.listNotificationsHandler))
+	router.HandlerFunc(http.MethodGet, "/v1/notifications/digest", app.requireAuth(app.listNotificationDigestHandler))
+	router.HandlerFunc(http.MethodPost, "/v1/notifications/read", app.requireAuth(app.markNotificationReadHandler))
+	router.HandlerFunc(http.MethodPost, "/v1/notifications/read-all", app.requireAuth(app.markAllNotificationsReadHandler))
+
 	// Analytics — week/month comparisons, for the Analytics page
 	router.HandlerFunc(http.MethodGet, "/v1/analytics", app.requireAuth(app.getAnalyticsHandler))
 

@@ -44,10 +44,14 @@ type Models struct {
 	TVSwaps          TVSwapModel
 	TVSwapAlerts     TVSwapAlertModel
 	IssueAttachments IssueAttachmentModel
-	LCU              LCUModel
-	Maintenance      MaintenanceModel
-	Shifts           ShiftModel
-	Schedule         ScheduleModel
+	// Notifications has no notification table. It derives the feed from the
+	// domain models above and stores only each user's read marks; see
+	// internal/data/notifications.go.
+	Notifications NotificationModel
+	LCU           LCUModel
+	Maintenance   MaintenanceModel
+	Shifts        ShiftModel
+	Schedule      ScheduleModel
 	// Absences are a separate model from Schedule, not a method on it: the
 	// rota is a recurring pattern with no dates in it, and a model holding both
 	// eventually grows a method that needs a week argument it has no other use
@@ -83,6 +87,7 @@ func NewModels(db *sql.DB) Models {
 		TVSwaps:          TVSwapModel{DB: db},
 		TVSwapAlerts:     TVSwapAlertModel{DB: db},
 		IssueAttachments: IssueAttachmentModel{DB: db},
+		Notifications:    NotificationModel{DB: db},
 		LCU:              LCUModel{DB: db},
 		Maintenance:      MaintenanceModel{DB: db},
 		Shifts:           ShiftModel{DB: db},
