@@ -3,6 +3,18 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!-- Installable on a phone. The manifest supplies the name, colours and icons;
+     the apple-touch-icon covers iOS, which ignores most of the manifest. The
+     theme colour is kept in step with the in-app theme setting further down
+     rather than left to prefers-color-scheme, because this app's theme is a
+     stored setting, not a system preference. -->
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#1769AA" id="theme-color-meta" />
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="LIRA" />
 <title>LIRA — Llana IT Reporting & Alerts</title>
 <!-- Fonts are served from this binary, in the woff2 files Google itself hands
      out for this exact request, with the unicode-ranges it sends. Served from
@@ -288,7 +300,18 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
 .page-banner svg { width: 15px; height: 15px; flex-shrink: 0; }
 .page-banner-error   { background: var(--red-light);    color: var(--red); }
 .page-banner-warning { background: var(--orange-light); color: var(--orange); border: 1px solid var(--orange); }
+/* The update banner is an offer, not a failure, so it uses the app's own blue
+   rather than the error or warning palettes. */
+.page-banner-info    { background: var(--blue-light);   color: var(--blue); border: 1px solid var(--blue-mid); }
 .page-banner-dismiss { margin-left: auto; background: none; border: none; cursor: pointer; color: inherit; }
+/* A banner action sits at the end of the row, opposite the message. Kept out of
+   .btn so it can inherit the banner's colour and stay one line high. */
+.page-banner-action {
+  margin-left: auto; background: none; border: 1px solid currentColor; cursor: pointer;
+  color: inherit; font: inherit; font-weight: 500; padding: 4px 10px; border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.page-banner-action:hover { background: rgba(23,105,170,0.08); }
 
 /* ── Sidebar ── */
 .sidebar-logo {
@@ -3829,6 +3852,11 @@ const T = {
     // banner that preceded it, or of the app at all.
     idleWarning: 'No activity for 25 minutes. You will be signed out in 5 minutes unless you keep using LIRA.',
     signedOutIdle: 'You were signed out after 30 minutes without activity. Sign in again to carry on.',
+  // PWA banners. The offline copy names what survives rather than only what is
+  // lost: the cached shell, the last reads, and a queue that will drain.
+  offlineBanner: 'You are offline. The last data loaded is still here, and new issues will be sent when the connection returns.',
+  updateReady: 'A new version of LIRA is ready.',
+  updateNow: 'Update now',
     deptIssueBtn: 'Dept. issue',
     aptIssueBtn: 'Apt. issue',
     totalToday: 'Total issues today',
@@ -4869,6 +4897,9 @@ const T = {
     navProfile: 'Perfil',
     idleWarning: 'Sem atividade há 25 minutos. A sessão será terminada dentro de 5 minutos, a não ser que continue a usar o LIRA.',
     signedOutIdle: 'A sua sessão foi terminada após 30 minutos sem atividade. Inicie sessão novamente para continuar.',
+    offlineBanner: 'Está offline. Os últimos dados carregados continuam aqui e as novas avarias serão enviadas quando a ligação voltar.',
+    updateReady: 'Está disponível uma nova versão do LIRA.',
+    updateNow: 'Atualizar agora',
     deptIssueBtn: 'Avaria Dept.',
     aptIssueBtn: 'Avaria Apt.',
     totalToday: 'Total de avarias hoje',
@@ -18223,6 +18254,14 @@ function App() {
   // explanation for why they are back at it.
   const [idleWarning, setIdleWarning]     = useState(false);
   const [signedOutIdle, setSignedOutIdle] = useState(false);
+  // PWA state. `offline` is the browser's own online flag, not a failed request:
+  // a request can fail for reasons a retry fixes, while offline changes what the
+  // app should say before anything is attempted. `updateReady` is a new build
+  // installed and waiting to take over.
+  const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && navigator.onLine === false);
+  const [updateReady, setUpdateReady] = useState(false);
+  const swWaitingRef = useRef(null);
+  const swAcceptedRef = useRef(false);
   const [users,   setUsers]   = useState([]);
   // Counts only, straight from the alerts endpoint. The alert lists are the
   // Alerts page's business and are fetched there, a pageful at a time.
@@ -18330,8 +18369,77 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     // them in the app's own palette rather than the system one. Without this,
     // a dark-mode select opens as a white list with light text on it.
     document.documentElement.style.colorScheme = theme === 'dark' ? 'dark' : 'light';
+    // The phone's status bar is painted by the OS from this tag. It has to
+    // follow the app's stored theme, which no media query can see.
+    const themeMeta = document.getElementById('theme-color-meta');
+    if (themeMeta) themeMeta.setAttribute('content', theme === 'dark' ? '#12151A' : '#1769AA');
   }, [theme]);
   useEffect(()=>{ saveLS('lira_session', session); }, [session]);
+
+  // Service worker registration. This is what makes the shell open with no
+  // network; it is deliberately best-effort, because an unsupported browser or
+  // a failed install should leave the online app exactly as it was.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    let cancelled = false;
+
+    const onControllerChange = () => {
+      // Reload only after the user accepted the update. The first install also
+      // fires this when the worker claims the page, and reloading then would be
+      // a visible flash that accomplished nothing.
+      if (swAcceptedRef.current) window.location.reload();
+    };
+
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      if (cancelled) return;
+      if (reg.waiting) {
+        swWaitingRef.current = reg.waiting;
+        setUpdateReady(true);
+      }
+      reg.addEventListener('updatefound', () => {
+        const installing = reg.installing;
+        if (!installing) return;
+        installing.addEventListener('statechange', () => {
+          // `controller` is the test for "an older page is running". Without it
+          // this is a first install, not an update, and there is nothing to
+          // replace.
+          if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+            swWaitingRef.current = reg.waiting;
+            setUpdateReady(true);
+          }
+        });
+      });
+    }).catch(() => {
+      // No worker, no offline shell. The app still works online.
+    });
+
+    return () => {
+      cancelled = true;
+      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+    };
+  }, []);
+
+  // The browser's connection state drives the banner. `online` is only a hint --
+  // a connected wifi network with no route to the server still reports online --
+  // but the opposite case is reliable and is the one worth warning about.
+  useEffect(() => {
+    const up   = () => setOffline(false);
+    const down = () => setOffline(true);
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    return () => {
+      window.removeEventListener('online', up);
+      window.removeEventListener('offline', down);
+    };
+  }, []);
+
+  function applyUpdate() {
+    swAcceptedRef.current = true;
+    const waiting = swWaitingRef.current;
+    if (waiting) waiting.postMessage({type:'SKIP_WAITING'});
+    else window.location.reload();
+  }
 
   // Load all data when logged in.
   //
@@ -18772,6 +18880,25 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             <div className="page-banner page-banner-error">
               {Ic.info} <span>{apiErr}</span>
               <button className="page-banner-dismiss" onClick={()=>setApiErr('')}>{Ic.x}</button>
+            </div>
+          )}
+
+          {/* Offline says what still works, not just that something is wrong:
+              the shell is cached, reads fall back to the last copy on the
+              device, and new issues queue until the connection returns. */}
+          {offline && (
+            <div className="page-banner page-banner-warning" role="status">
+              {Ic.info} <span>{t.offlineBanner}</span>
+            </div>
+          )}
+
+          {/* A new build is ready but has not taken over. Swapping it in
+              silently would reload a form someone is halfway through, so the
+              banner offers the moment instead. */}
+          {updateReady && (
+            <div className="page-banner page-banner-info" role="status">
+              {Ic.info} <span>{t.updateReady}</span>
+              <button className="page-banner-action" onClick={applyUpdate}>{t.updateNow}</button>
             </div>
           )}
 

@@ -35,6 +35,14 @@ func (app *application) routes() http.Handler {
 	// paths, so they have to be registered explicitly or the catch-all
 	// redirects them to /dashboard and hands HTML back to a <script> tag.
 	router.HandlerFunc(http.MethodGet, "/vendor/:file", app.vendorHandler)
+	// Progressive web app plumbing. /sw.js has to sit at the root: a worker's
+	// scope is derived from its script URL, and one served from /assets/ could
+	// only control /assets/. The icons are served separately from /vendor
+	// because they are not versioned by filename in the same way and have their
+	// own immutable policy.
+	router.HandlerFunc(http.MethodGet, "/manifest.webmanifest", app.manifestHandler)
+	router.HandlerFunc(http.MethodGet, "/sw.js", app.serviceWorkerHandler)
+	router.HandlerFunc(http.MethodGet, "/icons/:file", app.iconHandler)
 
 	// Health
 	router.HandlerFunc(http.MethodGet, "/v1/healthcheck", app.healthcheckHandler)
