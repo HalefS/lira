@@ -44,6 +44,10 @@ type IssueAttachment struct {
 
 	// Hex SHA-256 of the stored bytes, used as the ETag.
 	SHA256 string `json:"sha256"`
+
+	// ClientUUID is the offline outbox's idempotency key. Never returned; it
+	// belongs to the queue that uploaded the photo.
+	ClientUUID string `json:"-"`
 }
 
 // IssueAttachmentBlob is the one type that carries image bytes. It has no JSON
@@ -100,16 +104,45 @@ func (m IssueAttachmentModel) Insert(att *IssueAttachment, data []byte) error {
 
 	err = tx.QueryRow(`
 		INSERT INTO issue_attachments
-			(issue_id, created_by, mime_type, byte_size, width, height, sha256, data)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			(issue_id, created_by, mime_type, byte_size, width, height, sha256, data, client_uuid)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, '')::uuid)
 		RETURNING id, created_at`,
-		att.IssueID, att.CreatedBy, att.MimeType, len(data), att.Width, att.Height, att.SHA256, data,
+		att.IssueID, att.CreatedBy, att.MimeType, len(data), att.Width, att.Height, att.SHA256, data, att.ClientUUID,
 	).Scan(&att.ID, &att.CreatedAt)
 	if err != nil {
 		return err
 	}
 	att.ByteSize = len(data)
 	return tx.Commit()
+}
+
+// GetByClientUUID finds the photo a retried upload already stored. The lookup is
+// scoped by issue as well as key: the unique index is per issue, and a photo
+// retried against a different issue is not this row.
+func (m IssueAttachmentModel) GetByClientUUID(issueID int64, clientUUID string) (*IssueAttachment, error) {
+	query := `SELECT ` + issueAttachmentColumns + `
+		FROM issue_attachments a
+		LEFT JOIN users u ON u.id = a.created_by
+		WHERE a.issue_id = $1 AND a.client_uuid = $2`
+
+	var a IssueAttachment
+	var createdBy sql.NullInt64
+	err := m.DB.QueryRow(query, issueID, clientUUID).Scan(
+		&a.ID, &a.IssueID, &a.CreatedAt, &createdBy,
+		&a.CreatedByName, &a.MimeType, &a.ByteSize,
+		&a.Width, &a.Height, &a.SHA256,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrRecordNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if createdBy.Valid {
+		id := createdBy.Int64
+		a.CreatedBy = &id
+	}
+	return &a, nil
 }
 
 // GetBlob reads one photo's bytes, scoped by both ids so a guessed attachment

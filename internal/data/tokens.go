@@ -17,6 +17,12 @@ type Token struct {
 	UserID    int64     `json:"-"`
 	Expiry    time.Time `json:"expiry"`
 	Scope     string    `json:"-"`
+	// Device identifies the browser or installed app this token belongs to.
+	// Empty on tokens issued before devices existed, and on flows (registration,
+	// password reset) where there is no client to ask.
+	DeviceID   string    `json:"-"`
+	DeviceName string    `json:"-"`
+	CreatedAt  time.Time `json:"-"`
 }
 
 // hashToken is the one place a token string becomes the bytes stored in the
@@ -27,11 +33,13 @@ func hashToken(plaintext string) []byte {
 	return hash[:]
 }
 
-func generateToken(userID int64, ttl time.Duration, scope string) (*Token, error) {
+func generateToken(userID int64, ttl time.Duration, scope, deviceID, deviceName string) (*Token, error) {
 	token := &Token{
-		UserID: userID,
-		Expiry: time.Now().Add(ttl),
-		Scope:  scope,
+		UserID:     userID,
+		Expiry:     time.Now().Add(ttl),
+		Scope:      scope,
+		DeviceID:   deviceID,
+		DeviceName: deviceName,
 	}
 
 	randomBytes := make([]byte, 16)
@@ -50,7 +58,14 @@ type TokenModel struct {
 }
 
 func (m TokenModel) New(userID int64, ttl time.Duration, scope string) (*Token, error) {
-	token, err := generateToken(userID, ttl, scope)
+	return m.NewForDevice(userID, ttl, scope, "", "")
+}
+
+// NewForDevice issues a token bound to one browser or installed app. The device
+// fields are descriptive and used for revocation; they are not a security
+// boundary on their own.
+func (m TokenModel) NewForDevice(userID int64, ttl time.Duration, scope, deviceID, deviceName string) (*Token, error) {
+	token, err := generateToken(userID, ttl, scope, deviceID, deviceName)
 	if err != nil {
 		return nil, err
 	}
@@ -59,15 +74,28 @@ func (m TokenModel) New(userID int64, ttl time.Duration, scope string) (*Token, 
 
 func (m TokenModel) Insert(token *Token) error {
 	query := `
-		INSERT INTO tokens (hash, user_id, expiry, scope)
-		VALUES ($1, $2, $3, $4)`
+		INSERT INTO tokens (hash, user_id, expiry, scope, device_id, device_name)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING created_at`
 
-	args := []any{token.Hash, token.UserID, token.Expiry, token.Scope}
+	args := []any{token.Hash, token.UserID, token.Expiry, token.Scope, token.DeviceID, token.DeviceName}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	_, err := m.DB.ExecContext(ctx, query, args...)
+	return m.DB.QueryRowContext(ctx, query, args...).Scan(&token.CreatedAt)
+}
+
+// DeleteForDevice revokes the previous session on one device, leaving the same
+// account signed in everywhere else. Called on login when the client supplied a
+// device_id; without one, callers fall back to DeleteAllForUser.
+func (m TokenModel) DeleteForDevice(scope string, userID int64, deviceID string) error {
+	query := `DELETE FROM tokens WHERE scope = $1 AND user_id = $2 AND device_id = $3`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	_, err := m.DB.ExecContext(ctx, query, scope, userID, deviceID)
 	return err
 }
 

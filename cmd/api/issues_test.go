@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // A clock time has to be able to say three different things -- "leave it alone",
 // "there is no time" and "here is the time" -- and the first two look identical
@@ -102,4 +105,35 @@ func deref(s *string) string {
 		return "<nil>"
 	}
 	return *s
+}
+
+// An offline queue is only as good as the timestamp it carries. The window is
+// deliberately generous in both directions: clocks drift, but a phone set to
+// 2019 must not rewrite the report the issue appears in.
+func TestClientCreatedAt(t *testing.T) {
+	now := time.Date(2026, time.November, 5, 15, 0, 0, 0, time.UTC)
+	within := now.Add(-2 * time.Hour).Format(time.RFC3339)
+
+	got, valid, ignored := clientCreatedAt(within, now)
+	if !valid || ignored {
+		t.Fatalf("a recent timestamp should be accepted as-is, got valid=%v ignored=%v", valid, ignored)
+	}
+	if !got.Equal(now.Add(-2 * time.Hour)) {
+		t.Errorf("got %v, want the parsed time", got)
+	}
+
+	if _, valid, _ := clientCreatedAt("not a timestamp", now); valid {
+		t.Error("a non-RFC3339 value must be reported invalid")
+	}
+
+	if _, _, ignored := clientCreatedAt("2019-01-01T09:00:00Z", now); !ignored {
+		t.Error("a timestamp from 2019 must be ignored, not stored")
+	}
+	if _, _, ignored := clientCreatedAt(now.Add(48*time.Hour).Format(time.RFC3339), now); !ignored {
+		t.Error("a timestamp from next week must be ignored, not stored")
+	}
+
+	if _, valid, ignored := clientCreatedAt("   ", now); !valid || ignored {
+		t.Error("blank is absent, not invalid and not ignored")
+	}
 }

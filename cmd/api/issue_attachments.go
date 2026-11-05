@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"strings"
 
 	"github.com/HalefS/lira/internal/data"
 	"github.com/HalefS/lira/internal/photo"
@@ -64,6 +65,27 @@ func (app *application) createIssueAttachmentHandler(w http.ResponseWriter, r *h
 		return
 	}
 
+	// The outbox key travels as a query parameter rather than a multipart field
+	// because multipart parts arrive in order: a client_uuid part written after
+	// the photo would not have been read yet when the bytes are already being
+	// decoded. A query parameter is always available before the body is touched.
+	clientUUID := strings.TrimSpace(r.URL.Query().Get("client_uuid"))
+	if clientUUID != "" && !data.ValidClientUUID(clientUUID) {
+		app.failedValidationResponse(w, r, map[string]string{"client_uuid": "must be a UUID"})
+		return
+	}
+	if clientUUID != "" {
+		existing, err := app.models.IssueAttachments.GetByClientUUID(issueID, clientUUID)
+		switch {
+		case err == nil:
+			app.writeJSON(w, http.StatusOK, envelope{"attachment": existing, "duplicate": true}, nil)
+			return
+		case !errors.Is(err, data.ErrRecordNotFound):
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
 	// The cap is applied before the multipart reader sees a byte, so an
 	// oversized body is refused while it is being read rather than after it is
 	// in memory.
@@ -89,9 +111,19 @@ func (app *application) createIssueAttachmentHandler(w http.ResponseWriter, r *h
 		Width:         res.Width,
 		Height:        res.Height,
 		SHA256:        hex.EncodeToString(res.SHA256[:]),
+		ClientUUID:    clientUUID,
 	}
 
 	if err := app.models.IssueAttachments.Insert(att, res.Data); err != nil {
+		// Two retries can race past the lookup above; the unique index lets one
+		// win. The loser returns the row the winner wrote instead of a 500.
+		var pqErr *pq.Error
+		if clientUUID != "" && errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			if existing, getErr := app.models.IssueAttachments.GetByClientUUID(issueID, clientUUID); getErr == nil {
+				app.writeJSON(w, http.StatusOK, envelope{"attachment": existing, "duplicate": true}, nil)
+				return
+			}
+		}
 		app.uploadErrorResponse(w, r, err)
 		return
 	}

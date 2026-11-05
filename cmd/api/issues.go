@@ -119,6 +119,29 @@ func (app *application) checkDuplicateIssuesHandler(w http.ResponseWriter, r *ht
 	}, nil)
 }
 
+// clientCreatedAt validates an optional timestamp from an offline client.
+//
+// The first return is the time to store. valid is false when the string is not
+// RFC3339 at all. ignored is true when it parsed but is outside the window the
+// server is willing to believe -- a phone clock set to 2019, or a timestamp from
+// next week. An ignored value is not an error: the server clock is used and the
+// response says so, because refusing would leave a queued issue stuck on a phone
+// whose clock is simply wrong.
+func clientCreatedAt(raw string, now time.Time) (t time.Time, valid, ignored bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, true, false
+	}
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return time.Time{}, false, false
+	}
+	if parsed.Before(now.Add(-90*24*time.Hour)) || parsed.After(now.Add(5*time.Minute)) {
+		return time.Time{}, true, true
+	}
+	return parsed, true, false
+}
+
 func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Mode             string  `json:"mode"`
@@ -142,6 +165,12 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		// TVs moved between rooms while fixing the issue. Same nil-means-
 		// leave-as-is rule.
 		TVSwaps *[]data.TVSwapUse `json:"tv_swaps"`
+		// The offline outbox's idempotency key. Empty for the online form,
+		// which has no retry queue and therefore nothing to deduplicate.
+		ClientUUID string `json:"client_uuid"`
+		// When the work happened, as the phone saw it. Optional; the server
+		// clock wins when this is absent or implausible.
+		CreatedAt *string `json:"created_at"`
 	}
 
 	if err := app.readJSON(w, r, &input); err != nil {
@@ -165,6 +194,7 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		Status:           input.Status,
 		FalsePositive:    input.FalsePositive,
 		LoggedBy:         user.ID,
+		ClientUUID:       strings.TrimSpace(input.ClientUUID),
 	}
 
 	if issue.Status == "" {
@@ -178,6 +208,28 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	v := validator.New()
+	if issue.ClientUUID != "" && !data.ValidClientUUID(issue.ClientUUID) {
+		v.AddError("client_uuid", "must be a UUID")
+	}
+
+	// A phone with a wrong clock must not be able to file work in 2019 and move
+	// every report it appears in, so the value is bounded rather than trusted.
+	// Outside the window the server clock wins and the caller is told the value
+	// was ignored, which is recoverable; a hard refusal here would strand a
+	// queued issue on a phone whose clock is simply set wrong.
+	clientTimeIgnored := false
+	if input.CreatedAt != nil {
+		t, valid, ignored := clientCreatedAt(*input.CreatedAt, time.Now())
+		switch {
+		case !valid:
+			v.AddError("created_at", "must be an RFC3339 timestamp")
+		case ignored:
+			clientTimeIgnored = true
+		default:
+			issue.CreatedAt = t
+		}
+	}
+
 	if errors.Is(err, data.ErrRecordNotFound) {
 		v.AddError("type", "must be a valid issue type")
 	} else {
@@ -301,27 +353,30 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := app.models.Issues.Insert(issue); err != nil {
+	duplicate, err := app.models.Issues.Insert(issue)
+	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	if input.Consumables != nil {
-		if err := app.models.Consumables.SetForIssue(issue.ID, *input.Consumables, user.ID); err != nil {
-			app.serverErrorResponse(w, r, err)
-			return
+	if !duplicate {
+		if input.Consumables != nil {
+			if err := app.models.Consumables.SetForIssue(issue.ID, *input.Consumables, user.ID); err != nil {
+				app.serverErrorResponse(w, r, err)
+				return
+			}
 		}
-	}
 
-	if input.TVSwaps != nil {
-		if err := app.setIssueTVSwaps(w, r, issue.ID, *input.TVSwaps, user.ID); err != nil {
-			return
+		if input.TVSwaps != nil {
+			if err := app.setIssueTVSwaps(w, r, issue.ID, *input.TVSwaps, user.ID); err != nil {
+				return
+			}
 		}
-	}
 
-	if input.SupportRequests != nil {
-		if err := app.setIssueSupportRequests(w, r, issue.ID, supportRequests, user.ID); err != nil {
-			return
+		if input.SupportRequests != nil {
+			if err := app.setIssueSupportRequests(w, r, issue.ID, supportRequests, user.ID); err != nil {
+				return
+			}
 		}
 	}
 
@@ -332,7 +387,18 @@ func (app *application) createIssueHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	app.writeJSON(w, http.StatusCreated, envelope{"issue": fullIssue}, nil)
+	status := http.StatusCreated
+	resp := envelope{"issue": fullIssue}
+	if duplicate {
+		// This is the answer to a retry, not a second creation. 200 rather than
+		// 201 so a caller that only checks the status can tell the two apart.
+		status = http.StatusOK
+		resp["duplicate"] = true
+	}
+	if clientTimeIgnored {
+		resp["client_time_ignored"] = true
+	}
+	app.writeJSON(w, status, resp, nil)
 }
 
 func (app *application) showIssueHandler(w http.ResponseWriter, r *http.Request) {

@@ -12,8 +12,10 @@ import (
 
 func (app *application) createAuthTokenHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email      string `json:"email"`
+		Password   string `json:"password"`
+		DeviceID   string `json:"device_id"`
+		DeviceName string `json:"device_name"`
 	}
 
 	if err := app.readJSON(w, r, &input); err != nil {
@@ -28,6 +30,8 @@ func (app *application) createAuthTokenHandler(w http.ResponseWriter, r *http.Re
 	// login, since some accounts (e.g. the seeded default) may predate
 	// or bypass those rules.
 	v.Check(input.Password != "", "password", "must be provided")
+	v.Check(len(input.DeviceID) <= 100, "device_id", "must not be more than 100 characters")
+	v.Check(len(input.DeviceName) <= 100, "device_name", "must not be more than 100 characters")
 	if !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
@@ -67,10 +71,22 @@ func (app *application) createAuthTokenHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Delete any existing auth tokens for this user (single-session)
-	app.models.Tokens.DeleteAllForUser(data.ScopeAuthentication, user.ID)
+	// Signing in revokes the previous session on THIS device. With no device_id
+	// the old single-session rule still applies, so a client that does not send
+	// one cannot leave an older token alive by accident.
+	//
+	// The distinction is what lets a phone and the reception desk be signed in at
+	// the same time without turning "sign in again" into "leave the old token
+	// valid for seven more days".
+	if input.DeviceID != "" {
+		app.models.Tokens.DeleteForDevice(data.ScopeAuthentication, user.ID, input.DeviceID)
+	} else {
+		app.models.Tokens.DeleteAllForUser(data.ScopeAuthentication, user.ID)
+	}
 
-	token, err := app.models.Tokens.New(user.ID, 24*7*time.Hour, data.ScopeAuthentication)
+	token, err := app.models.Tokens.NewForDevice(
+		user.ID, 24*7*time.Hour, data.ScopeAuthentication, input.DeviceID, input.DeviceName,
+	)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return

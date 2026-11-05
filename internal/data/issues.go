@@ -59,6 +59,21 @@ type Issue struct {
 	// /v1/issues/:id/attachments/:attachment_id and cached by the browser.
 	// Always an array in the JSON, empty when there are none.
 	Attachments []*IssueAttachment `json:"attachments"`
+	// ClientUUID is the idempotency key an offline client generated when it
+	// queued this issue. It is never returned: it belongs to the phone's outbox,
+	// not to the issue anyone reads here.
+	ClientUUID string `json:"-"`
+}
+
+// clientUUIDPattern accepts the canonical hyphenated form only. crypto.randomUUID
+// produces exactly that, and refusing anything else keeps a malformed key from
+// reaching a uuid column and failing as a 500.
+var clientUUIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// ValidClientUUID reports whether s is a canonical UUID. An empty string is not
+// valid; callers treat the field as optional and only call this when it is set.
+func ValidClientUUID(s string) bool {
+	return clientUUIDPattern.MatchString(s)
 }
 
 type IssueFilters struct {
@@ -210,24 +225,64 @@ func loadIssueChildren(ctx context.Context, db *sql.DB, issues []*Issue) error {
 	return loadIssueAttachments(ctx, db, issues)
 }
 
-func (m IssueModel) Insert(issue *Issue) error {
+// Insert stores an issue and reports whether it was a duplicate.
+//
+// The second return value is true when client_uuid was already used by this
+// account. In that case the existing row is loaded into issue and no second row
+// is written: a phone retrying after a lost response gets the issue it already
+// created, not a copy of it. Callers must not apply children again when this is
+// true -- the first request is the one that owns them.
+//
+// created_at is written from the client when it supplied one, so an issue logged
+// at 09:00 in a plant room is reported on the day it happened rather than the
+// day the phone found signal. The handler bounds the value before it gets here;
+// nil means "use the database clock", which is the online path.
+func (m IssueModel) Insert(issue *Issue) (bool, error) {
 	query := `
 		INSERT INTO issues (mode, location, type, problem, resolution, time_minutes, status, logged_by,
-			start_time, end_time, started_at, resolved_at, reported_by_agent, confirmed_by_agent, false_positive)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			start_time, end_time, started_at, resolved_at, reported_by_agent, confirmed_by_agent, false_positive,
+			client_uuid, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+			NULLIF($16, '')::uuid, COALESCE($17::timestamp with time zone, NOW()))
+		ON CONFLICT (logged_by, client_uuid) WHERE client_uuid IS NOT NULL DO NOTHING
 		RETURNING id, created_at, version`
+
+	createdAt := any(nil)
+	if !issue.CreatedAt.IsZero() {
+		createdAt = issue.CreatedAt
+	}
 
 	args := []any{
 		issue.Mode, issue.Location, issue.Type, issue.Problem,
 		issue.Resolution, issue.TimeMinutes, issue.Status, issue.LoggedBy,
 		issue.StartTime, issue.EndTime, issue.StartedAt, issue.ResolvedAt,
 		issue.ReportedByAgent, issue.ConfirmedByAgent, issue.FalsePositive,
+		issue.ClientUUID, createdAt,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	return m.DB.QueryRowContext(ctx, query, args...).Scan(&issue.ID, &issue.CreatedAt, &issue.Version)
+	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&issue.ID, &issue.CreatedAt, &issue.Version)
+	if err == nil {
+		return false, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) || issue.ClientUUID == "" {
+		return false, err
+	}
+
+	// The conflict target matched. Load the row the first attempt wrote, using
+	// the same account scope as the unique index.
+	err = m.DB.QueryRowContext(ctx, `
+		SELECT id, created_at, version
+		FROM issues
+		WHERE logged_by = $1 AND client_uuid = $2`,
+		issue.LoggedBy, issue.ClientUUID,
+	).Scan(&issue.ID, &issue.CreatedAt, &issue.Version)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (m IssueModel) Get(id int64) (*Issue, error) {

@@ -88,3 +88,32 @@ func TestCarryPendingOntoTodaySpansDays(t *testing.T) {
 		t.Error("October 1st asked for on the 5th is a past date and must not carry pending")
 	}
 }
+
+// The outbox key is the one thing standing between a retried POST and a
+// duplicate issue, so the accepted shape is deliberately narrow.
+func TestValidClientUUID(t *testing.T) {
+	valid := []string{
+		"00000000-0000-0000-0000-000000000000",
+		"7f9c2ba4-7d3f-4f7a-9f6e-2b1c0d9e8a71",
+		"7F9C2BA4-7D3F-4F7A-9F6E-2B1C0D9E8A71",
+	}
+	for _, s := range valid {
+		if !ValidClientUUID(s) {
+			t.Errorf("%q should be accepted", s)
+		}
+	}
+
+	invalid := []string{
+		"",
+		"not-a-uuid",
+		"7f9c2ba4-7d3f-4f7a-9f6e-2b1c0d9e8a7",
+		"7f9c2ba4-7d3f-4f7a-9f6e-2b1c0d9e8a710",
+		"7f9c2ba4-7d3f-4f7a-9f6e-2b1c0d9e8a7g",
+		"{7f9c2ba4-7d3f-4f7a-9f6e-2b1c0d9e8a71}",
+	}
+	for _, s := range invalid {
+		if ValidClientUUID(s) {
+			t.Errorf("%q should be rejected", s)
+		}
+	}
+}

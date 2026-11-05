@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/HalefS/lira/internal/data"
 	"github.com/HalefS/lira/internal/validator"
@@ -63,7 +64,7 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	token, err := app.models.Tokens.New(user.ID, 24*7, data.ScopeAuthentication)
+	token, err := app.models.Tokens.New(user.ID, 24*7*time.Hour, data.ScopeAuthentication)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
