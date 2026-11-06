@@ -20066,7 +20066,14 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
         />}
         {lcuPrompt && (
           <LCUPrompt units={lcuPrompt.units} token={token}
-            onDone={()=>{ setLcuPrompt(null); setLcuEpoch(e=>e+1); loadEverything(); }}
+            onDone={()=>{
+              setLcuPrompt(null); setLcuEpoch(e=>e+1); loadEverything();
+              // The gate that refused the queue has just opened. Clear the pause
+              // and drain now rather than leaving yesterday's captures waiting
+              // for the next minute tick.
+              outboxBlockedUntil = 0;
+              try { window.dispatchEvent(new CustomEvent('lira:sync')); } catch (_) {}
+            }}
             onLogout={()=>logout()}/>
         )}
         {editing && (
