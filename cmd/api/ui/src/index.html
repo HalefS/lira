@@ -3246,15 +3246,193 @@ const { useState, useMemo, useEffect, useLayoutEffect, useCallback, useRef } = R
 /* ── API config ── */
 const API = '/v1';
 
+/* -- Offline storage -------------------------------------------------------
+
+   Two things outlive a page load on a phone: the last answer the server gave,
+   and work the phone could not send yet. Both belong in IndexedDB rather than
+   localStorage: a page of issues is a few hundred kilobytes, and localStorage
+   is synchronous, small, and already holds the session token.
+
+   Reads are namespaced by account, not by device. Two people share the phone at
+   the front desk, and the second must not open the app to the first one's
+   issues because the first forgot to sign out. The outbox is namespaced the
+   same way and only ever drains for the account that queued it.
+
+   Every operation here is best-effort. Private browsing, a full disk or a
+   blocked database must leave the online app exactly as it was. */
+
+const OFFLINE_DB = 'lira-offline';
+const OFFLINE_DB_VERSION = 1;
+// One cached read larger than this is not worth the quota: it is almost
+// certainly a report payload that can be fetched again, and keeping it would
+// push out the pages the phone opens every day.
+const READ_CACHE_MAX_CHARS = 512 * 1024;
+
+let offlineDBPromise = null;
+
+function offlineDB() {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+  if (offlineDBPromise) return offlineDBPromise;
+  offlineDBPromise = new Promise(resolve => {
+    let req;
+    try {
+      req = indexedDB.open(OFFLINE_DB, OFFLINE_DB_VERSION);
+    } catch (_) {
+      resolve(null);
+      return;
+    }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('reads')) {
+        const reads = db.createObjectStore('reads', { keyPath: 'key' });
+        reads.createIndex('by_user', 'user');
+      }
+      // Created ahead of the queue that uses it, so a phone that received this
+      // build does not need a second schema upgrade to start capturing work.
+      if (!db.objectStoreNames.contains('outbox')) {
+        db.createObjectStore('outbox', { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+    req.onblocked = () => resolve(null);
+  });
+  return offlineDBPromise;
+}
+
+function idbResult(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbDone(tx) {
+  return new Promise(resolve => {
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => resolve(false);
+    tx.onabort = () => resolve(false);
+  });
+}
+
+// Which account the read cache belongs to. Set from the session, cleared on
+// sign-out. While null, reads are neither stored nor served from the cache.
+let readCacheUser = null;
+// null = nothing read yet, true/false = the source of the last GET. Reset when
+// the account changes so the next read reports itself again.
+let lastReadWasCached = null;
+
+function setReadCacheUser(user) {
+  const id = user && user.id != null ? String(user.id) : null;
+  if (id !== readCacheUser) {
+    readCacheUser = id;
+    lastReadWasCached = null;
+  }
+}
+
+function readCacheKey(path) {
+  return readCacheUser ? readCacheUser + '::' + path : null;
+}
+
+async function readCacheGet(path) {
+  const key = readCacheKey(path);
+  if (!key) return null;
+  try {
+    const db = await offlineDB();
+    if (!db) return null;
+    const row = await idbResult(db.transaction('reads', 'readonly').objectStore('reads').get(key));
+    return row || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function readCachePut(path, data) {
+  const key = readCacheKey(path);
+  if (!key) return;
+  // Captured with the key: if the account changes before the queued write runs,
+  // the row must still carry the account that made the request, or the next
+  // sign-out would delete the wrong user's cache.
+  const user = readCacheUser;
+  let encoded;
+  try { encoded = JSON.stringify(data); } catch (_) { return; }
+  if (!encoded || encoded.length > READ_CACHE_MAX_CHARS) return;
+  offlineDB().then(db => {
+    if (!db) return;
+    try {
+      const tx = db.transaction('reads', 'readwrite');
+      tx.objectStore('reads').put({ key, user, path, data, savedAt: Date.now() });
+      // Deliberately not awaited: a cache write must never delay the read that
+      // produced it, and a failure here is invisible by design.
+    } catch (_) {}
+  }).catch(() => {});
+}
+
+// Deletes one account's cached reads. Called on sign-out, so a shared phone does
+// not keep the previous user's data on disk after the session ends.
+async function clearReadCache(userID) {
+  const user = userID != null ? String(userID) : readCacheUser;
+  if (!user) return;
+  try {
+    const db = await offlineDB();
+    if (!db) return;
+    const tx = db.transaction('reads', 'readwrite');
+    const cursorReq = tx.objectStore('reads').index('by_user').openCursor(IDBKeyRange.only(user));
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result;
+      if (!cursor) return;
+      cursor.delete();
+      cursor.continue();
+    };
+    await idbDone(tx);
+  } catch (_) {}
+}
+
+/* Whether the last GET came from the cache. This drives the offline banner
+   alongside navigator.onLine, because a hotel proxy can answer 502 while the
+   browser still believes it is online -- which is exactly when the cached copy
+   is being shown and the browser's own flag would say nothing is wrong. */
+function noteReadSource(cached) {
+  if (cached === lastReadWasCached) return;
+  lastReadWasCached = cached;
+  try {
+    window.dispatchEvent(new CustomEvent('lira:read-source', { detail: { cached } }));
+  } catch (_) {}
+}
+
 /* ── API client ── */
 async function apiFetch(path, { method='GET', body, token } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(API + path, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+
+  let res;
+  try {
+    res = await fetch(API + path, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (networkErr) {
+    // No connection at all. For a read, the last good answer is what the person
+    // is looking at anyway; for a write there is nothing to fall back to.
+    if (method === 'GET') {
+      const cached = await readCacheGet(path);
+      if (cached) { noteReadSource(true); return cached.data; }
+    }
+    // Marked so a page made of several parallel reads can stay quiet when the
+    // offline banner already explains why nothing arrived.
+    try { networkErr.offline = true; } catch (_) {}
+    throw networkErr;
+  }
+
+  // A proxy that is up but has no route onwards answers 502/503/504 instead of
+  // failing the connection. That is still "no usable network", so a cached read
+  // beats the proxy's error page.
+  if (method === 'GET' && (res.status === 502 || res.status === 503 || res.status === 504)) {
+    const cached = await readCacheGet(path);
+    if (cached) { noteReadSource(true); return cached.data; }
+  }
+
   // Read as text and parse by hand, because res.json() rejects an empty body with
   // a SyntaxError that is indistinguishable from a failed request. Signing out
   // answers 204 with nothing in it, and a successful sign-out must not look like
@@ -3294,6 +3472,12 @@ async function apiFetch(path, { method='GET', body, token } = {}) {
       err.mustResetPassword = true;
     }
     throw err;
+  }
+  // Only successful reads are worth remembering. An error is a fact about the
+  // request, not about the data.
+  if (method === 'GET') {
+    readCachePut(path, data);
+    noteReadSource(false);
   }
   return data;
 }
@@ -18262,6 +18446,9 @@ function App() {
   const [updateReady, setUpdateReady] = useState(false);
   const swWaitingRef = useRef(null);
   const swAcceptedRef = useRef(false);
+  // The account the read cache belonged to on the previous render, so a session
+  // that ends without an explicit sign-out (an expired token) still wipes it.
+  const prevCacheUserRef = useRef(null);
   const [users,   setUsers]   = useState([]);
   // Counts only, straight from the alerts endpoint. The alert lists are the
   // Alerts page's business and are fetched there, a pageful at a time.
@@ -18374,7 +18561,20 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     const themeMeta = document.getElementById('theme-color-meta');
     if (themeMeta) themeMeta.setAttribute('content', theme === 'dark' ? '#12151A' : '#1769AA');
   }, [theme]);
-  useEffect(()=>{ saveLS('lira_session', session); }, [session]);
+  useEffect(()=>{
+    saveLS('lira_session', session);
+    const userID = session && session.user ? session.user.id : null;
+    // A session that ends for any reason -- explicit sign-out, an expired token,
+    // an account removed -- takes its cached reads with it. The outbox is not
+    // cleared: queued work belongs to the account and waits for it to return.
+    if (prevCacheUserRef.current != null && userID == null) {
+      clearReadCache(prevCacheUserRef.current);
+    }
+    prevCacheUserRef.current = userID;
+    // Namespace the read cache before any request runs. Effects execute in the
+    // order they are declared, and the first fetch is two effects below.
+    setReadCacheUser(session && session.user);
+  }, [session]);
 
   // Service worker registration. This is what makes the shell open with no
   // network; it is deliberately best-effort, because an unsupported browser or
@@ -18434,6 +18634,18 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     };
   }, []);
 
+  // A read that had to use the cache is a stronger signal than navigator.onLine:
+  // it covers the hotel proxy that answers 502 while the device still claims to
+  // be online. The reverse clears the banner as soon as the server answers again.
+  useEffect(() => {
+    const onRead = e => {
+      if (e.detail && e.detail.cached) setOffline(true);
+      else setOffline(false);
+    };
+    window.addEventListener('lira:read-source', onRead);
+    return () => window.removeEventListener('lira:read-source', onRead);
+  }, []);
+
   function applyUpdate() {
     swAcceptedRef.current = true;
     const waiting = swWaitingRef.current;
@@ -18467,62 +18679,92 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
           setLcuPrompt({units: ex.lcuUnits, today: ex.lcuToday});
           return;
         }
-        if (ex.message.includes('401') || ex.message.toLowerCase().includes('token')) {
+        const message = String((ex && ex.message) || '');
+        if (ex.status === 401 || message.includes('401') || message.toLowerCase().includes('token')) {
           setSession(null); // token expired
-        } else {
-          setApiErr(ex.message);
+          return;
         }
+        // The gate could not be asked -- offline, or the server is unreachable.
+        // Still load what the device has cached: a phone in a plant room should
+        // see its last data rather than an empty shell. Writes remain refused by
+        // the server, so this cannot be used to bypass the gate.
+        loadEverything();
+        if (ex.offline || navigator.onLine === false) return;
+        setApiErr(message || 'Something went wrong');
       });
     return () => { cancelled = true; };
   }, [token]);
 
   function loadEverything() {
     const todayStr = localISODate(new Date());
-    return Promise.all([
-      apiFetch('/users', {token}),
-      apiFetch(`/stats?date=${todayStr}`, {token}),
-      apiFetch('/issue-types', {token}),
-      apiFetch('/departments', {token}),
-      apiFetch('/connecta-agents', {token}),
-      apiFetch('/settings', {token}),
+    // Each read feeds a different part of the shell. allSettled rather than all:
+    // offline, the reads that have a cached answer succeed and the rest fail,
+    // and one missing list should not blank the other nine. The failures are
+    // inspected afterwards for the two cases that need more than a banner.
+    const reads = {
+      users:       apiFetch('/users', {token}),
+      stats:       apiFetch(`/stats?date=${todayStr}`, {token}),
+      types:       apiFetch('/issue-types', {token}),
+      departments: apiFetch('/departments', {token}),
+      agents:      apiFetch('/connecta-agents', {token}),
+      settings:    apiFetch('/settings', {token}),
       // limit=1: all that is wanted from this call is the two pending counts that
       // drive the sidebar badge and the Analytics sentence. The alerts themselves
       // are fetched by the Alerts page, which pages through them.
-      apiFetch('/alerts?limit=1', {token}),
+      alerts:      apiFetch('/alerts?limit=1', {token}),
       // The consumable catalog in full, because the picker in the issue form needs
       // every item to choose from. The inventory table on the Consumables page
       // asks for its own pageful.
-      apiFetch('/consumable-items?limit=1000', {token}),
-      apiFetch('/user-issue-stats', {token}),
+      consumables: apiFetch('/consumable-items?limit=1000', {token}),
+      userStats:   apiFetch('/user-issue-stats', {token}),
       // Only the count is wanted from here, for the nav badge. The queue itself is
       // the Maintenance page's, fetched when it is opened.
-      apiFetch('/maintenance/schedules?recent=0', {token}),
-    ]).then(([usersRes, statsRes, typesRes, deptsRes, agentsRes, settingsRes, alertsRes, consumableItemsRes, userStatsRes, maintRes]) => {
-      setUsers(usersRes.users || []);
-      setStats(statsRes.stats);
-      setIssueTypes(typesRes.issue_types || []);
-      setDepartments(deptsRes.departments || []);
-      setConnectaAgents(agentsRes.connecta_agents || []);
-      setSettings(settingsRes.settings);
+      maintenance: apiFetch('/maintenance/schedules?recent=0', {token}),
+    };
+    const names = Object.keys(reads);
+
+    return Promise.allSettled(names.map(name => reads[name])).then(results => {
+      const ok = {};
+      names.forEach((name, i) => {
+        if (results[i].status === 'fulfilled') ok[name] = results[i].value;
+      });
+
+      if (ok.users)       setUsers(ok.users.users || []);
+      if (ok.stats)       setStats(ok.stats.stats);
+      if (ok.types)       setIssueTypes(ok.types.issue_types || []);
+      if (ok.departments) setDepartments(ok.departments.departments || []);
+      if (ok.agents)      setConnectaAgents(ok.agents.connecta_agents || []);
+      if (ok.settings)    setSettings(ok.settings.settings);
       // The counts only. The lists belong to the Alerts page.
-      // Recurring only, as before: the badge and the Analytics sentence both describe
-      // recurring issues, and a TV swap alert is a different kind of warning
-      // entirely. Counting them in would make the sentence say something it does
-      // not mean.
-      setAlertsPendingCount(alertsRes.pending_count || 0);
-      setConsumableItems(consumableItemsRes.consumable_items || []);
-      setUserIssueStats(userStatsRes.stats || []);
-      setMaintenanceDueCount(maintRes.due_count || 0);
-    }).catch(ex => {
-      if (ex.lcuRequired) {
+      if (ok.alerts)      setAlertsPendingCount(ok.alerts.pending_count || 0);
+      if (ok.consumables) setConsumableItems(ok.consumables.consumable_items || []);
+      if (ok.userStats)   setUserIssueStats(ok.userStats.stats || []);
+      if (ok.maintenance) setMaintenanceDueCount(ok.maintenance.due_count || 0);
+
+      const failures = results
+        .filter(r => r.status === 'rejected' && r.reason)
+        .map(r => r.reason);
+      if (!failures.length) return;
+
+      const gate = failures.find(ex => ex.lcuRequired);
+      if (gate) {
         // The gate closed mid-session -- a unit was added, or the day rolled over
         // while the tab sat open. Open the prompt rather than showing an error.
-        setLcuPrompt({units: ex.lcuUnits, today: ex.lcuToday});
-      } else if (ex.message.includes('401') || ex.message.toLowerCase().includes('token')) {
-        setSession(null); // token expired
-      } else {
-        setApiErr(ex.message);
+        setLcuPrompt({units: gate.lcuUnits, today: gate.lcuToday});
+        return;
       }
+
+      const message = ex => String((ex && ex.message) || '');
+      const expired = failures.find(ex => ex.status === 401 || message(ex).includes('401') || message(ex).toLowerCase().includes('token'));
+      if (expired) {
+        setSession(null); // token expired
+        return;
+      }
+
+      // Offline is already explained by the banner; repeating "Failed to fetch"
+      // once per list that had no cache would bury the one useful sentence.
+      if (navigator.onLine === false) return;
+      setApiErr(failures[0].message || 'Something went wrong');
     });
   }
 
@@ -18546,10 +18788,17 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
      local session still goes, because leaving someone signed in on screen because
      a network call failed is the worse of the two failures. */
   async function logout(reason) {
+    // Captured before the session is cleared: clearing the cache needs the
+    // account that owned the rows, and setSession only updates the ref on the
+    // next render.
+    const userID = session && session.user ? session.user.id : readCacheUser;
     try {
       if (token) await apiFetch('/tokens/authentication', {method:'DELETE', token});
     } catch (_) { /* signed out locally regardless */ }
 
+    // The reads go with the session. The outbox does not: queued work belongs to
+    // the account and waits for that same account to sign in again.
+    clearReadCache(userID);
     setSession(null);
     setIdleWarning(false);
     setSignedOutIdle(reason === 'idle');
