@@ -3052,6 +3052,107 @@ tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
   display: flex; padding: 0;
 }
 
+/* -- Capturing an issue on a phone ----------------------------------------
+
+   The form is deliberately narrower than the desktop issue modal: one column of
+   fields, a description box, and photos. The queue sits beside it on a wide
+   screen and underneath it on a phone, because the person checking what has not
+   sent yet is usually the person who just captured it. */
+.capture-wrap {
+  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 20px; align-items: start; max-width: 1100px;
+}
+.capture-card { margin-bottom: 0; }
+.capture-head {
+  padding: 16px 18px; border-bottom: 1px solid var(--gray-200);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+.capture-title { font-size: 14px; font-weight: 600; }
+.capture-intro { font-size: 12.5px; color: var(--gray-500); margin-top: 4px; line-height: 1.5; max-width: 54ch; }
+.capture-body { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 14px; }
+.capture-modes { display: flex; gap: 8px; }
+.capture-save { justify-content: center; padding: 10px 16px; }
+.capture-err { font-size: 12.5px; color: var(--red); }
+.capture-note { font-size: 12px; color: var(--gray-500); }
+.capture-pending-count {
+  font-size: 11.5px; font-weight: 600; color: var(--blue);
+  background: var(--blue-light); border-radius: 99px; padding: 3px 9px; white-space: nowrap;
+}
+.capture-empty { font-size: 13px; color: var(--gray-400); padding: 8px 0; }
+.capture-row {
+  display: flex; gap: 12px; align-items: flex-start; justify-content: space-between;
+  padding: 12px 0; border-top: 1px solid var(--gray-200);
+}
+.capture-row:first-child { border-top: none; padding-top: 0; }
+.capture-row-main { min-width: 0; }
+.capture-row-title { font-size: 13.5px; font-weight: 600; }
+.capture-row-meta { font-size: 11.5px; color: var(--gray-400); margin-top: 2px; }
+.capture-row-problem { font-size: 12.5px; color: var(--gray-600); margin-top: 4px; white-space: pre-wrap; }
+.capture-row-bad { font-size: 12px; color: var(--red); margin-top: 4px; }
+.capture-row-wait { font-size: 12px; color: var(--amber); margin-top: 4px; }
+.capture-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.capture-discard { color: var(--red); }
+
+/* The one control this app has never used. It needs the same box as
+   .form-control and cannot inherit a height, so give it a sensible one. */
+textarea.form-control { resize: vertical; min-height: 88px; line-height: 1.5; }
+
+/* -- The phone shell ------------------------------------------------------
+
+   Above 860px the sidebar is fixed and these rules do nothing. Below it the
+   sidebar becomes a drawer because the form needs the width more than the menu
+   does; the hamburger and the scrim are hidden/unrendered until then. The
+   floating Capture button is the phone's primary action. */
+.menu-btn {
+  display: none; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0; flex-shrink: 0;
+  border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+  background: #fff; color: var(--gray-700); cursor: pointer;
+}
+.menu-btn:hover { background: var(--gray-100); }
+.menu-btn svg { width: 16px; height: 16px; }
+.sidebar-scrim { display: none; }
+.mobile-capture-fab { display: none; }
+
+@media (max-width: 860px) {
+  .sidebar {
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 60;
+    transform: translateX(-100%); transition: transform 0.18s ease;
+    box-shadow: 0 0 40px rgba(10,20,30,0.18);
+  }
+  .sidebar.open { transform: none; }
+  .sidebar-scrim {
+    display: block; position: fixed; inset: 0; z-index: 55;
+    background: rgba(10,20,30,0.38);
+  }
+  .menu-btn { display: inline-flex; }
+  .topbar { padding: 10px 14px; gap: 10px; }
+  .topbar-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .topbar-heading { min-width: 0; }
+  .topbar-heading h1 { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar-heading p { display: none; }
+  .topbar-right { gap: 6px; }
+  /* The desktop way into the issue form is two wide buttons. On a phone the
+     Capture page is, so they step aside rather than wrapping the topbar. */
+  .topbar-right .btn-primary,
+  .topbar-right .btn-ghost { display: none; }
+  .content { padding: 14px; padding-bottom: 84px; }
+  .page-banner { margin: 10px 14px 0; }
+  .capture-wrap { grid-template-columns: 1fr; gap: 14px; }
+  .capture-row { flex-direction: column; }
+  .capture-row-actions { width: 100%; }
+  .capture-row-actions .btn { flex: 1; justify-content: center; }
+  .mobile-capture-fab {
+    display: inline-flex; align-items: center; gap: 6px;
+    position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 40; border: none; border-radius: 999px; padding: 12px 18px;
+    background: var(--blue); color: #fff; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 13.5px; font-weight: 600;
+    box-shadow: 0 6px 20px rgba(24,95,165,0.35);
+  }
+  .mobile-capture-fab svg { width: 15px; height: 15px; }
+}
+
 /* ── dark mode surface overrides ── */
 html.dark .sidebar,
 html.dark .topbar,
@@ -3066,6 +3167,7 @@ html.dark .modal,
 html.dark .auth-card,
 html.dark .error-boundary-card,
 html.dark .btn-ghost,
+html.dark .menu-btn,
 html.dark .lang-toggle,
 html.dark .form-control { background: var(--gray-50) !important; }
 /* Native <select> dropdowns are drawn by the OS, not by CSS, so a select whose
@@ -3262,7 +3364,7 @@ const API = '/v1';
    blocked database must leave the online app exactly as it was. */
 
 const OFFLINE_DB = 'lira-offline';
-const OFFLINE_DB_VERSION = 1;
+const OFFLINE_DB_VERSION = 2;
 // One cached read larger than this is not worth the quota: it is almost
 // certainly a report payload that can be fetched again, and keeping it would
 // push out the pages the phone opens every day.
@@ -3290,7 +3392,14 @@ function offlineDB() {
       // Created ahead of the queue that uses it, so a phone that received this
       // build does not need a second schema upgrade to start capturing work.
       if (!db.objectStoreNames.contains('outbox')) {
-        db.createObjectStore('outbox', { keyPath: 'id' });
+        const outbox = db.createObjectStore('outbox', { keyPath: 'id' });
+        outbox.createIndex('by_user', 'user');
+      } else {
+        // Version 1 created the store without this index; adding it here keeps
+        // existing installs on the same schema instead of making them wait for a
+        // second upgrade.
+        const outbox = req.transaction.objectStore('outbox');
+        if (!outbox.indexNames.contains('by_user')) outbox.createIndex('by_user', 'user');
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -3566,11 +3675,17 @@ async function shrinkImage(file) {
 /* Multipart upload, one photo per request. This deliberately does not use
    apiFetch: that helper forces Content-Type: application/json, which would stop
    the browser writing the multipart boundary. Setting only Authorization lets
-   fetch set the boundary itself. */
-async function uploadIssuePhoto(issueId, file, token) {
+   fetch set the boundary itself.
+
+   clientUUID is the outbox's per-photo key. It travels as a query parameter
+   rather than a form field because multipart parts arrive in order, and a field
+   written after the photo would not have been read when the bytes are decoded.
+   The server answers a retry with the attachment the first attempt stored. */
+async function uploadIssuePhoto(issueId, file, token, clientUUID) {
   const fd = new FormData();
   fd.append('photo', file, 'photo.jpg');
-  const res = await fetch(`${API}/issues/${issueId}/attachments`, {
+  const suffix = clientUUID ? `?client_uuid=${encodeURIComponent(clientUUID)}` : '';
+  const res = await fetch(`${API}/issues/${issueId}/attachments${suffix}`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` },
     body: fd,
@@ -3588,6 +3703,241 @@ async function uploadIssuePhoto(issueId, file, token) {
     throw err;
   }
   return data.attachment;
+}
+
+/* -- Outbox ----------------------------------------------------------------
+
+   Work captured on a phone has to survive the app being closed, the phone being
+   restarted and the token expiring. A row is the whole issue: the fields the
+   server needs, the photos as blobs, and enough state to resume an upload that
+   was interrupted.
+
+   Two keys are mandatory, and are the reason the server grew any of this. `id`
+   is sent as client_uuid on the issue and on every photo, so a retry after a
+   lost response gets the row the first attempt wrote instead of a second copy.
+   `createdAt` is sent as created_at, so a photo taken at 09:00 in a plant room
+   is reported at 09:00 rather than at the moment the phone found signal. */
+
+function newUUID() {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch (_) {}
+  // getRandomValues works without a secure context, unlike randomUUID. The
+  // server accepts any canonical UUID; the version/variant bits are set for
+  // correctness rather than to satisfy a strict parser.
+  const bytes = new Uint8Array(16);
+  try {
+    crypto.getRandomValues(bytes);
+  } catch (_) {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  return hex.slice(0,8) + '-' + hex.slice(8,12) + '-' + hex.slice(12,16) + '-' + hex.slice(16,20) + '-' + hex.slice(20);
+}
+
+// RFC3339 without milliseconds, which is the shape the server stores verbatim.
+function isoNow() {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function outboxChanged(detail) {
+  try { window.dispatchEvent(new CustomEvent('lira:outbox', { detail: detail || {} })); } catch (_) {}
+}
+
+async function outboxAll(userID) {
+  try {
+    const db = await offlineDB();
+    if (!db) return [];
+    const store = db.transaction('outbox', 'readonly').objectStore('outbox');
+    const rows = store.indexNames.contains('by_user')
+      ? await idbResult(store.index('by_user').getAll(String(userID)))
+      : (await idbResult(store.getAll())).filter(r => String(r.user) === String(userID));
+    return rows.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  } catch (_) {
+    return [];
+  }
+}
+
+async function outboxAdd(row) {
+  const db = await offlineDB();
+  if (!db) throw new Error('This browser cannot store work offline.');
+  const tx = db.transaction('outbox', 'readwrite');
+  tx.objectStore('outbox').put(row);
+  if (!await idbDone(tx)) throw new Error('Could not save the issue on this device.');
+  outboxChanged({ added: row.id });
+}
+
+async function outboxSave(row) {
+  try {
+    const db = await offlineDB();
+    if (!db) return;
+    const tx = db.transaction('outbox', 'readwrite');
+    tx.objectStore('outbox').put(row);
+    await idbDone(tx);
+    outboxChanged({ updated: row.id });
+  } catch (_) {}
+}
+
+async function outboxDelete(id) {
+  try {
+    const db = await offlineDB();
+    if (!db) return;
+    const tx = db.transaction('outbox', 'readwrite');
+    tx.objectStore('outbox').delete(id);
+    await idbDone(tx);
+    outboxChanged({ removed: id });
+  } catch (_) {}
+}
+
+// One sync run at a time. Two runs would race each other into the same
+// client_uuid, and while the server would deduplicate them, the loser would
+// spend a request to learn nothing.
+let outboxSyncing = false;
+let outboxBlockedUntil = 0;
+
+async function syncOutbox(session) {
+  if (outboxSyncing) return;
+  if (!session || !session.token || !session.user || session.user.id == null) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  if (Date.now() < outboxBlockedUntil) return;
+
+  outboxSyncing = true;
+  const result = { sent: 0, rejected: 0, error: '', blocked: false, auth: false };
+  try {
+    const rows = await outboxAll(session.user.id);
+    for (const row of rows) {
+      if (navigator.onLine === false) break;
+      // A row the server refused for its content will be refused again. Keep it
+      // for the person to read and discard rather than spending an attempt every
+      // minute. A row that needs a sign-in waits for a *different* token; the
+      // same expired one must not stop the rows queued behind it.
+      if (row.state === 'rejected') continue;
+      if (row.state === 'needs-auth' && row.authToken === session.token) continue;
+      const outcome = await syncOutboxRow(row, session);
+      if (outcome === 'done') result.sent++;
+      else if (outcome === 'rejected') result.rejected++;
+      else if (outcome === 'auth') { result.auth = true; result.error = row.lastError || ''; break; }
+      else if (outcome === 'blocked') { result.blocked = true; result.error = row.lastError || ''; break; }
+      else if (outcome === 'error') { result.error = row.lastError || ''; break; }
+    }
+  } finally {
+    outboxSyncing = false;
+    outboxChanged({ sync: result });
+  }
+}
+
+async function syncOutboxRow(row, session) {
+  let issueId = row.serverId || null;
+
+  if (!issueId) {
+    try {
+      const res = await apiFetch('/issues', {
+        method: 'POST',
+        token: session.token,
+        body: {
+          mode: row.mode,
+          location: row.location,
+          type: row.type,
+          problem: row.problem,
+          status: 'Pending',
+          client_uuid: row.id,
+          created_at: row.createdAt,
+        },
+      });
+      issueId = res.issue && res.issue.id;
+      if (!issueId) throw new Error('The server did not return an issue id.');
+      row.serverId = issueId;
+      row.state = 'sending';
+      row.lastError = '';
+      await outboxSave(row);
+    } catch (ex) {
+      return classifyOutboxError(row, ex, session);
+    }
+  }
+
+  // The issue exists, so what remains is its photos. Each success is recorded
+  // before the next attempt, so an interrupted run resumes rather than starting
+  // the whole set again.
+  const uploaded = new Set(row.uploadedPhotoIds || []);
+  for (const photo of row.photos || []) {
+    if (uploaded.has(photo.id)) continue;
+    if (navigator.onLine === false) return 'error';
+    try {
+      const blob = photo.blob instanceof Blob
+        ? photo.blob
+        : new Blob([photo.blob], { type: photo.type || 'image/jpeg' });
+      await uploadIssuePhoto(issueId, blob, session.token, photo.id);
+      uploaded.add(photo.id);
+      row.uploadedPhotoIds = Array.from(uploaded);
+      await outboxSave(row);
+    } catch (ex) {
+      const status = ex && ex.status;
+      if (status === 409) {
+        // The issue already holds the maximum number of photos. Nothing else
+        // can be attached, but the issue itself is good: keep it and stop.
+        row.photoError = 'full';
+        break;
+      }
+      if (status === 400 || status === 413 || status === 415 || status === 422) {
+        // One unreadable photo must not strand a perfectly good issue. Drop it
+        // and carry on with the rest.
+        uploaded.add(photo.id);
+        row.uploadedPhotoIds = Array.from(uploaded);
+        row.photoError = ex.message || 'photo rejected';
+        await outboxSave(row);
+        continue;
+      }
+      return classifyOutboxError(row, ex, session);
+    }
+  }
+
+  // Everything the server will take has arrived, so the row's job is done.
+  await outboxDelete(row.id);
+  return 'done';
+}
+
+function classifyOutboxError(row, ex, session) {
+  const status = ex && ex.status;
+  const message = (ex && ex.message) || 'Could not send';
+
+  if (status === 401) {
+    // The token expired while the issue waited. The work is not lost: it stays
+    // queued and resumes when the same account signs in again. The token is
+    // recorded so the next run with this same token skips it instead of
+    // failing on it forever.
+    row.state = 'needs-auth';
+    row.authToken = session && session.token;
+    row.lastError = message;
+    outboxSave(row);
+    return 'auth';
+  }
+  if (ex && ex.lcuRequired) {
+    // A server-side gate that lifts once today's test is recorded. This is not a
+    // permanent failure and must not be marked as one.
+    row.state = 'pending';
+    row.lastError = 'lcu_test_required';
+    outboxBlockedUntil = Date.now() + 5 * 60 * 1000;
+    outboxSave(row);
+    return 'blocked';
+  }
+  if (status === 400 || status === 422) {
+    row.state = 'rejected';
+    row.lastError = message;
+    outboxSave(row);
+    return 'rejected';
+  }
+
+  // Network, proxy, 5xx: try again later. The attempt count is for the UI; the
+  // trigger is connectivity and the periodic run, not an unbounded tight retry.
+  row.state = 'pending';
+  row.attempts = (row.attempts || 0) + 1;
+  row.lastError = message;
+  outboxSave(row);
+  return 'error';
 }
 
 /* ════════════════ MOTION ════════════════ */
@@ -5043,6 +5393,32 @@ const T = {
     duplicateAlertTitle: 'Possible recurring issue',
     noIssueTypes: 'No issue types yet.',
     removeType: 'Remove',
+    captureNav: 'Capture issue',
+    captureNavShort: 'Capture',
+    captureTitle: 'Log an issue without a signal',
+    captureIntro: 'Fill this in on the spot. If there is no connection it waits on this phone and sends itself when the signal returns.',
+    captureModeLabel: 'Apartment or department',
+    captureRoomSelect: 'Select a room',
+    captureSave: 'Save issue',
+    captureQueued: 'Issue saved on this phone. It will send itself when the connection returns.',
+    captureSaveFailed: 'Could not save the issue on this phone.',
+    captureNeedLocation: 'Enter a room or choose a department.',
+    captureNeedType: 'Choose an issue type.',
+    captureNeedProblem: 'Describe the problem.',
+    captureNoRooms: 'Rooms have not loaded yet. Connect once so this phone keeps the list, then try again.',
+    captureNoTypes: 'Issue types have not loaded yet. Connect once so this phone keeps the list, then try again.',
+    capturePendingTitle: 'Waiting to send',
+    capturePendingCount: '{count} waiting',
+    captureEmpty: 'Nothing is waiting to send.',
+    captureSendNow: 'Send now',
+    captureSending: 'Sending queued issues…',
+    captureDiscard: 'Discard',
+    captureDiscardConfirm: 'Discard this issue? It has not been sent and cannot be recovered.',
+    captureRejected: 'The server refused this issue: {error}',
+    captureNeedsAuth: 'Sign in again as the account that queued this to send it.',
+    captureRetryHint: 'Not sent yet: {error}',
+    captureRejectedToast: '{count} queued issue(s) were refused by the server.',
+    toastSynced: 'Queued issues sent.',
   },
   pt: {
     appSub: 'Sistema de Relatórios IT Llana',
@@ -6010,6 +6386,32 @@ const T = {
     duplicateAlertTitle: 'Possível avaria recorrente',
     noIssueTypes: 'Ainda não há tipos de avaria.',
     removeType: 'Remover',
+    captureNav: 'Registar avaria',
+    captureNavShort: 'Registar',
+    captureTitle: 'Registar uma avaria sem rede',
+    captureIntro: 'Preencha no local. Se não houver ligação, fica guardado neste telefone e é enviado quando a rede voltar.',
+    captureModeLabel: 'Apartamento ou departamento',
+    captureRoomSelect: 'Selecionar um quarto',
+    captureSave: 'Guardar avaria',
+    captureQueued: 'Avaria guardada neste telefone. Será enviada quando a ligação voltar.',
+    captureSaveFailed: 'Não foi possível guardar a avaria neste telefone.',
+    captureNeedLocation: 'Indique um quarto ou escolha um departamento.',
+    captureNeedType: 'Escolha um tipo de avaria.',
+    captureNeedProblem: 'Descreva o problema.',
+    captureNoRooms: 'Os quartos ainda não carregaram. Ligue-se uma vez para este telefone guardar a lista e tente de novo.',
+    captureNoTypes: 'Os tipos de avaria ainda não carregaram. Ligue-se uma vez para este telefone guardar a lista e tente de novo.',
+    capturePendingTitle: 'A aguardar envio',
+    capturePendingCount: '{count} em espera',
+    captureEmpty: 'Não há nada a aguardar envio.',
+    captureSendNow: 'Enviar agora',
+    captureSending: 'A enviar avarias em espera…',
+    captureDiscard: 'Descartar',
+    captureDiscardConfirm: 'Descartar esta avaria? Ainda não foi enviada e não pode ser recuperada.',
+    captureRejected: 'O servidor recusou esta avaria: {error}',
+    captureNeedsAuth: 'Inicie sessão novamente com a conta que registou isto para o enviar.',
+    captureRetryHint: 'Ainda não enviada: {error}',
+    captureRejectedToast: '{count} avaria(s) em espera foram recusadas pelo servidor.',
+    toastSynced: 'Avarias em espera enviadas.',
   }
 };
 
@@ -6022,6 +6424,7 @@ const TYPE_COLORS = { Door:'#1769AA', Internet:'#1D9E75', Hardware:'#D88A18', TV
 const Ic = {
   logo:   <svg viewBox="0 0 20 20" fill="white"><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5" opacity=".6"/><rect x="2" y="11" width="7" height="7" rx="1.5" opacity=".6"/><rect x="11" y="11" width="7" height="7" rx="1.5" opacity=".3"/></svg>,
   grid:   <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>,
+  menu:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>,
   list:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 4h12M2 8h12M2 12h8"/></svg>,
   clock:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>,
   users:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6" cy="5" r="2.5"/><path d="M1 13c0-2.8 2.2-5 5-5"/><circle cx="12" cy="7" r="2"/><path d="M10 13c0-2 1.3-3.5 3-4"/></svg>,
@@ -18429,6 +18832,294 @@ class PageErrorBoundary extends React.Component {
   }
 }
 
+function CapturePage({ token, issueTypes, departments, currentUser, setToast }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+
+  const [mode, setMode] = useState('apt');
+  const [location, setLocation] = useState('');
+  const [type, setType] = useState('');
+  const [problem, setProblem] = useState('');
+  const [photos, setPhotos] = useState([]); // {id, blob, url}
+  const [busy, setBusy] = useState(false);
+  const [formErr, setFormErr] = useState('');
+  const [pending, setPending] = useState([]);
+  // The apartment room inventory, expanded from the ranges the server stores.
+  // Loaded through apiFetch so the last list survives offline -- a room number
+  // cannot be invented, the server checks it against this inventory.
+  const [rooms, setRooms] = useState([]);
+  const fileRef = useRef(null);
+
+  const types = (issueTypes || []).map(it => it.name);
+  const depts = (departments || []).map(d => d.name);
+  const userID = currentUser && currentUser.id;
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    apiFetch('/rooms', {token}).then(res => {
+      if (cancelled) return;
+      const numbers = [];
+      (res.rooms || []).forEach(run => {
+        for (let n = run.from_room; n <= run.to_room; n++) numbers.push(String(n));
+      });
+      numbers.sort((a, b) => Number(a) - Number(b));
+      setRooms(numbers);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const refresh = useCallback(() => {
+    if (userID == null) { setPending([]); return; }
+    outboxAll(userID).then(setPending);
+  }, [userID]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  // The sync engine announces every mutation and every completed run. One event
+  // keeps the list, the sidebar badge and the form in step without a poll.
+  useEffect(() => {
+    const onChange = () => refresh();
+    window.addEventListener('lira:outbox', onChange);
+    return () => window.removeEventListener('lira:outbox', onChange);
+  }, [refresh]);
+
+  // Preview URLs are owned by this page; revoke them when it goes away so a
+  // phone does not hold the blobs twice.
+  const photosRef = useRef(photos);
+  photosRef.current = photos;
+  useEffect(() => () => {
+    photosRef.current.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
+  }, []);
+
+  async function addPhotos(files) {
+    const room = MAX_PHOTOS - photos.length;
+    if (!files || !files.length || room <= 0) return;
+    setFormErr('');
+    const added = [];
+    for (const file of Array.from(files).slice(0, room)) {
+      try {
+        const shrunk = await shrinkImage(file);
+        added.push({ id: newUUID(), blob: shrunk, url: URL.createObjectURL(shrunk) });
+      } catch (ex) {
+        setFormErr(ex && ex.message === 'large' ? t.photoErrTooLarge : t.photoErrType);
+      }
+    }
+    if (added.length) setPhotos(p => [...p, ...added]);
+    if (fileRef.current) fileRef.current.value = '';
+  }
+
+  function removePhoto(id) {
+    setPhotos(p => {
+      const gone = p.find(x => x.id === id);
+      if (gone && gone.url) URL.revokeObjectURL(gone.url);
+      return p.filter(x => x.id !== id);
+    });
+  }
+
+  async function save(e) {
+    e.preventDefault();
+    setFormErr('');
+    if (!location.trim()) { setFormErr(t.captureNeedLocation); return; }
+    if (!type) { setFormErr(t.captureNeedType); return; }
+    if (!problem.trim()) { setFormErr(t.captureNeedProblem); return; }
+    if (userID == null) return;
+
+    setBusy(true);
+    const row = {
+      id: newUUID(),
+      user: String(userID),
+      createdAt: isoNow(),
+      mode,
+      location: location.trim(),
+      type,
+      problem: problem.trim(),
+      photos: photos.map(p => ({ id: p.id, blob: p.blob, type: 'image/jpeg', name: 'photo.jpg' })),
+      state: 'pending',
+      attempts: 0,
+      uploadedPhotoIds: [],
+      lastError: '',
+      serverId: null,
+    };
+
+    try {
+      await outboxAdd(row);
+      photos.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
+      setPhotos([]);
+      setLocation('');
+      setProblem('');
+      setType('');
+      setToast(t.captureQueued);
+      // Try immediately. If there is no signal the engine leaves it queued and
+      // the online listener will pick it up later.
+      try { window.dispatchEvent(new CustomEvent('lira:sync')); } catch (_) {}
+    } catch (_) {
+      // The browser's own storage error is not a sentence for a technician; the
+      // translated one says what to do about it.
+      setFormErr(t.captureSaveFailed);
+    }
+    setBusy(false);
+  }
+
+  async function discard(row) {
+    if (!confirm(t.captureDiscardConfirm)) return;
+    await outboxDelete(row.id);
+    refresh();
+  }
+
+  function sendNow() {
+    try { window.dispatchEvent(new CustomEvent('lira:sync')); } catch (_) {}
+    setToast(t.captureSending);
+  }
+
+  return (
+    <div className="capture-wrap">
+      <form className="table-card capture-card" onSubmit={save}>
+        <div className="capture-head">
+          <div>
+            <h2 className="capture-title">{t.captureTitle}</h2>
+            <p className="capture-intro">{t.captureIntro}</p>
+          </div>
+        </div>
+
+        <div className="capture-body">
+          <div className="capture-modes" role="group" aria-label={t.captureModeLabel}>
+            <button type="button" className={`chip ${mode==='apt'?'active':''}`}
+              aria-pressed={mode==='apt'} onClick={()=>setMode('apt')}>{t.aptIssues}</button>
+            <button type="button" className={`chip ${mode==='dept'?'active':''}`}
+              aria-pressed={mode==='dept'} onClick={()=>setMode('dept')}>{t.deptIssues}</button>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="capture-location">{mode==='apt' ? t.aptNum : t.department}</label>
+            {mode==='apt' ? (
+              <select id="capture-location" className="form-control" value={location}
+                onChange={e=>setLocation(e.target.value)}>
+                <option value="">{t.captureRoomSelect}</option>
+                {rooms.map(r => <option key={r}>{r}</option>)}
+              </select>
+            ) : (
+              <select id="capture-location" className="form-control" value={location}
+                onChange={e=>setLocation(e.target.value)}>
+                <option value="">{t.selectDept}</option>
+                {depts.map(d => <option key={d}>{d}</option>)}
+              </select>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="capture-type">{t.issueType}</label>
+            <select id="capture-type" className="form-control" value={type}
+              onChange={e=>setType(e.target.value)}>
+              <option value="">{t.selectDept}</option>
+              {types.map(x => <option key={x}>{x}</option>)}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="capture-problem">{t.problemDesc}</label>
+            <textarea id="capture-problem" className="form-control" rows={4} maxLength={500}
+              placeholder={t.descPlaceholder} value={problem}
+              onChange={e=>setProblem(e.target.value)} />
+          </div>
+
+          <div className="form-group">
+            <div className="form-group-h">
+              {t.photosLabel}
+              {photos.length > 0 && <span className="ph-count">{photos.length} / {MAX_PHOTOS}</span>}
+            </div>
+            <div className={`ph-box ${photos.length ? 'has-items' : ''}`}>
+              {photos.length > 0 && (
+                <div className="ph-strip">
+                  {photos.map(p => (
+                    <button type="button" key={p.id} className="ph-tile"
+                      onClick={()=>removePhoto(p.id)} aria-label={t.photoRemove} title={t.photoRemove}>
+                      <img className="ph-thumb" src={p.url} alt="" />
+                    </button>
+                  ))}
+                </div>
+              )}
+              {photos.length < MAX_PHOTOS && (
+                <div className="ph-actions">
+                  <button type="button" className="btn btn-ghost"
+                    onClick={()=>{ if (fileRef.current) { fileRef.current.setAttribute('capture','environment'); fileRef.current.click(); } }}>
+                    {Ic.camera} {t.photoTake}
+                  </button>
+                  <button type="button" className="btn btn-ghost"
+                    onClick={()=>{ if (fileRef.current) { fileRef.current.removeAttribute('capture'); fileRef.current.click(); } }}>
+                    {Ic.plus} {t.photoChoose}
+                  </button>
+                </div>
+              )}
+              <input ref={fileRef} type="file" accept="image/*" multiple hidden
+                onChange={e=>addPhotos(e.target.files)} />
+              <span className="ph-hint">{t.photosHint.replace('{n}', String(MAX_PHOTOS))}</span>
+            </div>
+          </div>
+
+          {formErr && <div className="capture-err" role="alert">{formErr}</div>}
+          {types.length === 0 && <div className="capture-note">{t.captureNoTypes}</div>}
+          {mode==='apt' && rooms.length === 0 && <div className="capture-note">{t.captureNoRooms}</div>}
+
+          <button className="btn btn-primary capture-save" type="submit"
+            disabled={busy || types.length === 0 || (mode==='apt' && rooms.length === 0)}>
+            {busy ? t.issueSaving : t.captureSave}
+          </button>
+        </div>
+      </form>
+
+      <div className="table-card capture-card">
+        <div className="capture-head">
+          <h2 className="capture-title">{t.capturePendingTitle}</h2>
+          {pending.length > 0 && (
+            <span className="capture-pending-count">
+              {t.capturePendingCount.replace('{count}', String(pending.length))}
+            </span>
+          )}
+        </div>
+        <div className="capture-body">
+          {pending.length === 0 && <div className="capture-empty">{t.captureEmpty}</div>}
+          {pending.map(row => (
+            <div key={row.id} className="capture-row">
+              <div className="capture-row-main">
+                <div className="capture-row-title">
+                  {row.mode==='apt' ? `${t.aptNum}${row.location}` : row.location} · {row.type}
+                </div>
+                <div className="capture-row-meta">
+                  {new Date(row.createdAt).toLocaleString()}
+                  {' · '}
+                  {row.mode==='apt' ? t.aptIssues : t.deptIssues}
+                  {row.photos && row.photos.length ? ' · ' + t.photoCountMany.replace('{n}', String(row.photos.length)) : ''}
+                </div>
+                <div className="capture-row-problem">{row.problem}</div>
+                {row.state === 'rejected' && (
+                  <div className="capture-row-bad">
+                    {t.captureRejected.replace('{error}', row.lastError || '')}
+                  </div>
+                )}
+                {row.state === 'needs-auth' && <div className="capture-row-bad">{t.captureNeedsAuth}</div>}
+                {row.state !== 'rejected' && row.state !== 'needs-auth' && row.lastError && (
+                  <div className="capture-row-wait">
+                    {t.captureRetryHint.replace('{error}', row.lastError)}
+                  </div>
+                )}
+              </div>
+              <div className="capture-row-actions">
+                {row.state !== 'rejected' && (
+                  <button type="button" className="btn btn-ghost" onClick={sendNow}>{t.captureSendNow}</button>
+                )}
+                <button type="button" className="btn btn-ghost capture-discard" onClick={()=>discard(row)}>
+                  {t.captureDiscard}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [lang,    setLang]    = useState(()=>loadLS('lira_lang','en'));
   const [theme,   setTheme]   = useState(()=>loadLS('lira_theme','light'));
@@ -18487,6 +19178,13 @@ function App() {
   const [focusGroup, setFocusGroup] = useState(null);
   // Collapsed by default: the sidebar looks unchanged until it is opened.
   const [miscOpen, setMiscOpen] = useState(false);
+  // The phone drawer. Below 860px the sidebar becomes a slide-over; on desktop
+  // this state is set and read but the sidebar is always visible anyway.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // How many captured issues are still on this device, for the nav badge. Read
+  // from IndexedDB rather than held as the source of truth, because it has to
+  // survive a reload and a second tab.
+  const [outboxCount, setOutboxCount] = useState(0);
   // Non-null while this user owes an LCU result for today, which is also the
   // condition under which the server refuses everything else.
   const [lcuPrompt, setLcuPrompt] = useState(null);
@@ -18645,6 +19343,77 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     window.addEventListener('lira:read-source', onRead);
     return () => window.removeEventListener('lira:read-source', onRead);
   }, []);
+
+  /* -- The outbox ---------------------------------------------------------
+     Captured work lives in IndexedDB, not in this component: closing the app,
+     reloading or opening a second tab must not lose it. App only mirrors the
+     count for the badge and owns the timer that drains the queue. */
+
+  useEffect(() => {
+    if (!me || me.id == null) { setOutboxCount(0); return; }
+    let cancelled = false;
+    const read = () => outboxAll(me.id).then(rows => {
+      if (!cancelled) setOutboxCount(rows.length);
+    });
+    read();
+    // Emitted by every mutation and by a completed sync run.
+    window.addEventListener('lira:outbox', read);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('lira:outbox', read);
+    };
+  }, [me && me.id]);
+
+  useEffect(() => {
+    if (!token) return;
+    let stopped = false;
+
+    const run = () => { if (!stopped) syncOutbox(session); };
+
+    /* One completed run is worth a toast only when it changed something the
+       person can see. A failure is left to the queue page, which shows the row
+       and why it is still there; a toast per attempt would be noise. */
+    const onResult = e => {
+      const r = e.detail && e.detail.sync;
+      if (!r) return;
+      if (r.sent > 0) {
+        setToast(t.toastSynced);
+        // A sent issue is a new row and a new number on the dashboard.
+        bumpIssues();
+        const todayStr = localISODate(new Date());
+        apiFetch(`/stats?date=${todayStr}`, {token}).then(res => setStats(res.stats)).catch(() => {});
+        apiFetch('/alerts?limit=1', {token}).then(res => setAlertsPendingCount(res.pending_count || 0)).catch(() => {});
+      } else if (r.rejected > 0) {
+        setToast(t.captureRejectedToast.replace('{count}', String(r.rejected)));
+      }
+    };
+
+    // On sign-in, when the connection returns, when the capture page asks after
+    // queueing something, and once a minute -- the last one covers a hotel proxy
+    // that answers 502 while navigator.onLine still says true.
+    run();
+    window.addEventListener('online', run);
+    window.addEventListener('lira:sync', run);
+    window.addEventListener('lira:outbox', onResult);
+    const timer = setInterval(run, 60 * 1000);
+
+    return () => {
+      stopped = true;
+      window.removeEventListener('online', run);
+      window.removeEventListener('lira:sync', run);
+      window.removeEventListener('lira:outbox', onResult);
+      clearInterval(timer);
+    };
+  }, [token, lang]);
+
+  // Warm the room inventory in the read cache even if the capture page is never
+  // opened online. Without this, a phone that only ever queues work would reach
+  // the capture page offline with no room numbers to choose from -- and a room
+  // number cannot be invented, the server checks it against this inventory.
+  useEffect(() => {
+    if (!token) return;
+    apiFetch('/rooms', {token}).catch(() => {});
+  }, [token]);
 
   function applyUpdate() {
     swAcceptedRef.current = true;
@@ -18997,12 +19766,20 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
       </LangCtx.Provider>
     );
 
+  // Navigating always closes the phone drawer, including when the destination is
+  // the page already showing -- otherwise tapping the current item leaves the
+  // drawer over it with no visible response.
+  const go = id => { setPage(id); setDrawerOpen(false); };
+
   const nav = [
     {id:'dashboard', label:t.dashboard,  icon:Ic.grid },
     // The inbox is a personal read state over everything below it, not a third
     // queue of recurring issues, so it sits with the dashboard rather than
     // beside Alerts -- and it carries a tray, not a second bell.
     {id:'inbox',     label:t.notifNav,   icon:Ic.inbox},
+    // Capturing is its own destination because it is the phone's way in: the
+    // full issue form assumes a connection, this one does not.
+    {id:'capture',   label:t.captureNav, icon:Ic.plus },
     {id:'apt',       label:t.aptIssues,  icon:Ic.list },
     {id:'dept',      label:t.deptIssues, icon:Ic.edit },
     {id:'history',   label:t.history,    icon:Ic.clock},
@@ -19044,7 +19821,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     <LangCtx.Provider value={lang}>
     <TypeColorCtx.Provider value={typeColorMap}>
       <div className="app">
-        <aside className="sidebar">
+        <aside className={`sidebar ${drawerOpen ? 'open' : ''}`}>
           <div className="sidebar-logo">
             <div className="logo-mark">{Ic.logo}</div>
             <div><div className="logo-text">LIRA</div><div className="logo-sub">{t.appSub}</div></div>
@@ -19064,7 +19841,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
                 {miscOpen && (
                   <div className="nav-group-children">
                     {n.children.map(c=>(
-                      <button key={c.id} className={`nav-item nav-item-child ${page===c.id?'active':''}`} onClick={()=>setPage(c.id)}>
+                      <button key={c.id} className={`nav-item nav-item-child ${page===c.id?'active':''}`} onClick={()=>go(c.id)}>
                         {c.icon}
                         <span>{c.label}</span>
                       </button>
@@ -19073,7 +19850,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
                 )}
               </div>
             ) : (
-              <button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>setPage(n.id)}
+              <button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>go(n.id)}
                 aria-label={n.id === 'inbox' && notifUnread > 0
                   ? t.notifNavUnread.replace('{label}', n.label).replace('{count}', notifUnread)
                   : undefined}>
@@ -19085,6 +19862,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
                   // the three that changes by looking at it.
                   const badge = n.id === 'inbox' ? notifUnread
                               : n.id === 'alerts' ? alertsPendingCount
+                              : n.id === 'capture' ? outboxCount
                               : n.id === 'maintenance' ? maintenanceDueCount : 0;
                   return badge > 0 ? (
                     <span className="nav-icon-wrap">
@@ -19098,7 +19876,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             ))}
           </div>
           <div className="sidebar-footer">
-            <button className="sidebar-user" onClick={()=>setPage('profile')}>
+            <button className="sidebar-user" onClick={()=>go('profile')}>
               <Avatar name={shortName(me.name)} idx={me.avatar_idx} src={me.avatar_data}/>
               <div>
                 <div className="sidebar-user-name">{shortName(me.name)}</div>
@@ -19109,11 +19887,22 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
           </div>
         </aside>
 
+        {/* Only rendered while the drawer is open, which only happens below
+            860px. Tapping it closes the drawer; it also stops a stray tap
+            landing on the form underneath. */}
+        {drawerOpen && (
+          <div className="sidebar-scrim" onClick={()=>setDrawerOpen(false)} aria-hidden="true" />
+        )}
+
         <div className="main">
           <div className="topbar">
             <div className="topbar-left">
-              <h1>{navLabel(page)}</h1>
-              <p>{today(lang)}</p>
+              <button className="menu-btn" aria-label={t.menu} aria-expanded={drawerOpen}
+                onClick={()=>setDrawerOpen(true)}>{Ic.menu}</button>
+              <div className="topbar-heading">
+                <h1>{navLabel(page)}</h1>
+                <p>{today(lang)}</p>
+              </div>
             </div>
             <div className="topbar-right">
               <ThemeToggle theme={theme} onChange={setTheme}/>
@@ -19174,6 +19963,8 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             {page==='inbox' && <NotificationsPage token={token} digest={notifDigest}
               unreadCount={notifUnread} onUnreadChange={setNotifUnread}
               onRetryDigest={refreshNotifSummary} setToast={setToast} onGoToPage={setPage}/>}
+            {page==='capture' && <CapturePage token={token} issueTypes={issueTypes}
+              departments={departments} currentUser={me} setToast={setToast}/>}
             {/* The issue tables fetch and paginate themselves. App used to hold
                 every issue ever logged and hand the same array to all three of
                 these pages at once, which meant the History page needed the whole
@@ -19236,6 +20027,15 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             </PageErrorBoundary>
           </div>
         </div>
+
+        {/* The phone's way into the capture form. Hidden on the capture page
+            itself, where it would land on the form already on screen. */}
+        {page !== 'capture' && (
+          <button className="mobile-capture-fab" onClick={()=>go('capture')}
+            aria-label={t.captureNav}>
+            {Ic.plus}<span>{t.captureNavShort}</span>
+          </button>
+        )}
 
         {modal && (
           <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)} onPhotosChanged={bumpIssues}/>
