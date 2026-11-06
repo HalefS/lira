@@ -4277,6 +4277,33 @@ function loadLS(key, fallback) {
 }
 function saveLS(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 
+/* A stable identity for this browser profile, used when signing in.
+   The server revokes only the token it issued to the same device, so a phone in
+   a plant room and the reception desk can hold sessions for one account at the
+   same time. Without an id the server falls back to revoking every token, which
+   is what a new sign-in used to do -- correct for a shared machine, but wrong
+   for the second device this app now runs on.
+
+   The id is generated once and kept out of the session object, so it survives
+   sign-out: signing in again on the same phone should replace this phone's
+   token, not create a second one. */
+function deviceIdentity() {
+  let id = loadLS('lira_device', null);
+  if (!id) {
+    id = newUUID();
+    saveLS('lira_device', id);
+  }
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+  let name = 'Web';
+  if (/iPhone/i.test(ua)) name = 'iPhone';
+  else if (/iPad/i.test(ua)) name = 'iPad';
+  else if (/Android/i.test(ua)) name = 'Android';
+  else if (/Windows/i.test(ua)) name = 'Windows';
+  else if (/Macintosh|Mac OS X/i.test(ua)) name = 'Mac';
+  else if (/Linux/i.test(ua)) name = 'Linux';
+  return { id: String(id).slice(0, 100), name: name.slice(0, 100) };
+}
+
 /* ── Map API issue → frontend shape ── */
 function mapIssue(i) {
   return {
@@ -6916,8 +6943,9 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange, notice 
   async function doLogin(e) {
     e.preventDefault(); setErr(''); setLoading(true);
     try {
+      const device = deviceIdentity();
       const data = await apiFetch('/tokens/authentication', {
-        method:'POST', body:{ email, password:pw }
+        method:'POST', body:{ email, password:pw, device_id: device.id, device_name: device.name }
       });
       onLogin(data.user, data.token);
     } catch(ex) {
