@@ -381,14 +381,21 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
 .sidebar-user:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .sidebar-user-name { font-size: 13px; font-weight: 500; }
 .sidebar-user-role { font-size: 11px; color: var(--gray-400); text-transform: capitalize; }
-.logout-btn {
+/* The two footer buttons share a shape; only the colour says which one adds
+   something and which one ends a session. */
+.logout-btn, .sidebar-install {
   width: 100%; padding: 8px 10px; border-radius: var(--radius-md);
   border: none; background: none; color: var(--gray-600);
   font-size: 13.5px; font-weight: 400; cursor: pointer; font-family: 'DM Sans', sans-serif;
   display: flex; align-items: center; gap: 9px; transition: all 0.12s; text-align: left;
 }
-.logout-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+.logout-btn svg, .sidebar-install svg { width: 15px; height: 15px; flex-shrink: 0; }
 .logout-btn:hover { background: var(--red-light); color: var(--red); }
+/* The install row is blue and only exists while the browser is offering an
+   install, so it is never a button that cannot do anything. */
+.sidebar-install { color: var(--blue); font-weight: 500; margin-bottom: 2px; }
+.sidebar-install:hover { background: var(--blue-light); }
+.sidebar-install:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* ── Avatar ── */
 .avatar-circle {
@@ -4418,6 +4425,9 @@ const T = {
   offlineBanner: 'You are offline. The last data loaded is still here, and new issues will be sent when the connection returns.',
   updateReady: 'A new version of LIRA is ready.',
   updateNow: 'Update now',
+  // The sidebar row that opens the browser's install prompt. Named the way
+  // Chrome and Edge name it in their own menus.
+  installApp: 'Install app',
     deptIssueBtn: 'Dept. issue',
     aptIssueBtn: 'Apt. issue',
     totalToday: 'Total issues today',
@@ -5487,6 +5497,7 @@ const T = {
     offlineBanner: 'Está offline. Os últimos dados carregados continuam aqui e as novas avarias serão enviadas quando a ligação voltar.',
     updateReady: 'Está disponível uma nova versão do LIRA.',
     updateNow: 'Atualizar agora',
+    installApp: 'Instalar app',
     deptIssueBtn: 'Avaria Dept.',
     aptIssueBtn: 'Avaria Apt.',
     totalToday: 'Total de avarias hoje',
@@ -6463,6 +6474,9 @@ const Ic = {
   edit:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M11 2l3 3-8 8H3v-3l8-8z"/></svg>,
   check:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 8l3.5 3.5L13 4"/></svg>,
   logout: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6"/></svg>,
+  // Install to this device: an arrow into a screen, not into a file. `download`
+  // next to it is a report leaving the app, which is a different promise.
+  install: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M8 4.8v5M5.6 7.6L8 10l2.4-2.4"/></svg>,
   shield: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2l5 2v4c0 3-2.5 5.5-5 6C5.5 13.5 3 11 3 8V4l5-2z"/></svg>,
   // The gear, for the settings destination. A hub plus eight teeth rather than a
   // full cog outline: at the 15px the nav gives it, an outlined gear closes up
@@ -19165,6 +19179,12 @@ function App() {
   const [updateReady, setUpdateReady] = useState(false);
   const swWaitingRef = useRef(null);
   const swAcceptedRef = useRef(false);
+  // The browser's install offer, kept rather than acted on. Chrome and Edge fire
+  // `beforeinstallprompt` once, when the origin is secure, the manifest is
+  // acceptable and the app is not already installed; the event is the only way to
+  // open the prompt later from a button of our own. Null means there is nothing
+  // to offer, and the sidebar row is not rendered at all.
+  const [installEvent, setInstallEvent] = useState(null);
   // The account the read cache belonged to on the previous render, so a session
   // that ends without an explicit sign-out (an expired token) still wipes it.
   const prevCacheUserRef = useRef(null);
@@ -19346,6 +19366,27 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     };
   }, []);
 
+  // The browser's install offer. `preventDefault` suppresses the browser's own
+  // mini-infobar so the offer appears where someone looking for an app icon will
+  // look. Both the event and the state are dropped after one use: the prompt
+  // cannot be replayed, and a dismissed one must not leave a dead button behind.
+  useEffect(() => {
+    const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+      || navigator.standalone === true;
+    if (standalone) return;
+    const onPrompt = e => {
+      e.preventDefault();
+      setInstallEvent(e);
+    };
+    const onInstalled = () => setInstallEvent(null);
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
   // The browser's connection state drives the banner. `online` is only a hint --
   // a connected wifi network with no route to the server still reports online --
   // but the opposite case is reliable and is the one worth warning about.
@@ -19448,6 +19489,22 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     const waiting = swWaitingRef.current;
     if (waiting) waiting.postMessage({type:'SKIP_WAITING'});
     else window.location.reload();
+  }
+
+  // Opening the stored install prompt. One `prompt()` call spends the event
+  // whatever the answer, so it is cleared first; a refusal is a legitimate
+  // answer and gets no banner. Cancelling the browser dialog throws in some
+  // builds, which is also not worth reporting.
+  async function installApp() {
+    const offer = installEvent;
+    if (!offer) return;
+    setInstallEvent(null);
+    try {
+      offer.prompt();
+      await offer.userChoice;
+    } catch (_) {
+      // Already used or cancelled: nothing to do.
+    }
   }
 
   // Load all data when logged in.
@@ -19911,6 +19968,15 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
                 <div className="sidebar-user-role">{me.role==='manager' ? t.managerRole : t.techRole}</div>
               </div>
             </button>
+            {/* Only when the browser has actually offered an install: HTTPS,
+                installability met, and not already installed. On iOS, on plain
+                HTTP, or in the installed app there is no row at all, rather
+                than a button that silently cannot work. */}
+            {installEvent && (
+              <button className="sidebar-install" onClick={installApp}>
+                {Ic.install} <span>{t.installApp}</span>
+              </button>
+            )}
             <button className="logout-btn" onClick={()=>logout()}>{Ic.logout} {t.signOut}</button>
           </div>
         </aside>
