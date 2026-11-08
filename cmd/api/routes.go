@@ -191,6 +191,29 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPost, "/v1/rooms", app.requireAuth(app.requireManager(app.createRoomHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/rooms/:id", app.requireAuth(app.requireManager(app.deleteRoomHandler)))
 
+	// Room map — the hotel's rooms by category, with the equipment found in each.
+	//
+	// Reads are open to any signed-in user: a technician surveying a floor needs
+	// the map, and every write of a room's own state is theirs to make, exactly
+	// like a maintenance check. The catalogs (categories and equipment types) are
+	// configuration, so only managers change those.
+	//
+	// The paths start with fresh first segments rather than nesting under
+	// /v1/rooms: httprouter cannot hold /v1/rooms/search and /v1/rooms/:id in the
+	// same method tree, and a third static child would repeat that trap.
+	router.HandlerFunc(http.MethodGet, "/v1/room-map", app.requireAuth(app.listRoomMapHandler))
+	router.HandlerFunc(http.MethodGet, "/v1/room-map/:room", app.requireAuth(app.showRoomMapRoomHandler))
+	router.HandlerFunc(http.MethodPut, "/v1/room-map/:room", app.requireAuth(app.saveRoomMapRoomHandler))
+
+	router.HandlerFunc(http.MethodGet, "/v1/room-categories", app.requireAuth(app.listRoomCategoriesHandler))
+	router.HandlerFunc(http.MethodPost, "/v1/room-categories", app.requireAuth(app.requireManager(app.createRoomCategoryHandler)))
+	router.HandlerFunc(http.MethodPatch, "/v1/room-categories/:id", app.requireAuth(app.requireManager(app.updateRoomCategoryHandler)))
+	router.HandlerFunc(http.MethodDelete, "/v1/room-categories/:id", app.requireAuth(app.requireManager(app.deleteRoomCategoryHandler)))
+
+	router.HandlerFunc(http.MethodGet, "/v1/equipment-types", app.requireAuth(app.listEquipmentTypesHandler))
+	router.HandlerFunc(http.MethodPost, "/v1/equipment-types", app.requireAuth(app.requireManager(app.createEquipmentTypeHandler)))
+	router.HandlerFunc(http.MethodDelete, "/v1/equipment-types/:id", app.requireAuth(app.requireManager(app.deleteEquipmentTypeHandler)))
+
 	// Weekly team shift rota.
 	//
 	// The two reads are PUBLIC, registered without requireAuth on purpose. A rota

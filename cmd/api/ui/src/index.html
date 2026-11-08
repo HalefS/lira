@@ -3341,6 +3341,183 @@ html.dark .auth-left   { background: var(--blue-light) !important; }
   background: var(--blue-light); border-radius: var(--radius-md);
   user-select: all;
 }
+
+/* ── Room map ─────────────────────────────────────────────────────────────
+   The map is a wall of small rooms, so the card carries three things in the
+   order they are read: the number (which room), the category (how it is
+   furnished) and the status (whether it is actually working). The left rail is
+   the only status colour, which leaves the card plain and stops a grid of
+   three hundred rooms from turning into a colour chart. */
+.rm-toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.rm-toolbar .search-wrap { flex: 1; min-width: 220px; }
+.rm-summary {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 10px; margin-bottom: 18px;
+}
+.rm-summary-card {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  background: #fff; border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg); padding: 11px 13px; cursor: pointer;
+  font-family: inherit; transition: border-color 0.12s, box-shadow 0.12s;
+}
+.rm-summary-card:hover { border-color: var(--gray-300); box-shadow: var(--shadow-sm); }
+.rm-summary-card.active { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-light); }
+.rm-summary-count { font-size: 22px; font-weight: 600; line-height: 1.1; }
+.rm-summary-label { font-size: 11.5px; color: var(--gray-400); font-weight: 500; }
+.rm-floor { margin-bottom: 22px; }
+.rm-floor-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.rm-floor-title {
+  font-size: 12px; font-weight: 600; color: var(--gray-600);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.rm-floor-line { flex: 1; height: 1px; background: var(--gray-200); }
+.rm-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(142px, 1fr));
+  gap: 9px;
+}
+.rm-room {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  background: #fff; border: 1px solid var(--gray-200);
+  border-left: 4px solid var(--gray-300);
+  border-radius: var(--radius-md); padding: 9px 11px;
+  cursor: pointer; font-family: inherit;
+  transition: transform 0.1s, box-shadow 0.12s, border-color 0.12s;
+}
+.rm-room:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.rm-room-number {
+  font-family: 'DM Mono', monospace; font-size: 15.5px; font-weight: 600;
+  color: var(--gray-900); line-height: 1.2;
+}
+.rm-room-cat {
+  font-size: 11.5px; color: var(--gray-500);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rm-room-foot { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; margin-top: 2px; }
+.rm-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--gray-400); }
+.rm-room-unassigned { border-left-color: var(--gray-300); }
+.rm-room-unchecked  { border-left-color: var(--amber); }
+.rm-room-ok         { border-left-color: var(--green); }
+.rm-room-degraded   { border-left-color: var(--amber); }
+.rm-room-down       { border-left-color: var(--red); }
+.rm-room-unassigned .rm-room-foot { color: var(--gray-400); }
+.rm-room-unchecked  .rm-room-foot { color: var(--amber); }
+.rm-room-ok         .rm-room-foot { color: var(--green); }
+.rm-room-degraded   .rm-room-foot { color: var(--amber); }
+.rm-room-down       .rm-room-foot { color: var(--red); }
+.rm-room-unassigned .rm-dot { background: var(--gray-400); }
+.rm-room-unchecked  .rm-dot { background: var(--amber); }
+.rm-room-ok         .rm-dot { background: var(--green); }
+.rm-room-degraded   .rm-dot { background: var(--amber); }
+.rm-room-down       .rm-dot { background: var(--red); }
+
+/* One equipment line in the room dialog: name on the left, present and
+   working steppers on the right. The labels sit over their own stepper so a
+   row of four numbers cannot be misread as two pairs. */
+.rm-eq-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 14px; align-items: center; padding: 9px 0;
+  border-bottom: 1px solid var(--gray-100);
+}
+.rm-eq-row:last-child { border-bottom: 0; }
+.rm-eq-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rm-eq-title { display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 500; }
+.rm-eq-icon { display: inline-flex; color: var(--gray-500); }
+.rm-eq-icon svg { width: 14px; height: 14px; }
+.rm-eq-meta { font-size: 11px; color: var(--gray-400); }
+.rm-eq-col { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.rm-stepper-label {
+  font-size: 9.5px; font-weight: 600; color: var(--gray-400);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.rm-stepper {
+  display: flex; align-items: center; overflow: hidden;
+  border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+}
+.rm-stepper button {
+  width: 27px; height: 27px; border: 0; background: var(--gray-50);
+  color: var(--gray-700); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.rm-stepper button:hover:not(:disabled) { background: var(--gray-100); }
+.rm-stepper button:disabled { opacity: 0.3; cursor: default; }
+.rm-stepper button svg { width: 11px; height: 11px; }
+.rm-stepper span {
+  min-width: 27px; text-align: center; font-size: 13px; font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--gray-900);
+}
+
+/* "Equipment checked". The hint explains the one thing that is easy to get
+   wrong: saving a category is not the same as surveying the room. */
+.rm-check-line {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 10px 12px; margin: 4px 0 12px;
+  border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+  background: var(--gray-50); cursor: pointer;
+}
+.rm-check-line input { margin-top: 2px; flex-shrink: 0; accent-color: var(--blue); }
+.rm-check-text { display: flex; flex-direction: column; gap: 2px; }
+.rm-check-title { font-size: 13px; font-weight: 500; color: var(--gray-900); }
+.rm-check-hint { font-size: 11.5px; color: var(--gray-400); line-height: 1.4; }
+
+/* Category and equipment management. */
+.rm-cat-list { display: flex; flex-direction: column; gap: 7px; }
+.rm-cat-row {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+  padding: 9px 11px; background: #fff;
+}
+.rm-cat-swatch { width: 15px; height: 15px; border-radius: 50%; flex-shrink: 0; }
+.rm-cat-main { min-width: 0; }
+.rm-cat-name { font-size: 13.5px; font-weight: 600; }
+.rm-cat-eq { font-size: 11.5px; color: var(--gray-400); }
+.rm-cat-actions { margin-left: auto; display: flex; gap: 3px; flex-shrink: 0; }
+.rm-cat-form {
+  display: flex; flex-direction: column; gap: 11px;
+  border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+  padding: 12px; background: var(--gray-50);
+}
+.rm-cat-eq-list { display: flex; flex-direction: column; gap: 6px; }
+.rm-cat-eq-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 74px;
+  gap: 10px; align-items: center; font-size: 13px;
+}
+.rm-cat-eq-name { display: flex; align-items: center; gap: 7px; }
+.rm-et-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rm-et-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px; border-radius: 999px;
+  background: var(--gray-50); border: 1px solid var(--gray-200);
+  font-size: 12px;
+}
+.rm-et-chip .rm-eq-icon svg { width: 12px; height: 12px; }
+.rm-et-chip button {
+  border: 0; background: none; color: var(--gray-400); cursor: pointer;
+  display: flex; align-items: center; padding: 0;
+}
+.rm-et-chip button:hover { color: var(--red); }
+.rm-et-chip button svg { width: 11px; height: 11px; }
+.rm-et-add { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+
+@media (max-width: 560px) {
+  .rm-grid { grid-template-columns: repeat(auto-fill, minmax(126px, 1fr)); }
+  .rm-cat-row { flex-wrap: wrap; }
+  .rm-cat-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
+}
+
+html.dark .rm-summary-card,
+html.dark .rm-room,
+html.dark .rm-cat-row { background: var(--gray-50) !important; border-color: var(--gray-300) !important; }
+html.dark .rm-cat-form { background: var(--gray-100) !important; border-color: var(--gray-300) !important; }
+html.dark .rm-stepper { border-color: var(--gray-300) !important; }
+html.dark .rm-stepper button { background: var(--gray-200) !important; color: var(--gray-900) !important; }
+html.dark .rm-stepper button:hover:not(:disabled) { background: var(--gray-300) !important; }
+html.dark .rm-et-chip { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
+html.dark .rm-eq-row { border-bottom-color: var(--gray-300) !important; }
+html.dark .rm-check-line { background: var(--gray-100) !important; border-color: var(--gray-300) !important; }
+html.dark .rm-check-title { color: var(--gray-900) !important; }
 </style>
 </head>
 <body>
@@ -5456,6 +5633,71 @@ const T = {
     captureRetryHint: 'Not sent yet: {error}',
     captureRejectedToast: '{count} queued issue(s) were refused by the server.',
     toastSynced: 'Queued issues sent.',
+
+    // Room map. The categories and equipment names are data the manager types,
+    // so only the frame around them is translated here.
+    roomMapNav: 'Rooms',
+    roomMapSubtitle: 'Every room, what it should contain, and what is actually working.',
+    roomMapSearch: 'Search room or category',
+    roomMapAll: 'All rooms',
+    roomMapAllFloors: 'All floors',
+    roomMapFloorLabel: 'Floor {floor}',
+    roomMapManage: 'Categories',
+    roomMapManagerTitle: 'Room categories and equipment',
+    roomMapManagerIntro: 'Create the room types first, then assign one to each room on the map. Equipment types are shared by every category.',
+    roomMapNoCategories: 'No categories yet. Create one to start classifying rooms.',
+    roomMapNoRooms: 'No rooms are in the inventory. Add room ranges in Settings first.',
+    roomMapNoMatch: 'No rooms match this filter.',
+    roomMapLoadError: 'The room map could not be loaded.',
+    roomMapSaveError: 'The room could not be saved.',
+    roomMapSaved: 'Room saved.',
+    roomMapCategorySaved: 'Category saved.',
+    roomMapEquipmentSaved: 'Equipment type saved.',
+    roomMapCategoryDeleteConfirm: 'Delete the category "{name}"? Rooms using it become unassigned, but their equipment records are kept.',
+    roomMapEquipmentDeleteConfirm: 'Delete the equipment type "{name}"? It will be removed from every category and every room.',
+    roomMapStatusUnassigned: 'Unassigned',
+    roomMapStatusUnchecked: 'Not checked',
+    roomMapStatusOk: 'OK',
+    roomMapStatusDegraded: 'Degraded',
+    roomMapStatusDown: 'Down',
+    roomMapRoomTitle: 'Room {room}',
+    roomMapCategory: 'Category',
+    roomMapNoCategory: 'No category',
+    roomMapEquipment: 'Equipment',
+    roomMapExpected: 'Expected: {count}',
+    roomMapNotExpected: 'Not expected',
+    roomMapPresent: 'Present',
+    roomMapWorking: 'Working',
+    roomMapNotes: 'Notes',
+    roomMapSave: 'Save room',
+    roomMapLastChecked: 'Last checked {date}',
+    roomMapNeverChecked: 'Never checked',
+    roomMapFewerPresent: 'Fewer present: {name}',
+    roomMapMorePresent: 'More present: {name}',
+    roomMapFewerWorking: 'Fewer working: {name}',
+    roomMapMoreWorking: 'More working: {name}',
+    roomMapSurveyed: 'Equipment checked',
+    roomMapSurveyedHint: 'Leave this off if the room has only been given a category, not surveyed yet.',
+    roomMapNewCategory: 'New category',
+    roomMapEditCategory: 'Edit category',
+    roomMapCategoryName: 'Category name',
+    roomMapColor: 'Colour',
+    roomMapEquipmentTemplate: 'Equipment in this category',
+    roomMapQuantity: 'Quantity',
+    roomMapSaveCategory: 'Save category',
+    roomMapEquipmentTypes: 'Equipment types',
+    roomMapAddEquipment: 'Add equipment type',
+    roomMapEquipmentName: 'Equipment name',
+    roomMapIcon: 'Icon',
+    roomMapDelete: 'Delete',
+    roomMapEdit: 'Edit',
+    roomMapNoEquipment: 'No equipment',
+    roomMapIconBox: 'Box',
+    roomMapIconTv: 'TV',
+    roomMapIconPhone: 'Phone',
+    roomMapIconServer: 'Router / server',
+    roomMapIconWifi: 'Wi-Fi',
+    roomMapIconLock: 'Lock',
   },
   pt: {
     appSub: 'Sistema de Relatórios IT Llana',
@@ -6450,6 +6692,69 @@ const T = {
     captureRetryHint: 'Ainda não enviada: {error}',
     captureRejectedToast: '{count} avaria(s) em espera foram recusadas pelo servidor.',
     toastSynced: 'Avarias em espera enviadas.',
+
+    roomMapNav: 'Quartos',
+    roomMapSubtitle: 'Todos os quartos, o que devem ter e o que está realmente a funcionar.',
+    roomMapSearch: 'Pesquisar quarto ou categoria',
+    roomMapAll: 'Todos os quartos',
+    roomMapAllFloors: 'Todos os pisos',
+    roomMapFloorLabel: 'Piso {floor}',
+    roomMapManage: 'Categorias',
+    roomMapManagerTitle: 'Categorias e equipamentos dos quartos',
+    roomMapManagerIntro: 'Crie primeiro os tipos de quarto e depois atribua um a cada quarto no mapa. Os tipos de equipamento são partilhados por todas as categorias.',
+    roomMapNoCategories: 'Ainda não há categorias. Crie uma para começar a classificar os quartos.',
+    roomMapNoRooms: 'Não há quartos no inventário. Adicione intervalos de quartos nas Definições primeiro.',
+    roomMapNoMatch: 'Nenhum quarto corresponde a este filtro.',
+    roomMapLoadError: 'Não foi possível carregar o mapa dos quartos.',
+    roomMapSaveError: 'Não foi possível guardar o quarto.',
+    roomMapSaved: 'Quarto guardado.',
+    roomMapCategorySaved: 'Categoria guardada.',
+    roomMapEquipmentSaved: 'Tipo de equipamento guardado.',
+    roomMapCategoryDeleteConfirm: 'Eliminar a categoria "{name}"? Os quartos que a usam ficam sem categoria, mas os registos de equipamento são mantidos.',
+    roomMapEquipmentDeleteConfirm: 'Eliminar o tipo de equipamento "{name}"? Será removido de todas as categorias e de todos os quartos.',
+    roomMapStatusUnassigned: 'Sem categoria',
+    roomMapStatusUnchecked: 'Por verificar',
+    roomMapStatusOk: 'OK',
+    roomMapStatusDegraded: 'Degradado',
+    roomMapStatusDown: 'Em baixo',
+    roomMapRoomTitle: 'Quarto {room}',
+    roomMapCategory: 'Categoria',
+    roomMapNoCategory: 'Sem categoria',
+    roomMapEquipment: 'Equipamento',
+    roomMapExpected: 'Esperado: {count}',
+    roomMapNotExpected: 'Não esperado',
+    roomMapPresent: 'Presente',
+    roomMapWorking: 'A funcionar',
+    roomMapNotes: 'Notas',
+    roomMapSave: 'Guardar quarto',
+    roomMapLastChecked: 'Última verificação: {date}',
+    roomMapNeverChecked: 'Nunca verificado',
+    roomMapFewerPresent: 'Menos presentes: {name}',
+    roomMapMorePresent: 'Mais presentes: {name}',
+    roomMapFewerWorking: 'Menos a funcionar: {name}',
+    roomMapMoreWorking: 'Mais a funcionar: {name}',
+    roomMapSurveyed: 'Equipamento verificado',
+    roomMapSurveyedHint: 'Deixe desligado se o quarto apenas recebeu uma categoria e ainda não foi verificado.',
+    roomMapNewCategory: 'Nova categoria',
+    roomMapEditCategory: 'Editar categoria',
+    roomMapCategoryName: 'Nome da categoria',
+    roomMapColor: 'Cor',
+    roomMapEquipmentTemplate: 'Equipamento nesta categoria',
+    roomMapQuantity: 'Quantidade',
+    roomMapSaveCategory: 'Guardar categoria',
+    roomMapEquipmentTypes: 'Tipos de equipamento',
+    roomMapAddEquipment: 'Adicionar tipo de equipamento',
+    roomMapEquipmentName: 'Nome do equipamento',
+    roomMapIcon: 'Ícone',
+    roomMapDelete: 'Eliminar',
+    roomMapEdit: 'Editar',
+    roomMapNoEquipment: 'Sem equipamento',
+    roomMapIconBox: 'Caixa',
+    roomMapIconTv: 'TV',
+    roomMapIconPhone: 'Telefone',
+    roomMapIconServer: 'Router / servidor',
+    roomMapIconWifi: 'Wi-Fi',
+    roomMapIconLock: 'Fechadura',
   }
 };
 
@@ -6462,6 +6767,14 @@ const TYPE_COLORS = { Door:'#1769AA', Internet:'#1D9E75', Hardware:'#D88A18', TV
 const Ic = {
   logo:   <svg viewBox="0 0 20 20" fill="white"><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5" opacity=".6"/><rect x="2" y="11" width="7" height="7" rx="1.5" opacity=".6"/><rect x="11" y="11" width="7" height="7" rx="1.5" opacity=".3"/></svg>,
   grid:   <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>,
+  // A floor plan rather than the four-square grid: the room map is rooms
+  // divided by walls, and using the dashboard's own grid would make two
+  // different destinations share a mark.
+  map:    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"><rect x="1.8" y="1.8" width="12.4" height="12.4" rx="1"/><path d="M8 1.8v5.4M1.8 7.2H8M8 9.1h6.2M12.2 7.2v7M8 9.1v5.1"/></svg>,
+  // Wi-Fi: two arcs and the origin dot, legible at the 14px an equipment row
+  // gives it. The lock is a shackle over a body, not a keyhole silhouette.
+  wifi:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2.2 6.1a8.6 8.6 0 0 1 11.6 0"/><path d="M4.5 8.7a5.2 5.2 0 0 1 7 0"/><path d="M6.8 11.2a2.2 2.2 0 0 1 2.4 0"/><circle cx="8" cy="13.4" r=".5" fill="currentColor" stroke="none"/></svg>,
+  lock:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3.2" y="7" width="9.6" height="7" rx="1.4"/><path d="M5.4 7V5.1a2.6 2.6 0 0 1 5.2 0V7"/><path d="M8 10.2v.8"/></svg>,
   menu:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>,
   list:   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 4h12M2 8h12M2 12h8"/></svg>,
   clock:  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>,
@@ -10903,6 +11216,600 @@ function TVSwapsPage({ token }) {
         </div>
       )}
       <LoadMore list={paged} t={t}/>
+    </>
+  );
+}
+
+/* The five statuses, in the order the summary tiles show them. Kept as data
+   rather than five hand-written tiles so the filter chips, the labels and the
+   counts cannot drift apart. */
+const ROOM_MAP_STATUSES = ['unassigned', 'unchecked', 'ok', 'degraded', 'down'];
+const ROOM_MAP_STATUS_KEY = {
+  unassigned: 'roomMapStatusUnassigned',
+  unchecked:  'roomMapStatusUnchecked',
+  ok:         'roomMapStatusOk',
+  degraded:   'roomMapStatusDegraded',
+  down:       'roomMapStatusDown',
+};
+const ROOM_MAP_STATUS_COLOR = {
+  unassigned: 'var(--gray-400)',
+  unchecked:  'var(--amber)',
+  ok:         'var(--green)',
+  degraded:   'var(--amber)',
+  down:       'var(--red)',
+};
+const ROOM_MAP_ICON_OPTIONS = [
+  ['box',    'roomMapIconBox'],
+  ['tv',     'roomMapIconTv'],
+  ['phone',  'roomMapIconPhone'],
+  ['server', 'roomMapIconServer'],
+  ['wifi',   'roomMapIconWifi'],
+  ['lock',   'roomMapIconLock'],
+];
+
+const roomMapStatusLabel = (t, status) => t[ROOM_MAP_STATUS_KEY[status]] || status;
+
+/* The catalog's icon token is data, so an unknown one must degrade to a plain
+   box rather than draw nothing. */
+function EquipmentGlyph({ icon }) {
+  return <span className="rm-eq-icon">{Ic[icon] || Ic.box}</span>;
+}
+
+function RoomMapRoomDialog({ room, token, categories, equipmentTypes, t, setToast, onClose, onSaved }) {
+  const [categoryId, setCategoryId] = React.useState(room.category_id ? String(room.category_id) : '');
+  const [notes, setNotes] = React.useState(room.notes || '');
+  const [counts, setCounts] = React.useState(() => {
+    const init = {};
+    for (const et of equipmentTypes) init[et.id] = { present: 0, working: 0 };
+    for (const e of room.equipment || []) {
+      init[e.equipment_type_id] = { present: e.present, working: e.working };
+    }
+    return init;
+  });
+  const [saving, setSaving] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  // A room can be classified before anyone walks it. Saving a category alone
+  // must leave the room "not checked", so "we have not looked" stays distinct
+  // from "we looked and it is fine". The box starts ticked for a room that has
+  // already been surveyed.
+  const [checked, setChecked] = React.useState(!!room.surveyed_at);
+
+  const category = categories.find(c => String(c.id) === categoryId) || null;
+  const expectedFor = id => {
+    const line = ((category && category.equipment) || []).find(e => e.equipment_type_id === id);
+    return line ? line.quantity : 0;
+  };
+
+  // What the category expects comes first, so a surveyor reads the list in the
+  // order they check the room. Equipment outside the template follows, because
+  // it can still be recorded (a router somebody added to one room).
+  const orderedTypes = React.useMemo(
+    () => [...equipmentTypes].sort((a, b) => {
+      const ea = expectedFor(a.id) > 0 ? 0 : 1;
+      const eb = expectedFor(b.id) > 0 ? 0 : 1;
+      if (ea !== eb) return ea - eb;
+      return a.name.localeCompare(b.name);
+    }),
+    [equipmentTypes, category]
+  );
+
+  // Present is the ceiling: raising working above it is the one thing a survey
+  // must not be able to record, so the control clamps rather than validating
+  // after the fact.
+  function change(id, field, delta) {
+    setCounts(prev => {
+      const cur = { ...(prev[id] || { present: 0, working: 0 }) };
+      if (field === 'present') {
+        cur.present = Math.max(0, Math.min(99, cur.present + delta));
+        if (cur.working > cur.present) cur.working = cur.present;
+      } else {
+        cur.working = Math.max(0, Math.min(cur.present, cur.working + delta));
+      }
+      return { ...prev, [id]: cur };
+    });
+  }
+
+  async function save() {
+    setSaving(true);
+    setErr('');
+    try {
+      const equipment = equipmentTypes
+        .map(et => ({
+          equipment_type_id: et.id,
+          present: (counts[et.id] && counts[et.id].present) || 0,
+          working: (counts[et.id] && counts[et.id].working) || 0,
+        }))
+        // Zero rows carry no information: a type the category expects but
+        // nobody counted is added back by the server as a zero, and a type the
+        // category does not expect at zero says nothing at all.
+        .filter(e => e.present > 0);
+
+      const res = await apiFetch(`/room-map/${room.room_number}`, {
+        method: 'PUT',
+        token,
+        body: {
+          category_id: categoryId ? Number(categoryId) : null,
+          notes,
+          surveyed: checked,
+          equipment,
+        },
+      });
+      onSaved(res.room);
+      setToast(t.roomMapSaved);
+    } catch (ex) {
+      setErr(ex.message || t.roomMapSaveError);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !saving && onClose()}>
+      <div className="modal" style={{ maxWidth: 620 }} role="dialog" aria-modal="true">
+        <div className="modal-header">
+          <div>
+            <h2>{t.roomMapRoomTitle.replace('{room}', room.room_number)}</h2>
+            <div style={{ fontSize: 11.5, color: 'var(--gray-400)', marginTop: 3 }}>
+              {room.surveyed_at
+                ? t.roomMapLastChecked.replace('{date}', new Date(room.surveyed_at).toLocaleString())
+                : t.roomMapNeverChecked}
+            </div>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose} disabled={saving}>{Ic.x}</button>
+        </div>
+
+        <div className="modal-body">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: ROOM_MAP_STATUS_COLOR[room.status] }}>
+            <span className="rm-dot" style={{ background: ROOM_MAP_STATUS_COLOR[room.status] }} />
+            <span style={{ fontWeight: 600 }}>{roomMapStatusLabel(t, room.status)}</span>
+          </div>
+
+          <div className="form-group">
+            <label>{t.roomMapCategory}</label>
+            <select className="form-control" value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+              <option value="">{t.roomMapNoCategory}</option>
+              {categories.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+            </select>
+          </div>
+
+          <label className="rm-check-line">
+            <input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} />
+            <span className="rm-check-text">
+              <span className="rm-check-title">{t.roomMapSurveyed}</span>
+              <span className="rm-check-hint">{t.roomMapSurveyedHint}</span>
+            </span>
+          </label>
+
+          <div>
+            <div className="form-group-h" style={{ marginBottom: 4 }}>{t.roomMapEquipment}</div>
+            {equipmentTypes.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: 'var(--gray-400)' }}>{t.roomMapNoEquipment}</div>
+            ) : orderedTypes.map(et => {
+              const c = counts[et.id] || { present: 0, working: 0 };
+              const expected = expectedFor(et.id);
+              return (
+                <div className="rm-eq-row" key={et.id}>
+                  <div className="rm-eq-name">
+                    <span className="rm-eq-title"><EquipmentGlyph icon={et.icon}/> {et.name}</span>
+                    <span className="rm-eq-meta">
+                      {expected > 0
+                        ? t.roomMapExpected.replace('{count}', expected)
+                        : t.roomMapNotExpected}
+                    </span>
+                  </div>
+                  <div className="rm-eq-col">
+                    <span className="rm-stepper-label">{t.roomMapPresent}</span>
+                    <div className="rm-stepper">
+                      <button type="button" onClick={() => change(et.id, 'present', -1)} disabled={c.present <= 0}
+                        aria-label={t.roomMapFewerPresent.replace('{name}', et.name)}>{Ic.minus}</button>
+                      <span>{c.present}</span>
+                      <button type="button" onClick={() => change(et.id, 'present', 1)} disabled={c.present >= 99}
+                        aria-label={t.roomMapMorePresent.replace('{name}', et.name)}>{Ic.plus}</button>
+                    </div>
+                  </div>
+                  <div className="rm-eq-col">
+                    <span className="rm-stepper-label">{t.roomMapWorking}</span>
+                    <div className="rm-stepper">
+                      <button type="button" onClick={() => change(et.id, 'working', -1)} disabled={c.working <= 0}
+                        aria-label={t.roomMapFewerWorking.replace('{name}', et.name)}>{Ic.minus}</button>
+                      <span>{c.working}</span>
+                      <button type="button" onClick={() => change(et.id, 'working', 1)} disabled={c.working >= c.present}
+                        aria-label={t.roomMapMoreWorking.replace('{name}', et.name)}>{Ic.plus}</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="form-group">
+            <label>{t.roomMapNotes}</label>
+            <textarea className="form-control" rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
+          </div>
+
+          {err && (
+            <div style={{ background: 'var(--red-light)', color: 'var(--red)', borderRadius: 'var(--radius-md)', padding: '9px 12px', fontSize: 12.5 }}>
+              {err}
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>{t.cancel}</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? t.issueSaving : t.roomMapSave}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoomMapCategoryManager({ token, categories, equipmentTypes, onReload, onClose, t, setToast }) {
+  const [editId, setEditId] = React.useState(null);
+  const [name, setName] = React.useState('');
+  const [color, setColor] = React.useState('#1769AA');
+  const [qty, setQty] = React.useState({});
+  const [err, setErr] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [newName, setNewName] = React.useState('');
+  const [newIcon, setNewIcon] = React.useState('box');
+  const [etErr, setEtErr] = React.useState('');
+
+  function resetForm() {
+    setEditId(null);
+    setName('');
+    setColor('#1769AA');
+    setQty({});
+    setErr('');
+  }
+
+  function startEdit(c) {
+    setEditId(c.id);
+    setName(c.name);
+    setColor(c.color || '#1769AA');
+    const next = {};
+    for (const e of c.equipment || []) next[e.equipment_type_id] = String(e.quantity);
+    setQty(next);
+    setErr('');
+  }
+
+  async function saveCategory(e) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setErr('');
+    try {
+      const equipment = equipmentTypes
+        .map(et => ({ equipment_type_id: et.id, quantity: Number(qty[et.id] || 0) }))
+        .filter(e => e.quantity > 0);
+      const body = { name, color, equipment };
+      if (editId) await apiFetch(`/room-categories/${editId}`, { method: 'PATCH', token, body });
+      else await apiFetch('/room-categories', { method: 'POST', token, body });
+      await onReload();
+      resetForm();
+      setToast(t.roomMapCategorySaved);
+    } catch (ex) {
+      setErr(ex.message || t.roomMapSaveError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeCategory(c) {
+    if (!confirm(t.roomMapCategoryDeleteConfirm.replace('{name}', c.name))) return;
+    setErr('');
+    try {
+      await apiFetch(`/room-categories/${c.id}`, { method: 'DELETE', token });
+      if (editId === c.id) resetForm();
+      await onReload();
+      setToast(t.roomMapCategorySaved);
+    } catch (ex) {
+      setErr(ex.message || t.roomMapSaveError);
+    }
+  }
+
+  async function addEquipmentType(e) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setEtErr('');
+    try {
+      await apiFetch('/equipment-types', { method: 'POST', token, body: { name: newName, icon: newIcon } });
+      setNewName('');
+      await onReload();
+      setToast(t.roomMapEquipmentSaved);
+    } catch (ex) {
+      setEtErr(ex.message || t.roomMapSaveError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeEquipmentType(et) {
+    if (!confirm(t.roomMapEquipmentDeleteConfirm.replace('{name}', et.name))) return;
+    setEtErr('');
+    try {
+      await apiFetch(`/equipment-types/${et.id}`, { method: 'DELETE', token });
+      await onReload();
+      setToast(t.roomMapEquipmentSaved);
+    } catch (ex) {
+      setEtErr(ex.message || t.roomMapSaveError);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !busy && onClose()}>
+      <div className="modal" style={{ maxWidth: 720 }} role="dialog" aria-modal="true">
+        <div className="modal-header">
+          <div>
+            <h2>{t.roomMapManagerTitle}</h2>
+            <div style={{ fontSize: 11.5, color: 'var(--gray-400)', marginTop: 3, maxWidth: 520 }}>{t.roomMapManagerIntro}</div>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose} disabled={busy}>{Ic.x}</button>
+        </div>
+
+        <div className="modal-body">
+          <div className="rm-cat-list">
+            {categories.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: 'var(--gray-400)' }}>{t.roomMapNoCategories}</div>
+            ) : categories.map(c => (
+              <div className="rm-cat-row" key={c.id}>
+                <span className="rm-cat-swatch" style={{ background: c.color || 'var(--gray-400)' }} />
+                <div className="rm-cat-main">
+                  <div className="rm-cat-name">{c.name}</div>
+                  <div className="rm-cat-eq">
+                    {(c.equipment || []).length === 0
+                      ? t.roomMapNoEquipment
+                      : c.equipment.map(e => `${e.quantity}× ${e.name}`).join(' · ')}
+                  </div>
+                </div>
+                <div className="rm-cat-actions">
+                  <button className="btn btn-ghost" style={{ padding: '3px 9px', fontSize: 12 }} onClick={() => startEdit(c)}>
+                    {t.roomMapEdit}
+                  </button>
+                  <button className="btn btn-ghost" style={{ padding: '3px 9px', fontSize: 12, color: 'var(--red)' }} onClick={() => removeCategory(c)}>
+                    {t.roomMapDelete}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <form className="rm-cat-form" onSubmit={saveCategory}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <div className="form-group-h">{editId ? t.roomMapEditCategory : t.roomMapNewCategory}</div>
+              {editId && <button type="button" className="btn btn-ghost" style={{ padding: '3px 9px', fontSize: 12 }} onClick={resetForm}>{t.cancel}</button>}
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>{t.roomMapCategoryName}</label>
+                <input className="form-control" value={name} onChange={e => setName(e.target.value)} required />
+              </div>
+              <div className="form-group">
+                <label>{t.roomMapColor}</label>
+                <input type="color" className="form-control" style={{ padding: 3, height: 36 }} value={color} onChange={e => setColor(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>{t.roomMapEquipmentTemplate}</label>
+              <div className="rm-cat-eq-list">
+                {equipmentTypes.map(et => (
+                  <div className="rm-cat-eq-row" key={et.id}>
+                    <span className="rm-cat-eq-name"><EquipmentGlyph icon={et.icon}/> {et.name}</span>
+                    <input type="number" min="0" max="99" className="form-control" style={{ padding: '5px 8px', fontSize: 13 }}
+                      value={qty[et.id] || ''} placeholder="0"
+                      aria-label={`${t.roomMapQuantity}: ${et.name}`}
+                      onChange={e => setQty(prev => ({ ...prev, [et.id]: e.target.value }))} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {err && <div style={{ color: 'var(--red)', fontSize: 12.5 }}>{err}</div>}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                {busy ? t.issueSaving : t.roomMapSaveCategory}
+              </button>
+            </div>
+          </form>
+
+          <div>
+            <div className="form-group-h" style={{ marginBottom: 7 }}>{t.roomMapEquipmentTypes}</div>
+            <div className="rm-et-chips">
+              {equipmentTypes.map(et => (
+                <span className="rm-et-chip" key={et.id}>
+                  <EquipmentGlyph icon={et.icon}/> {et.name}
+                  <button type="button" onClick={() => removeEquipmentType(et)}
+                    aria-label={`${t.roomMapDelete}: ${et.name}`}>{Ic.x}</button>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <form className="rm-et-add" onSubmit={addEquipmentType}>
+            <input className="form-control" style={{ flex: 1, minWidth: 150 }} placeholder={t.roomMapEquipmentName}
+              value={newName} onChange={e => setNewName(e.target.value)} required />
+            <select className="form-control" value={newIcon} onChange={e => setNewIcon(e.target.value)} aria-label={t.roomMapIcon}>
+              {ROOM_MAP_ICON_OPTIONS.map(([value, key]) => <option key={value} value={value}>{t[key]}</option>)}
+            </select>
+            <button type="submit" className="btn btn-ghost" disabled={busy}>{Ic.plus} {t.roomMapAddEquipment}</button>
+          </form>
+          {etErr && <div style={{ color: 'var(--red)', fontSize: 12.5 }}>{etErr}</div>}
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={onClose}>{t.cancel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoomMapPage({ token, currentUser, setToast }) {
+  const lang = React.useContext(LangCtx);
+  const t = T[lang];
+  const [data, setData] = React.useState(null);
+  const [error, setError] = React.useState('');
+  const [loading, setLoading] = React.useState(true);
+  const [status, setStatus] = React.useState('all');
+  const [floor, setFloor] = React.useState('all');
+  const [query, setQuery] = React.useState('');
+  const [openRoom, setOpenRoom] = React.useState(null);
+  const [manage, setManage] = React.useState(false);
+  const [retry, setRetry] = React.useState(0);
+
+  async function load(silent) {
+    if (!silent) setLoading(true);
+    setError('');
+    try {
+      const res = await apiFetch('/room-map', { token });
+      setData(res.room_map);
+    } catch (ex) {
+      setError(ex.message || t.roomMapLoadError);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }
+
+  React.useEffect(() => { load(false); }, [token, retry]);
+
+  async function refresh() { await load(true); }
+
+  const rooms = (data && data.rooms) || [];
+  const categories = (data && data.categories) || [];
+  const equipmentTypes = (data && data.equipment_types) || [];
+  const summary = (data && data.summary) || { total: 0, unassigned: 0, unchecked: 0, ok: 0, degraded: 0, down: 0 };
+
+  const floors = React.useMemo(
+    () => [...new Set(rooms.map(r => r.floor))].sort((a, b) => a - b),
+    [rooms]
+  );
+
+  const q = query.trim().toLowerCase();
+  const shown = rooms.filter(r => {
+    if (status !== 'all' && r.status !== status) return false;
+    if (floor !== 'all' && r.floor !== floor) return false;
+    if (q && !(`${r.room_number} ${r.category_name || ''}`.toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  const byFloor = React.useMemo(() => {
+    const out = {};
+    for (const r of shown) (out[r.floor] = out[r.floor] || []).push(r);
+    return Object.keys(out).sort((a, b) => Number(a) - Number(b)).map(f => [Number(f), out[f]]);
+  }, [shown]);
+
+  const tiles = [
+    { id: 'all', label: t.roomMapAll, count: summary.total, color: 'var(--gray-900)' },
+    ...ROOM_MAP_STATUSES.map(s => ({
+      id: s, label: roomMapStatusLabel(t, s), count: summary[s] || 0, color: ROOM_MAP_STATUS_COLOR[s],
+    })),
+  ];
+
+  return (
+    <>
+      <p style={{ fontSize: 13, color: 'var(--gray-400)', margin: '-6px 0 16px', maxWidth: 760 }}>{t.roomMapSubtitle}</p>
+
+      <div className="rm-toolbar">
+        <div className="search-wrap">
+          {Ic.search}
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t.roomMapSearch} aria-label={t.roomMapSearch}/>
+        </div>
+        <div className="filter-chips">
+          <button className={`chip ${floor === 'all' ? 'active' : ''}`} onClick={() => setFloor('all')}>{t.roomMapAllFloors}</button>
+          {floors.map(f => (
+            <button key={f} className={`chip ${floor === f ? 'active' : ''}`} onClick={() => setFloor(f)}>
+              {t.roomMapFloorLabel.replace('{floor}', f)}
+            </button>
+          ))}
+        </div>
+        {currentUser && currentUser.role === 'manager' && (
+          <button className="btn btn-ghost" onClick={() => setManage(true)}>{Ic.gear} {t.roomMapManage}</button>
+        )}
+      </div>
+
+      {data && categories.length === 0 && (
+        <div className="page-banner page-banner-info" style={{ marginBottom: 16 }}>
+          {Ic.info}
+          <span>{t.roomMapNoCategories}</span>
+          {currentUser && currentUser.role === 'manager' && (
+            <button className="page-banner-action" onClick={() => setManage(true)}>{t.roomMapManage}</button>
+          )}
+        </div>
+      )}
+
+      <div className="rm-summary">
+        {tiles.map(tile => (
+          <button key={tile.id} className={`rm-summary-card ${status === tile.id ? 'active' : ''}`}
+            onClick={() => setStatus(tile.id)}>
+            <span className="rm-summary-count" style={{ color: tile.color }}>{tile.count}</span>
+            <span className="rm-summary-label">{tile.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="empty-state"><p>{t.analyticsLoading}</p></div>
+      ) : error && !data ? (
+        <div className="table-card">
+          <div style={{ background: 'var(--red-light)', color: 'var(--red)', borderRadius: 'var(--radius-md)', padding: '10px 16px', fontSize: 13, margin: '14px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ flex: 1 }}>{error}</span>
+            <button className="btn btn-ghost" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => setRetry(n => n + 1)}>{t.tryAgain}</button>
+          </div>
+        </div>
+      ) : rooms.length === 0 ? (
+        <div className="empty-state">{Ic.map}<p>{t.roomMapNoRooms}</p></div>
+      ) : shown.length === 0 ? (
+        <div className="empty-state">{Ic.search}<p>{t.roomMapNoMatch}</p></div>
+      ) : byFloor.map(([floorNumber, list]) => (
+        <section className="rm-floor" key={floorNumber}>
+          <div className="rm-floor-head">
+            <span className="rm-floor-title">{t.roomMapFloorLabel.replace('{floor}', floorNumber)}</span>
+            <span className="rm-floor-line" />
+          </div>
+          <div className="rm-grid">
+            {list.map(r => (
+              <button key={r.room_number} className={`rm-room rm-room-${r.status}`} onClick={() => setOpenRoom(r)}>
+                <span className="rm-room-number">{r.room_number}</span>
+                <span className="rm-room-cat">{r.category_name || t.roomMapNoCategory}</span>
+                <span className="rm-room-foot">
+                  <span className="rm-dot" style={{ background: ROOM_MAP_STATUS_COLOR[r.status] }} />
+                  {roomMapStatusLabel(t, r.status)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ))}
+
+      {openRoom && (
+        <RoomMapRoomDialog
+          room={openRoom}
+          token={token}
+          categories={categories}
+          equipmentTypes={equipmentTypes}
+          t={t}
+          setToast={setToast}
+          onClose={() => setOpenRoom(null)}
+          onSaved={async room => { setOpenRoom(null); await refresh(); }}
+        />
+      )}
+
+      {manage && (
+        <RoomMapCategoryManager
+          token={token}
+          categories={categories}
+          equipmentTypes={equipmentTypes}
+          onReload={refresh}
+          onClose={() => setManage(false)}
+          t={t}
+          setToast={setToast}
+        />
+      )}
     </>
   );
 }
@@ -19872,6 +20779,9 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     // Maintenance sits next to Alerts because both are work waiting on somebody,
     // not a record to read back.
     {id:'maintenance', label:t.maintenance, icon:Ic.tool },
+    // The rooms destination sits beside Maintenance because it is the same kind
+    // of work: a survey of what is in a room and whether it works.
+    {id:'roommap',    label:t.roomMapNav, icon:Ic.map },
     {id:'analytics', label:t.analytics,  icon:Ic.trending},
     // The rota is public -- anyone can read it, which is why it sits above
     // the manager-only System and Settings entries rather than beside them.
@@ -20068,6 +20978,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             {page==='history'   && <HistoryPage token={token} issueTypes={issueTypes} epoch={issuesEpoch} currentUser={me} slaMinutes={settings?.sla_minutes} onDelete={askDelete} onEdit={(i,m)=>setEditing({issue:i,mode:m})}/>}
             {page==='alerts'    && <AlertsPage currentUser={me} token={token} onCountsUpdate={setAlertsPendingCount} setToast={setToast}/>}
             {page==='maintenance' && <MaintenancePage token={token} currentUser={me} departments={departments} setToast={setToast} onCountsUpdate={setMaintenanceDueCount} onRequestIssue={req => setMaintIssue(req)}/>}
+            {page==='roommap' && <RoomMapPage token={token} currentUser={me} setToast={setToast}/>}
             {page==='analytics' && <AnalyticsPage token={token} alertsPendingCount={alertsPendingCount}/>}
             {page==='consumables' && <ConsumablesPage token={token} currentUser={me} onCatalogUpdate={setConsumableItems} setToast={setToast}/>}
             {page==='support' && <SupportPage token={token}/>}
