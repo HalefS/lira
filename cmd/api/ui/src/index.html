@@ -3045,6 +3045,14 @@ tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
   z-index: 200; animation: toastIn 0.2s ease; display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow-md);
 }
 @keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+@media (prefers-reduced-motion: reduce) {
+  .auth-card { animation: none; }
+  .modal-overlay { animation: none; }
+  .modal { animation: none; }
+  .toast { animation: none; }
+  .consumable-chip { animation: none; }
+  .tp-chip { animation: none; }
+}
 .toast-dot { width: 8px; height: 8px; border-radius: 50%; background: #63C48A; flex-shrink: 0; }
 
 /* ── lang toggle ── */
@@ -9882,7 +9890,7 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
         <span className="table-title">{tableMode==='apt' ? t.aptIssuesTitle : t.deptIssuesTitle}</span>
         <div className="table-actions">
           <div className="filter-chips">
-            {chips.map(c=><button key={c.value ?? '__all__'} className={`chip ${filter===c.value?'active':''}`} onClick={()=>setFilter(c.value)}>{c.label}</button>)}
+            {chips.map(c=><button key={c.value ?? '__all__'} className={`chip ${filter===c.value?'active':''}`} aria-pressed={filter===c.value} onClick={()=>setFilter(c.value)}>{c.label}</button>)}
           </div>
           <div className="search-wrap">
             {Ic.search}
@@ -10162,10 +10170,10 @@ function AlertsPage({ currentUser, token, onCountsUpdate, setToast }) {
       </div>
 
       <div style={{display:'flex',gap:8,marginBottom:16}}>
-        <button className={`chip ${filter==='pending'?'active':''}`} onClick={()=>setFilter('pending')}>
+        <button className={`chip ${filter==='pending'?'active':''}`} aria-pressed={filter==='pending'} onClick={()=>setFilter('pending')}>
           {t.alertsPending} ({pendingCount})
         </button>
-        <button className={`chip ${filter==='solved'?'active':''}`} onClick={()=>setFilter('solved')}>
+        <button className={`chip ${filter==='solved'?'active':''}`} aria-pressed={filter==='solved'} onClick={()=>setFilter('solved')}>
           {t.alertsSolved} ({solvedCount})
         </button>
       </div>
@@ -10799,10 +10807,10 @@ function NotificationsPage({ token, digest, unreadCount, onUnreadChange, onRetry
       <NotificationDigest digest={digest} unreadCount={unreadCount} onRetry={onRetryDigest} t={t}/>
 
       <div className="notif-toolbar">
-        <button className={`chip ${filter==='all'?'active':''}`} onClick={()=>setFilter('all')}>
+        <button className={`chip ${filter==='all'?'active':''}`} aria-pressed={filter==='all'} onClick={()=>setFilter('all')}>
           {t.notifFilterAll}
         </button>
-        <button className={`chip ${filter==='unread'?'active':''}`} onClick={()=>setFilter('unread')}>
+        <button className={`chip ${filter==='unread'?'active':''}`} aria-pressed={filter==='unread'} onClick={()=>setFilter('unread')}>
           {t.notifFilterUnread}{liveUnread > 0 ? ` (${liveUnread})` : ''}
         </button>
         <div className="notif-toolbar-right">
@@ -12348,10 +12356,10 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
   const deptRows   = report ? (report.entries || []).filter(e => e.mode !== 'apt') : [];
 
   const statCards = report ? [
-    { label: t.item + 's',       value: report.total_quantity, sub: t.weekTotalUnits,   color: '#1769AA' },
-    { label: t.records,          value: report.total_records,  sub: t.weekTotalRecords, color: '#1D9E75' },
-    { label: t.weekDistinctItems,value: report.distinct_items, sub: t.byItem,           color: '#2E8B57' },
-    { label: t.weekLocations,    value: report.locations_count,sub: t.byLocation,       color: '#D88A18' },
+    { label: t.item + 's',       value: report.total_quantity, sub: t.weekTotalUnits,   color: 'var(--blue)' },
+    { label: t.records,          value: report.total_records,  sub: t.weekTotalRecords, color: 'var(--teal)' },
+    { label: t.weekDistinctItems,value: report.distinct_items, sub: t.byItem,           color: 'var(--green)' },
+    { label: t.weekLocations,    value: report.locations_count,sub: t.byLocation,       color: 'var(--amber)' },
   ] : [];
 
   async function saveStock(body) {
@@ -12682,7 +12690,7 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
                         <span>{x.item}</span>
                       </div>
                       <div className="week-bar-track">
-                        <div className="week-bar-fill" style={{width:`${Math.max(4,(x.quantity/itemMax)*100)}%`,background:'#1769AA'}}/>
+                        <div className="week-bar-fill" style={{width:`${Math.max(4,(x.quantity/itemMax)*100)}%`,background:'var(--blue)'}}/>
                       </div>
                       <div className="week-bar-count">{x.quantity}</div>
                     </div>
@@ -12695,7 +12703,7 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
                     <div className="week-bar-row" key={`${x.mode}:${x.location}`}>
                       <div className="week-bar-label"><span>{x.location}</span></div>
                       <div className="week-bar-track">
-                        <div className="week-bar-fill" style={{width:`${Math.max(4,(x.quantity/locMax)*100)}%`,background:'#1D9E75'}}/>
+                        <div className="week-bar-fill" style={{width:`${Math.max(4,(x.quantity/locMax)*100)}%`,background:'var(--teal)'}}/>
                       </div>
                       <div className="week-bar-count">{x.quantity}</div>
                     </div>
@@ -12711,7 +12719,7 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
                         <span>{x.name}</span>
                       </div>
                       <div className="week-bar-track">
-                        <div className="week-bar-fill" style={{width:`${Math.max(4,(x.quantity/techMax)*100)}%`,background:'#2E8B57'}}/>
+                        <div className="week-bar-fill" style={{width:`${Math.max(4,(x.quantity/techMax)*100)}%`,background:'var(--green)'}}/>
                       </div>
                       <div className="week-bar-count">{x.quantity}</div>
                     </div>
@@ -14868,7 +14876,7 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
                 : report.by_technician.map(ts=>(
                     <div className="bar-row" key={ts.user_id}>
                       <div className="bar-label"><Avatar name={shortName(ts.name)} idx={ts.avatar_idx} size="sm"/>{shortName(ts.name)}</div>
-                      <div className="bar-track"><div className="bar-fill" style={{width:`${(ts.count/maxTech)*100}%`,background:'#1769AA'}}></div></div>
+                      <div className="bar-track"><div className="bar-fill" style={{width:`${(ts.count/maxTech)*100}%`,background:'var(--blue)'}}></div></div>
                       <div className="bar-count">{ts.count}</div>
                     </div>
                   ))
@@ -15072,10 +15080,10 @@ function ProfilePage({ currentUser, token, onSessionUpdate, setToast, lang, onLa
   ];
 
   const statCards = myStats ? [
-    {label:'Total issues',  value: myStats.total_issues, color:'#1769AA'},
-    {label:'Resolved',      value: myStats.resolved,     color:'#2E8B57'},
-    {label:'This week',     value: myStats.this_week,    color:'#D88A18'},
-    {label:'Avg. time',     value: myStats.avg_minutes.toFixed(1)+'m', color:'#1D9E75'},
+    {label:'Total issues',  value: myStats.total_issues, color:'var(--blue)'},
+    {label:'Resolved',      value: myStats.resolved,     color:'var(--green)'},
+    {label:'This week',     value: myStats.this_week,    color:'var(--amber)'},
+    {label:'Avg. time',     value: myStats.avg_minutes.toFixed(1)+'m', color:'var(--teal)'},
   ] : [];
 
   return (
