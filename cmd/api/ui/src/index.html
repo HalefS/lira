@@ -15164,7 +15164,7 @@ function ProfilePage({ currentUser, token, onSessionUpdate, setToast, lang, onLa
               </div>
             </div>
             <div style={{display:'flex',justifyContent:'flex-end'}}>
-              <button className="btn btn-primary" onClick={saveIdentity} disabled={saving}>
+              <button className="btn btn-primary" onClick={saveIdentity} disabled={saving} aria-busy={saving}>
                 {Ic.check} {saving ? 'Saving…' : 'Save changes'}
               </button>
             </div>
@@ -20080,7 +20080,7 @@ function CapturePage({ token, issueTypes, departments, currentUser, setToast }) 
           {mode==='apt' && rooms.length === 0 && <div className="capture-note">{t.captureNoRooms}</div>}
 
           <button className="btn btn-primary capture-save" type="submit"
-            disabled={busy || types.length === 0 || (mode==='apt' && rooms.length === 0)}>
+            disabled={busy || types.length === 0 || (mode==='apt' && rooms.length === 0)} aria-busy={busy}>
             {busy ? t.issueSaving : t.captureSave}
           </button>
         </div>
