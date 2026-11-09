@@ -432,6 +432,7 @@ img.avatar-circle { object-fit: cover; background: var(--gray-100); }
 .btn-danger:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-full { width: 100%; justify-content: center; padding: 10px 14px; font-size: 14px; }
 .btn svg { width: 14px; height: 14px; }
+.btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* ── Stats ── */
 .stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 22px; }
@@ -547,6 +548,7 @@ tbody tr.row-clickable { cursor: pointer; }
 .icon-btn:hover { background: var(--gray-100); color: var(--gray-900); }
 .icon-btn.danger:hover { background: var(--red-light); color: var(--red); }
 .icon-btn svg { width: 14px; height: 14px; }
+.icon-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .color-swatch-input {
   width: 24px; height: 24px; padding: 0; border: 1px solid var(--gray-200);
   border-radius: 50%; cursor: pointer; background: none; overflow: hidden;
@@ -2840,6 +2842,10 @@ html.dark .room-picker-empty { color: var(--gray-400) !important; }
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 45%, transparent); }
   50%      { box-shadow: 0 0 0 4px transparent; }
 }
+@media (prefers-reduced-motion: reduce) {
+  .sys-live-dot { animation: none; }
+  .sys-refresh-btn.spinning svg { animation: none; }
+}
 .sys-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
 @media (max-width: 1100px) { .sys-grid { grid-template-columns: repeat(2, 1fr); } }
 .sys-card { background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: 18px 20px; }
@@ -3012,8 +3018,9 @@ tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
 .digest-note svg { width:16px; height:16px; flex-shrink:0; color:var(--gray-400); }
 .digest-foot { display:flex; align-items:center; gap:12px; padding:0 20px 14px; font-size:12px; color:var(--gray-400); flex-wrap:wrap; }
 .digest-foot .digest-link { margin-left:auto; }
-.digest-link { background:none; border:none; padding:0; font:inherit; color:var(--blue); cursor:pointer; font-size:12.5px; font-weight:500; }
+.digest-link { background:none; border:none; padding:4px 0; font:inherit; color:var(--blue); cursor:pointer; font-size:12.5px; font-weight:500; }
 .digest-link:hover { text-decoration:underline; }
+.digest-link:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 2px; }
 .digest-skel { height:72px; margin:14px 20px; border-radius:var(--radius-md); background:var(--gray-100); }
 @media (max-width: 560px) {
   .notif-item { grid-template-columns:26px minmax(0,1fr); }
@@ -9741,7 +9748,7 @@ function Dashboard({ users, stats, consumableItems, onGoToPage, digest, notifUnr
           {byTech.map(ts=>(
             <div className="bar-row" key={ts.user_id}>
               <div className="bar-label"><Avatar name={shortName(ts.name)} idx={ts.avatar_idx} size="sm"/>{shortName(ts.name)}</div>
-              <div className="bar-track"><div className="bar-fill" style={{width:`${(ts.count/maxWork)*100}%`,background:'#1769AA'}}></div></div>
+              <div className="bar-track"><div className="bar-fill" style={{width:`${(ts.count/maxWork)*100}%`,background:'var(--blue)'}}></div></div>
               <div className="bar-count">{ts.count}</div>
             </div>
           ))}
@@ -9752,10 +9759,10 @@ function Dashboard({ users, stats, consumableItems, onGoToPage, digest, notifUnr
           {Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([type,count])=>(
             <div className="bar-row" key={type}>
               <div className="bar-label">
-                <span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:TYPE_COLORS[type]||'#888',flexShrink:0}}></span>
+                <span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:TYPE_COLORS[type]||'var(--gray-400)',flexShrink:0}}></span>
                 {type}
               </div>
-              <div className="bar-track"><div className="bar-fill" style={{width:`${(count/maxType)*100}%`,background:TYPE_COLORS[type]||'#888'}}></div></div>
+              <div className="bar-track"><div className="bar-fill" style={{width:`${(count/maxType)*100}%`,background:TYPE_COLORS[type]||'var(--gray-400)'}}></div></div>
               <div className="bar-count">{count}</div>
             </div>
           ))}
@@ -14837,10 +14844,10 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
                 : Object.entries(report.by_type).sort((a,b)=>b[1]-a[1]).map(([type,count])=>(
                     <div className="bar-row" key={type}>
                       <div className="bar-label">
-                        <span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:TYPE_COLORS[type]||'#888',flexShrink:0}}></span>
+                        <span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:TYPE_COLORS[type]||'var(--gray-400)',flexShrink:0}}></span>
                         {type}
                       </div>
-                      <div className="bar-track"><div className="bar-fill" style={{width:`${(count/maxType)*100}%`,background:TYPE_COLORS[type]||'#888'}}></div></div>
+                      <div className="bar-track"><div className="bar-fill" style={{width:`${(count/maxType)*100}%`,background:TYPE_COLORS[type]||'var(--gray-400)'}}></div></div>
                       <div className="bar-count">{count}</div>
                     </div>
                   ))
