@@ -464,6 +464,7 @@ img.avatar-circle { object-fit: cover; background: var(--gray-100); }
 }
 .chip:hover { border-color: var(--blue-mid); color: var(--blue); }
 .chip.active { background: var(--blue-light); color: var(--blue); border-color: var(--blue-mid); }
+.chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .search-wrap {
   display: flex; align-items: center; gap: 7px;
   background: var(--gray-100); border: 1px solid var(--gray-200); border-radius: var(--radius-md); padding: 5px 11px;
@@ -474,6 +475,8 @@ img.avatar-circle { object-fit: cover; background: var(--gray-100); }
   font-size: 13px; color: var(--gray-900); font-family: 'DM Sans', sans-serif; width: 130px;
 }
 .search-wrap input::placeholder { color: var(--gray-400); }
+.search-wrap input:focus { outline: none; }
+.search-wrap:focus-within { border-color: var(--blue-mid); box-shadow: 0 0 0 3px rgba(24,95,165,0.1); }
 table { width: 100%; border-collapse: collapse; }
 thead th {
   padding: 9px 18px; text-align: left; font-size: 11px; font-weight: 600;
@@ -501,6 +504,9 @@ tbody tr.row-clickable { cursor: pointer; }
   100% { box-shadow: 0 0 0 6px rgba(37,99,235,0); }
 }
 .status-highlight { animation: statusHighlightPulse 700ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .row-enter td, .status-highlight { animation: none; }
+}
 
 /* ── Badges ── */
 .badge {
@@ -9806,7 +9812,7 @@ function IssueTime({ minutes, sla, t }) {
 
    `retrySignal` is the matching half: the parent increments it so one Try again
    re-asks for both tables rather than only the one it was clicked in. */
-function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUser, newIssueId, slaMinutes, onDelete, onEdit, onFailure, peerError, isPrimary, retrySignal=0, onRetryAll }) {
+function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUser, newIssueId, slaMinutes, onDelete, onEdit, onFailure, peerError, isPrimary, retrySignal=0, onRetryAll, emptyText=null }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   // `null` means "no type filter", rather than the translated word for "All".
@@ -9901,7 +9907,7 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
       ) : !list.rows ? (
         <div className="empty-state">{Ic.list}<p>{t.analyticsLoading}</p></div>
       ) : issues.length===0 ? (
-        <div className="empty-state">{Ic.list}<p>{t.noMatch}</p></div>
+        <div className="empty-state">{Ic.list}<p>{emptyText || t.noMatch}</p></div>
       ) : (
         /* Scrolls sideways rather than being clipped by the card. Eight columns
            will not fit a laptop window, and .table-card is overflow:hidden to clip
@@ -9992,8 +9998,8 @@ function HistoryPage({ token, issueTypes, epoch=0, currentUser, slaMinutes, onDe
           value={date} max={todayStr}
           onChange={e=>setDate(e.target.value)}
         />
-        <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate(todayStr)}>{t.historyToday}</button>
-        <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setDate('')}>{t.historyAllDates}</button>
+        <button className="btn btn-ghost" style={{fontSize:12,padding:'8px 14px',minHeight:36}} onClick={()=>setDate(todayStr)}>{t.historyToday}</button>
+        <button className="btn btn-ghost" style={{fontSize:12,padding:'8px 14px',minHeight:36}} onClick={()=>setDate('')}>{t.historyAllDates}</button>
         {/* Today's list is not just today's issues: anything still pending from an
             earlier day stays on it until it is solved, so the number of rows can
             be larger than the number logged today. Saying so is the difference
@@ -10011,9 +10017,11 @@ function HistoryPage({ token, issueTypes, epoch=0, currentUser, slaMinutes, onDe
           them. Each table now paginates on its own, so the two can be showing
           different amounts. */}
       <IssuesTable token={token} issueTypes={issueTypes} tableMode="apt"  date={date} epoch={epoch} currentUser={currentUser} slaMinutes={slaMinutes} onDelete={onDelete} onEdit={onEdit}
-        onFailure={noteFailure} peerError={failures.dept} isPrimary retrySignal={retrySignal} onRetryAll={()=>setRetrySignal(n => n + 1)}/>
+        onFailure={noteFailure} peerError={failures.dept} isPrimary retrySignal={retrySignal} onRetryAll={()=>setRetrySignal(n => n + 1)}
+        emptyText={date ? t.historyNoIssues : t.noMatch}/>
       <IssuesTable token={token} issueTypes={issueTypes} tableMode="dept" date={date} epoch={epoch} currentUser={currentUser} slaMinutes={slaMinutes} onDelete={onDelete} onEdit={onEdit}
-        onFailure={noteFailure} peerError={failures.apt} retrySignal={retrySignal} onRetryAll={()=>setRetrySignal(n => n + 1)}/>
+        onFailure={noteFailure} peerError={failures.apt} retrySignal={retrySignal} onRetryAll={()=>setRetrySignal(n => n + 1)}
+        emptyText={date ? t.historyNoIssues : t.noMatch}/>
     </div>
   );
 }
