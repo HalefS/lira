@@ -3365,6 +3365,7 @@ html.dark .auth-left   { background: var(--blue-light) !important; }
 }
 .rm-summary-card:hover { border-color: var(--gray-300); box-shadow: var(--shadow-sm); }
 .rm-summary-card.active { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-light); }
+.rm-summary-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .rm-summary-count { font-size: 22px; font-weight: 600; line-height: 1.1; }
 .rm-summary-label { font-size: 11.5px; color: var(--gray-400); font-weight: 500; }
 .rm-floor { margin-bottom: 22px; }
@@ -3387,6 +3388,7 @@ html.dark .auth-left   { background: var(--blue-light) !important; }
   transition: transform 0.1s, box-shadow 0.12s, border-color 0.12s;
 }
 .rm-room:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.rm-room:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .rm-room-number {
   font-family: 'DM Mono', monospace; font-size: 15.5px; font-weight: 600;
   color: var(--gray-900); line-height: 1.2;
@@ -3437,15 +3439,16 @@ html.dark .auth-left   { background: var(--blue-light) !important; }
   border: 1px solid var(--gray-200); border-radius: var(--radius-md);
 }
 .rm-stepper button {
-  width: 27px; height: 27px; border: 0; background: var(--gray-50);
+  width: 32px; height: 32px; border: 0; background: var(--gray-50);
   color: var(--gray-700); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
 .rm-stepper button:hover:not(:disabled) { background: var(--gray-100); }
+.rm-stepper button:focus-visible { outline: 2px solid var(--blue); outline-offset: -3px; }
 .rm-stepper button:disabled { opacity: 0.3; cursor: default; }
-.rm-stepper button svg { width: 11px; height: 11px; }
+.rm-stepper button svg { width: 12px; height: 12px; }
 .rm-stepper span {
-  min-width: 27px; text-align: center; font-size: 13px; font-weight: 600;
+  min-width: 30px; text-align: center; font-size: 13.5px; font-weight: 600;
   font-variant-numeric: tabular-nums; color: var(--gray-900);
 }
 
@@ -3458,6 +3461,7 @@ html.dark .auth-left   { background: var(--blue-light) !important; }
   background: var(--gray-50); cursor: pointer;
 }
 .rm-check-line input { margin-top: 2px; flex-shrink: 0; accent-color: var(--blue); }
+.rm-check-line:focus-within { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-light); }
 .rm-check-text { display: flex; flex-direction: column; gap: 2px; }
 .rm-check-title { font-size: 13px; font-weight: 500; color: var(--gray-900); }
 .rm-check-hint { font-size: 11.5px; color: var(--gray-400); line-height: 1.4; }
@@ -3495,16 +3499,32 @@ html.dark .auth-left   { background: var(--blue-light) !important; }
 .rm-et-chip .rm-eq-icon svg { width: 12px; height: 12px; }
 .rm-et-chip button {
   border: 0; background: none; color: var(--gray-400); cursor: pointer;
-  display: flex; align-items: center; padding: 0;
+  display: flex; align-items: center; padding: 5px; margin: -5px -5px -5px -1px;
+  border-radius: 50%;
 }
-.rm-et-chip button:hover { color: var(--red); }
+.rm-et-chip button:hover { color: var(--red); background: var(--red-light); }
+.rm-et-chip button:focus-visible { outline: 2px solid var(--blue); outline-offset: 0; }
 .rm-et-chip button svg { width: 11px; height: 11px; }
 .rm-et-add { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
 
+/* On a phone the survey row becomes two lines: what the item is, then the two
+   steppers side by side. Keeping all three columns on one line would squeeze
+   the equipment name to a few characters and shrink the buttons below what a
+   thumb can hit. */
 @media (max-width: 560px) {
   .rm-grid { grid-template-columns: repeat(auto-fill, minmax(126px, 1fr)); }
+  .rm-eq-row { grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 10px 0; }
+  .rm-eq-name { grid-column: 1 / -1; }
+  .rm-eq-col { align-items: stretch; }
+  .rm-eq-col .rm-stepper { justify-content: space-between; }
+  .rm-eq-col .rm-stepper span { flex: 1; }
   .rm-cat-row { flex-wrap: wrap; }
   .rm-cat-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rm-room { transition: box-shadow 0.12s, border-color 0.12s; }
+  .rm-room:hover { transform: none; }
 }
 
 html.dark .rm-summary-card,
@@ -5649,10 +5669,14 @@ const T = {
     roomMapNoRooms: 'No rooms are in the inventory. Add room ranges in Settings first.',
     roomMapNoMatch: 'No rooms match this filter.',
     roomMapLoadError: 'The room map could not be loaded.',
+    roomMapLoading: 'Loading the room map.',
     roomMapSaveError: 'The room could not be saved.',
+    roomMapManageError: 'That change could not be saved.',
     roomMapSaved: 'Room saved.',
     roomMapCategorySaved: 'Category saved.',
+    roomMapCategoryDeleted: 'Category deleted.',
     roomMapEquipmentSaved: 'Equipment type saved.',
+    roomMapEquipmentDeleted: 'Equipment type deleted.',
     roomMapCategoryDeleteConfirm: 'Delete the category "{name}"? Rooms using it become unassigned, but their equipment records are kept.',
     roomMapEquipmentDeleteConfirm: 'Delete the equipment type "{name}"? It will be removed from every category and every room.',
     roomMapStatusUnassigned: 'Unassigned',
@@ -5670,6 +5694,7 @@ const T = {
     roomMapWorking: 'Working',
     roomMapNotes: 'Notes',
     roomMapSave: 'Save room',
+    roomMapClose: 'Close',
     roomMapLastChecked: 'Last checked {date}',
     roomMapNeverChecked: 'Never checked',
     roomMapFewerPresent: 'Fewer present: {name}',
@@ -6706,10 +6731,14 @@ const T = {
     roomMapNoRooms: 'Não há quartos no inventário. Adicione intervalos de quartos nas Definições primeiro.',
     roomMapNoMatch: 'Nenhum quarto corresponde a este filtro.',
     roomMapLoadError: 'Não foi possível carregar o mapa dos quartos.',
+    roomMapLoading: 'A carregar o mapa dos quartos.',
     roomMapSaveError: 'Não foi possível guardar o quarto.',
+    roomMapManageError: 'Não foi possível guardar essa alteração.',
     roomMapSaved: 'Quarto guardado.',
     roomMapCategorySaved: 'Categoria guardada.',
+    roomMapCategoryDeleted: 'Categoria eliminada.',
     roomMapEquipmentSaved: 'Tipo de equipamento guardado.',
+    roomMapEquipmentDeleted: 'Tipo de equipamento eliminado.',
     roomMapCategoryDeleteConfirm: 'Eliminar a categoria "{name}"? Os quartos que a usam ficam sem categoria, mas os registos de equipamento são mantidos.',
     roomMapEquipmentDeleteConfirm: 'Eliminar o tipo de equipamento "{name}"? Será removido de todas as categorias e de todos os quartos.',
     roomMapStatusUnassigned: 'Sem categoria',
@@ -6727,6 +6756,7 @@ const T = {
     roomMapWorking: 'A funcionar',
     roomMapNotes: 'Notas',
     roomMapSave: 'Guardar quarto',
+    roomMapClose: 'Fechar',
     roomMapLastChecked: 'Última verificação: {date}',
     roomMapNeverChecked: 'Nunca verificado',
     roomMapFewerPresent: 'Menos presentes: {name}',
@@ -11274,6 +11304,11 @@ function RoomMapRoomDialog({ room, token, categories, equipmentTypes, t, setToas
   // already been surveyed.
   const [checked, setChecked] = React.useState(!!room.surveyed_at);
 
+  // The same keyboard contract as every other dialog in the app: Escape and
+  // outside clicks close it, Tab is trapped inside, focus returns to the room
+  // card afterwards, and neither escape hatch fires mid-save.
+  const panelRef = useDialog({ onClose, preventClose: saving });
+
   const category = categories.find(c => String(c.id) === categoryId) || null;
   const expectedFor = id => {
     const line = ((category && category.equipment) || []).find(e => e.equipment_type_id === id);
@@ -11345,17 +11380,17 @@ function RoomMapRoomDialog({ room, token, categories, equipmentTypes, t, setToas
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !saving && onClose()}>
-      <div className="modal" style={{ maxWidth: 620 }} role="dialog" aria-modal="true">
+      <div className="modal" ref={panelRef} style={{ maxWidth: 620 }} role="dialog" aria-modal="true" aria-labelledby="rm-room-title">
         <div className="modal-header">
           <div>
-            <h2>{t.roomMapRoomTitle.replace('{room}', room.room_number)}</h2>
+            <h2 id="rm-room-title">{t.roomMapRoomTitle.replace('{room}', room.room_number)}</h2>
             <div style={{ fontSize: 11.5, color: 'var(--gray-400)', marginTop: 3 }}>
               {room.surveyed_at
                 ? t.roomMapLastChecked.replace('{date}', new Date(room.surveyed_at).toLocaleString())
                 : t.roomMapNeverChecked}
             </div>
           </div>
-          <button type="button" className="icon-btn" onClick={onClose} disabled={saving}>{Ic.x}</button>
+          <button type="button" className="icon-btn" onClick={onClose} disabled={saving} aria-label={t.roomMapClose}>{Ic.x}</button>
         </div>
 
         <div className="modal-body">
@@ -11456,6 +11491,11 @@ function RoomMapCategoryManager({ token, categories, equipmentTypes, onReload, o
   const [newIcon, setNewIcon] = React.useState('box');
   const [etErr, setEtErr] = React.useState('');
 
+  // Same keyboard contract as the room dialog and the rest of the app. A write
+  // in flight cannot be escaped; nothing here is optimistic, so closing after
+  // the response has landed is safe.
+  const panelRef = useDialog({ onClose, preventClose: busy });
+
   function resetForm() {
     setEditId(null);
     setName('');
@@ -11490,7 +11530,7 @@ function RoomMapCategoryManager({ token, categories, equipmentTypes, onReload, o
       resetForm();
       setToast(t.roomMapCategorySaved);
     } catch (ex) {
-      setErr(ex.message || t.roomMapSaveError);
+      setErr(ex.message || t.roomMapManageError);
     } finally {
       setBusy(false);
     }
@@ -11503,9 +11543,9 @@ function RoomMapCategoryManager({ token, categories, equipmentTypes, onReload, o
       await apiFetch(`/room-categories/${c.id}`, { method: 'DELETE', token });
       if (editId === c.id) resetForm();
       await onReload();
-      setToast(t.roomMapCategorySaved);
+      setToast(t.roomMapCategoryDeleted);
     } catch (ex) {
-      setErr(ex.message || t.roomMapSaveError);
+      setErr(ex.message || t.roomMapManageError);
     }
   }
 
@@ -11520,7 +11560,7 @@ function RoomMapCategoryManager({ token, categories, equipmentTypes, onReload, o
       await onReload();
       setToast(t.roomMapEquipmentSaved);
     } catch (ex) {
-      setEtErr(ex.message || t.roomMapSaveError);
+      setEtErr(ex.message || t.roomMapManageError);
     } finally {
       setBusy(false);
     }
@@ -11532,21 +11572,21 @@ function RoomMapCategoryManager({ token, categories, equipmentTypes, onReload, o
     try {
       await apiFetch(`/equipment-types/${et.id}`, { method: 'DELETE', token });
       await onReload();
-      setToast(t.roomMapEquipmentSaved);
+      setToast(t.roomMapEquipmentDeleted);
     } catch (ex) {
-      setEtErr(ex.message || t.roomMapSaveError);
+      setEtErr(ex.message || t.roomMapManageError);
     }
   }
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !busy && onClose()}>
-      <div className="modal" style={{ maxWidth: 720 }} role="dialog" aria-modal="true">
+      <div className="modal" ref={panelRef} style={{ maxWidth: 720 }} role="dialog" aria-modal="true" aria-labelledby="rm-manager-title">
         <div className="modal-header">
           <div>
-            <h2>{t.roomMapManagerTitle}</h2>
+            <h2 id="rm-manager-title">{t.roomMapManagerTitle}</h2>
             <div style={{ fontSize: 11.5, color: 'var(--gray-400)', marginTop: 3, maxWidth: 520 }}>{t.roomMapManagerIntro}</div>
           </div>
-          <button type="button" className="icon-btn" onClick={onClose} disabled={busy}>{Ic.x}</button>
+          <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label={t.roomMapClose}>{Ic.x}</button>
         </div>
 
         <div className="modal-body">
@@ -11642,7 +11682,7 @@ function RoomMapCategoryManager({ token, categories, equipmentTypes, onReload, o
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-primary" onClick={onClose}>{t.cancel}</button>
+          <button className="btn btn-primary" onClick={onClose} disabled={busy}>{t.roomMapClose}</button>
         </div>
       </div>
     </div>
@@ -11720,9 +11760,9 @@ function RoomMapPage({ token, currentUser, setToast }) {
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t.roomMapSearch} aria-label={t.roomMapSearch}/>
         </div>
         <div className="filter-chips">
-          <button className={`chip ${floor === 'all' ? 'active' : ''}`} onClick={() => setFloor('all')}>{t.roomMapAllFloors}</button>
+          <button className={`chip ${floor === 'all' ? 'active' : ''}`} aria-pressed={floor === 'all'} onClick={() => setFloor('all')}>{t.roomMapAllFloors}</button>
           {floors.map(f => (
-            <button key={f} className={`chip ${floor === f ? 'active' : ''}`} onClick={() => setFloor(f)}>
+            <button key={f} className={`chip ${floor === f ? 'active' : ''}`} aria-pressed={floor === f} onClick={() => setFloor(f)}>
               {t.roomMapFloorLabel.replace('{floor}', f)}
             </button>
           ))}
@@ -11745,7 +11785,7 @@ function RoomMapPage({ token, currentUser, setToast }) {
       <div className="rm-summary">
         {tiles.map(tile => (
           <button key={tile.id} className={`rm-summary-card ${status === tile.id ? 'active' : ''}`}
-            onClick={() => setStatus(tile.id)}>
+            aria-pressed={status === tile.id} onClick={() => setStatus(tile.id)}>
             <span className="rm-summary-count" style={{ color: tile.color }}>{tile.count}</span>
             <span className="rm-summary-label">{tile.label}</span>
           </button>
@@ -11753,7 +11793,7 @@ function RoomMapPage({ token, currentUser, setToast }) {
       </div>
 
       {loading ? (
-        <div className="empty-state"><p>{t.analyticsLoading}</p></div>
+        <div className="empty-state"><p>{t.roomMapLoading}</p></div>
       ) : error && !data ? (
         <div className="table-card">
           <div style={{ background: 'var(--red-light)', color: 'var(--red)', borderRadius: 'var(--radius-md)', padding: '10px 16px', fontSize: 13, margin: '14px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
