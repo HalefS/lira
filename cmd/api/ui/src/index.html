@@ -454,7 +454,7 @@ img.avatar-circle { object-fit: cover; background: var(--gray-100); }
    one row, and ruled off from the table above it so the two do not read as one
    continuous list of unknown length. */
 .table-footer { padding: 9px 16px; border-top: 1px solid var(--gray-200); text-align: center; }
-.table-footer .btn { font-size: 12px; padding: 5px 14px; }
+.table-footer .btn { font-size: 12px; padding: 5px 14px; min-height: 36px; }
 .table-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .filter-chips { display: flex; gap: 6px; }
 .chip {
@@ -560,6 +560,7 @@ tbody tr.row-clickable { cursor: pointer; }
   border-radius: 50%; cursor: pointer; background: none; overflow: hidden;
   vertical-align: middle;
 }
+.color-swatch-input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .color-swatch-input::-webkit-color-swatch-wrapper { padding: 0; }
 .color-swatch-input::-webkit-color-swatch { border: none; border-radius: 50%; }
 .color-swatch-input::-moz-color-swatch { border: none; border-radius: 50%; }
@@ -948,6 +949,10 @@ html.dark .set-group-head:hover { background: var(--gray-200); }
 .set-group.open > .set-group-body { grid-template-rows: 1fr; }
 .set-group-inner { overflow: hidden; min-height: 0; }
 .set-group.open > .set-group-body > .set-group-inner { padding: 0 18px 18px; }
+@media (prefers-reduced-motion: reduce) {
+  .set-group-body { transition: none; }
+  .set-group-chev { transition: none; }
+}
 
 /* Nested: no border and no fill of its own. The divider is enough to say "this
    is inside something", and a second ring of cards inside the first is the same
@@ -2930,6 +2935,7 @@ tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
   border: 2px solid transparent; border-radius: 12px; background: none; cursor: pointer; transition: all 0.12s;
 }
 .icon-opt:hover { background: var(--gray-100); }
+.icon-opt:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .icon-opt.selected { border-color: var(--blue); background: var(--blue-light); }
 .cicon-btn { padding: 0; border: none; background: none; border-radius: 10px; cursor: pointer; display: inline-flex; }
 .cicon-btn:hover .cicon { box-shadow: 0 0 0 2px var(--blue-mid); }
@@ -17674,7 +17680,7 @@ function ShiftSettingsCard({ token, setToast }) {
                 {start}&ndash;{end}{looksOvernight ? t.rotaPlusOne : ''}
               </span>
             </span>
-            <button type="submit" className="btn btn-primary" disabled={saving || !name.trim()}>
+            <button type="submit" className="btn btn-primary" disabled={saving || !name.trim()} aria-busy={saving}>
               {Ic.plus} {saving ? '.' : t.shiftAdd}
             </button>
           </div>
@@ -17788,12 +17794,12 @@ function ShiftSettingsCard({ token, setToast }) {
                           <>
                             <button className="btn btn-primary" style={{padding:'4px 12px',fontSize:12}}
                               onClick={() => saveEdit(s.id, s.version)}
-                              disabled={saving || !draft.name.trim()}>
+                              disabled={saving || !draft.name.trim()} aria-busy={saving}>
                               {saving ? '.' : t.shiftSaveChanges}
                             </button>
                             <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
                               onClick={() => { setEditingId(null); setDraft(null); }}
-                              disabled={saving}>
+                              disabled={saving} aria-busy={saving}>
                               {t.shiftCancelEdit}
                             </button>
                           </>
@@ -19388,7 +19394,7 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
                   onChange={e=>setWindowHours(e.target.value)} />
               </div>
               <button type="submit" className="btn btn-primary"
-                disabled={savingSettings || !windowHours}>
+                disabled={savingSettings || !windowHours} aria-busy={savingSettings}>
                 {Ic.check} {savingSettings ? '…' : t.saveChanges}
               </button>
             </form>
@@ -19404,7 +19410,7 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
                   onChange={e=>setLcuDays(e.target.value)} />
               </div>
               <button type="submit" className="btn btn-primary"
-                disabled={savingSettings || !lcuDays}>
+                disabled={savingSettings || !lcuDays} aria-busy={savingSettings}>
                 {Ic.check} {savingSettings ? '…' : t.saveChanges}
               </button>
             </form>
@@ -19425,7 +19431,7 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
                   onChange={e=>setSlaMinutes(e.target.value)} />
               </div>
               <button type="submit" className="btn btn-primary"
-                disabled={savingSettings || String(slaMinutes).trim() === ''}>
+                disabled={savingSettings || String(slaMinutes).trim() === ''} aria-busy={savingSettings}>
                 {Ic.check} {savingSettings ? '…' : t.saveChanges}
               </button>
             </form>
@@ -19454,7 +19460,7 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
                   <input id="set-type-name" className="form-control" placeholder={t.issueTypePlaceholder} value={name}
                     onChange={e=>setName(e.target.value)} maxLength={50}/>
                 </div>
-                <button type="submit" className="btn btn-primary" disabled={saving || !name.trim()}>
+                <button type="submit" className="btn btn-primary" disabled={saving || !name.trim()} aria-busy={saving}>
                   {Ic.plus} {saving ? '…' : t.addIssueType}
                 </button>
               </form>
@@ -19509,7 +19515,7 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
                   <input id="set-dept-name" className="form-control" placeholder={t.departmentPlaceholder} value={deptName}
                     onChange={e=>setDeptName(e.target.value)} maxLength={50}/>
                 </div>
-                <button type="submit" className="btn btn-primary" disabled={savingDept || !deptName.trim()}>
+                <button type="submit" className="btn btn-primary" disabled={savingDept || !deptName.trim()} aria-busy={savingDept}>
                   {Ic.plus} {savingDept ? '…' : t.addDepartment}
                 </button>
               </form>
@@ -19544,7 +19550,7 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
                             {editingDeptId === d.id ? (
                               <>
                                 <button className="btn btn-primary" style={{padding:'4px 12px',fontSize:12}}
-                                  onClick={()=>saveDeptEdit(d.id)} disabled={savingDept || !deptDraft.trim()}>
+                                  onClick={()=>saveDeptEdit(d.id)} disabled={savingDept || !deptDraft.trim()} aria-busy={savingDept}>
                                   {savingDept ? '…' : t.saveChanges}
                                 </button>
                                 <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
@@ -19581,7 +19587,7 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
                   <input id="set-agent-name" className="form-control" placeholder={t.agentPlaceholder} value={agentName}
                     onChange={e=>setAgentName(e.target.value)} maxLength={100}/>
                 </div>
-                <button type="submit" className="btn btn-primary" disabled={savingAgent || !agentName.trim()}>
+                <button type="submit" className="btn btn-primary" disabled={savingAgent || !agentName.trim()} aria-busy={savingAgent}>
                   {Ic.plus} {savingAgent ? '…' : t.addAgent}
                 </button>
               </form>
@@ -19633,7 +19639,7 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
                     <ConsumableIcon name={ciIcon} size={36}/>
                     <span style={{color: ciName.trim() ? 'var(--gray-900)' : 'var(--gray-400)'}}>{ciName.trim() || t.consumableNamePlaceholder}</span>
                   </div>
-                  <button type="submit" className="btn btn-primary" disabled={savingCi || !ciName.trim()}>
+                  <button type="submit" className="btn btn-primary" disabled={savingCi || !ciName.trim()} aria-busy={savingCi}>
                     {Ic.plus} {savingCi ? '…' : t.addConsumable}
                   </button>
                 </div>
@@ -19721,7 +19727,7 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
 
                 <button type="submit" className="btn btn-primary" style={{marginTop:12}}
                   disabled={savingRoom || !roomRun.trim()
-                    || !roomPreview || roomPreview.count > maxRunSize}>
+                    || !roomPreview || roomPreview.count > maxRunSize} aria-busy={savingRoom}>
                   {Ic.plus} {savingRoom ? '…' : t.adminRoomsAdd}
                 </button>
               </form>
