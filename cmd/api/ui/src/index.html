@@ -11680,7 +11680,7 @@ function RoomMapCategoryManager({ token, categories, equipmentTypes, onReload, o
             {err && <div style={{ color: 'var(--red)', fontSize: 12.5 }}>{err}</div>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button type="submit" className="btn btn-primary" disabled={busy}>
+              <button type="submit" className="btn btn-primary" disabled={busy} aria-busy={busy}>
                 {busy ? t.issueSaving : t.roomMapSaveCategory}
               </button>
             </div>
@@ -14823,10 +14823,10 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
             </div>
           )}
         </div>
-        <button className="btn btn-ghost" onClick={reload} disabled={loading}>
+        <button className="btn btn-ghost" onClick={reload} disabled={loading} aria-busy={loading}>
           {loading ? '…' : t.reportRefresh}
         </button>
-        <button className="btn btn-primary" onClick={downloadPDF} disabled={!report || loading || downloading}
+        <button className="btn btn-primary" onClick={downloadPDF} disabled={!report || loading || downloading} aria-busy={downloading}
           style={{marginLeft:'auto'}}>
           {Ic.download} {downloading ? t.generatingPdf : t.reportDownloadPdf}
         </button>
