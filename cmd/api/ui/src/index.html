@@ -13879,6 +13879,19 @@ function formatDateShort(iso) {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, {day:'numeric', month:'short'});
 }
 
+// reportIssueDate is the day the report attributes an issue to: started_at when
+// the work has a start, otherwise created_at. Those are the same two columns
+// GetReport uses to place a row in its period, so the date shown can never fall
+// outside the report's own range. The month is spelled because a numeric 03/10
+// reads as October in Portugal and March in the US.
+function reportIssueDate(issue, lang) {
+  const raw = issue.started_at || issue.created_at;
+  if (!raw) return '—';
+  const d = new Date(raw);
+  if (isNaN(d)) return '—';
+  return d.toLocaleDateString(lang === 'pt' ? 'pt-PT' : 'en-GB', {day:'2-digit', month:'short'});
+}
+
 // dayNumber turns a YYYY-MM-DD string into whole days since the epoch.
 //
 // Both sides are built with Date.UTC so the two dates are compared as plain
@@ -14912,12 +14925,13 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
               </div>
               <table>
                 <thead>
-                  <tr><th>Apt.</th><th>Type</th><th>Problem</th><th>Resolution</th><th>Time</th><th>Status</th><th>Technician</th></tr>
+                  <tr><th>Apt.</th><th>{t.date}</th><th>Type</th><th>Problem</th><th>Resolution</th><th>Time</th><th>Status</th><th>Technician</th></tr>
                 </thead>
                 <tbody>
                   {report.apt_issues.map(i=>(
                     <tr key={i.id} className={i.false_positive ? 'fp-row' : ''}>
                       <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.location}</strong></td>
+                      <td style={{fontFamily:'DM Mono,monospace',fontSize:12.5,color:'var(--gray-600)',whiteSpace:'nowrap'}}>{reportIssueDate(i, lang)}</td>
                       <td><TypeBadge type={i.type}/></td>
                       <td style={{maxWidth:140,fontSize:13}}>{i.problem}{i.false_positive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}</td>
                       <td style={{maxWidth:180,fontSize:13,color:'var(--gray-600)'}}>{i.resolution||'—'}</td>
@@ -14944,12 +14958,13 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
               </div>
               <table>
                 <thead>
-                  <tr><th>Dept.</th><th>Type</th><th>Problem</th><th>Resolution</th><th>Time</th><th>Status</th><th>Technician</th></tr>
+                  <tr><th>Dept.</th><th>{t.date}</th><th>Type</th><th>Problem</th><th>Resolution</th><th>Time</th><th>Status</th><th>Technician</th></tr>
                 </thead>
                 <tbody>
                   {report.dept_issues.map(i=>(
                     <tr key={i.id} className={i.false_positive ? 'fp-row' : ''}>
                       <td><strong style={{fontFamily:'DM Mono,monospace',fontSize:13}}>{i.location}</strong></td>
+                      <td style={{fontFamily:'DM Mono,monospace',fontSize:12.5,color:'var(--gray-600)',whiteSpace:'nowrap'}}>{reportIssueDate(i, lang)}</td>
                       <td><TypeBadge type={i.type}/></td>
                       <td style={{maxWidth:140,fontSize:13}}>{i.problem}{i.false_positive && <div><span className="fp-badge">{Ic.check} {t.falsePositiveBadge}</span></div>}</td>
                       <td style={{maxWidth:180,fontSize:13,color:'var(--gray-600)'}}>{i.resolution||'—'}</td>

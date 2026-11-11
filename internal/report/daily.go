@@ -145,6 +145,7 @@ type techBar struct {
 // already resolved so the template stays free of logic.
 type issueRow struct {
 	Location      string
+	Date          string
 	Type          string
 	TypeColor     string
 	Problem       string
@@ -392,6 +393,7 @@ func issueRows(issues []*data.Issue, typeColors map[string]string) []issueRow {
 		bg, fg := avatarColors(i.LoggedByIdx)
 		rows = append(rows, issueRow{
 			Location:      i.Location,
+			Date:          issueDate(i),
 			Type:          i.Type,
 			TypeColor:     typeColor(i.Type, typeColors),
 			Problem:       i.Problem,
@@ -407,6 +409,23 @@ func issueRows(issues []*data.Issue, typeColors map[string]string) []issueRow {
 		})
 	}
 	return rows
+}
+
+// issueDate is the day the report attributes an issue to. It uses the same
+// COALESCE(started_at, created_at) as GetReport's period filter and sort, so a
+// row's printed date can never fall outside the dates printed on the cover.
+// The month is spelled rather than numeric because 03/10 is October to a
+// European reader and March to an American one, and a report is exactly the
+// document somebody reads months later with no other context.
+func issueDate(i *data.Issue) string {
+	d := i.CreatedAt
+	if i.StartedAt != nil {
+		d = *i.StartedAt
+	}
+	if d.IsZero() {
+		return "—"
+	}
+	return d.Format("02 Jan")
 }
 
 // typeColor resolves the color a type is drawn in: the manager's stored choice

@@ -90,13 +90,13 @@
     <h2>Apartment issues <span class="count">({{len .AptIssues}})</span></h2>
     <table>
       <colgroup>
-        <col style="width:15mm" /><col style="width:20mm" /><col style="width:45mm" />
-        <col style="width:40mm" /><col style="width:15mm" /><col style="width:15mm" />
-        <col style="width:35mm" />
+        <col style="width:15mm" /><col style="width:16mm" /><col style="width:18mm" />
+        <col style="width:38mm" /><col style="width:33mm" /><col style="width:14mm" />
+        <col style="width:14mm" /><col style="width:35mm" />
       </colgroup>
       <thead>
         <tr>
-          <th>Apt.</th><th>Type</th><th>Problem</th><th>Resolution</th>
+          <th>Apt.</th><th>Date</th><th>Type</th><th>Problem</th><th>Resolution</th>
           <th>Time</th><th>Status</th><th>Technician</th>
         </tr>
       </thead>
@@ -104,6 +104,7 @@
         {{range .AptIssues}}
         <tr{{if .FalsePositive}} class="fp"{{end}}>
           <td class="cell-loc">{{.Location}}</td>
+          <td class="cell-date">{{.Date}}</td>
           <td><span class="pill" style="background:{{.TypeColor}}1F;color:{{.TypeColor}}">{{.Type}}</span></td>
           <td class="cell-problem">
             {{.Problem}}
@@ -130,13 +131,13 @@
     <h2>Department issues <span class="count">({{len .DeptIssues}})</span></h2>
     <table>
       <colgroup>
-        <col style="width:18mm" /><col style="width:20mm" /><col style="width:42mm" />
-        <col style="width:38mm" /><col style="width:15mm" /><col style="width:15mm" />
-        <col style="width:32mm" />
+        <col style="width:18mm" /><col style="width:16mm" /><col style="width:18mm" />
+        <col style="width:37mm" /><col style="width:31mm" /><col style="width:14mm" />
+        <col style="width:14mm" /><col style="width:32mm" />
       </colgroup>
       <thead>
         <tr>
-          <th>Dept.</th><th>Type</th><th>Problem</th><th>Resolution</th>
+          <th>Dept.</th><th>Date</th><th>Type</th><th>Problem</th><th>Resolution</th>
           <th>Time</th><th>Status</th><th>Technician</th>
         </tr>
       </thead>
@@ -144,6 +145,7 @@
         {{range .DeptIssues}}
         <tr{{if .FalsePositive}} class="fp"{{end}}>
           <td class="cell-loc">{{.Location}}</td>
+          <td class="cell-date">{{.Date}}</td>
           <td><span class="pill" style="background:{{.TypeColor}}1F;color:{{.TypeColor}}">{{.Type}}</span></td>
           <td class="cell-problem">
             {{.Problem}}

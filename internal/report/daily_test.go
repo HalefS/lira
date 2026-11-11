@@ -79,6 +79,43 @@ func TestInitials(t *testing.T) {
 	}
 }
 
+// The printed date must be the day the report itself uses to place the row:
+// started_at when there is one, created_at otherwise. Showing created_at
+// unconditionally would print a day outside the report's cover for an issue
+// logged before midnight and started after it.
+func TestIssueDateUsesTheReportsDay(t *testing.T) {
+	started := time.Date(2026, 10, 3, 22, 15, 0, 0, time.Local)
+	created := time.Date(2026, 10, 4, 1, 30, 0, 0, time.Local)
+
+	if got := issueDate(&data.Issue{CreatedAt: created, StartedAt: &started}); got != "03 Oct" {
+		t.Errorf("issueDate with a start = %q, want %q", got, "03 Oct")
+	}
+	if got := issueDate(&data.Issue{CreatedAt: created}); got != "04 Oct" {
+		t.Errorf("issueDate without a start = %q, want %q", got, "04 Oct")
+	}
+	if got := issueDate(&data.Issue{}); got != "—" {
+		t.Errorf("issueDate with no timestamps = %q, want an em dash", got)
+	}
+}
+
+// Both issue tables must carry the Date column, not just the one the daily
+// report happens to show first.
+func TestRenderedReportHasDateColumn(t *testing.T) {
+	r := sampleReport()
+	r.AptIssues[0].CreatedAt = time.Date(2026, 11, 6, 1, 58, 0, 0, time.Local)
+
+	html, err := RenderDailyHTML(r)
+	if err != nil {
+		t.Fatalf("RenderDailyHTML: %v", err)
+	}
+	if got := strings.Count(html, "<th>Date</th>"); got != 2 {
+		t.Errorf("rendered report has %d Date headers, want 2 (apartment and department tables)", got)
+	}
+	if !strings.Contains(html, `<td class="cell-date">06 Nov</td>`) {
+		t.Error("rendered report does not carry the issue date into its cell")
+	}
+}
+
 // avatarColors indexes a fixed palette, so a large or negative avatar_idx must
 // wrap rather than panic — it comes straight from the database.
 func TestAvatarColorsWraps(t *testing.T) {
