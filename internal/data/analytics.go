@@ -148,7 +148,11 @@ func (m AnalyticsModel) technicianBreakdown(ctx context.Context, start, end time
 	}
 	defer rows.Close()
 
-	var out []*TechAnalytics
+	// Allocated rather than left nil. A nil slice marshals to JSON null, and the
+	// Analytics page reads by_technician as a list (`[...data.by_technician]`), so
+	// a week in which nobody logged an issue would crash the page instead of
+	// reaching its own empty state. Empty must mean an empty list here.
+	out := make([]*TechAnalytics, 0, 8)
 	for rows.Next() {
 		var t TechAnalytics
 		if err := rows.Scan(&t.UserID, &t.Name, &t.IssuesLogged, &t.Resolved, &t.AvgTimeMinutes); err != nil {
