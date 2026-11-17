@@ -12,7 +12,7 @@ If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is 
 ## Project notes (LIRA)
 
 - Go module: server in `cmd/api`, business logic in `internal/data`, schema in `migrations/`.
-- The whole SPA is one file, `cmd/api/ui/src/index.html` (~21k lines). It is indexed: query by symbol or function name (`RoomMapPage`, `IssuesTable`, `AlertsPage`, the `T` translation object) instead of reading the file end to end.
+- The SPA is authored as modules under `cmd/api/ui/src`: `index.html` is the shell, `styles/` the CSS, `app/*.jsx` one file per page or subsystem. `build.mjs` concatenates them in the order of its `MANIFEST` into a single scope (no imports), so a page can call a helper defined in another file. It is indexed: query by symbol or function name (`RoomMapPage`, `IssuesTable`, `AlertsPage`, the `T` translation object) instead of reading a file end to end.
 - `cmd/api/ui/index.html` is generated — never edit it directly; rebuild with `node cmd/api/ui/build.mjs`.
 - Refresh the graph after a pull or a large edit with `codegraph sync` (it normally auto-syncs). `.codegraph/` is machine-local and git-ignored; the index is not committed.
 

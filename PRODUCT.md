@@ -77,7 +77,7 @@ Undecided product facts (do not assume them as shipped):
 
 ## Evidence on Hand
 
-- Working single-hotel application in this repository: handlers in `cmd/api`, rules in `internal/data`, report renderers in `internal/report`, schema in `migrations/`, frontend source in `cmd/api/ui/src/index.html`.
+- Working single-hotel application in this repository: handlers in `cmd/api`, rules in `internal/data`, report renderers in `internal/report`, schema in `migrations/`, frontend source under `cmd/api/ui/src`.
 - Demo users in `migrations/seed.sql`: Manager (manager), Eder and Alcidio (technicians). These are placeholders, not real staff profiles.
 - Real operational vocabulary and handover companies come from the code and copy (Telnet, Telefonica, Connecta).
 - No real testimonials, case studies, customers, press, pricing, deployment claims, or performance benchmarks exist. Future work must not fabricate them.

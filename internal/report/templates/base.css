@@ -50,7 +50,7 @@
   --gray-600: #4B5563;
   --gray-900: #17202A;
 
-  /* Absence hues. These mirror the application :root (cmd/api/ui/src/index.html)
+  /* Absence hues. These mirror the application :root (cmd/api/ui/src/styles/app.css)
      which the header comment above says must be changed in all three places. The
      attendance sheet tints an absent day by kind, and hardcoding the hex here
      would break that contract the next time --violet moves. */

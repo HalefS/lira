@@ -33,7 +33,7 @@ Node is needed only to rebuild the frontend.
 make db/setup          # create the database and enable citext  <- do this FIRST
 make db/migrations/up  # apply migrations
 make db/seed           # demo users
-make ui                # compile cmd/api/ui/src/index.html -> cmd/api/ui/index.html
+make ui                # compile cmd/api/ui/src -> cmd/api/ui/index.html
 make run/api           # build and run on :4000
 ```
 
@@ -56,18 +56,23 @@ lists the targets; the ones that matter most are below.
 |---|---|
 | `make run/api` | Build and run the server |
 | `make run/api/dev` | Run with no rate limit, in development mode |
-| `make ui` | **Compile the frontend** — run after every edit to `cmd/api/ui/src/index.html` |
+| `make ui` | **Compile the frontend** — run after every edit under `cmd/api/ui/src` |
 | `make audit` | `go mod tidy`, `go fmt`, `go vet`, `go test -race` |
 | `make db/migrations/status` | Where the database is, and whether it is healthy |
 | `make db/psql` | Open a psql session |
 
 ### The frontend is compiled, not interpreted
 
-`cmd/api/ui/src/index.html` holds JSX. `cmd/api/ui/index.html` holds the
-compiled output and **is committed**, so `go build` and every cross-compile
-target need nothing but Go.
+The frontend is authored as modules under `cmd/api/ui/src`: `index.html` is the
+shell (head, fonts, boot script, mount point), `styles/` holds the CSS, and
+`app/*.jsx` holds one file per page or subsystem. `build.mjs` concatenates the
+JSX in the order its `MANIFEST` gives and compiles the result — the modules share
+one scope, so a page can call a helper that lives in another file.
 
-Editing the JSX without running `make ui` means `go build` succeeds and serves
+`cmd/api/ui/index.html` holds the compiled output and **is committed**, so
+`go build` and every cross-compile target need nothing but Go.
+
+Editing the source without running `make ui` means `go build` succeeds and serves
 the previous version — the change is not an error, it is simply not there yet.
 
 ---
@@ -104,9 +109,11 @@ server must not be able to change the shape of a database.
 
 ```
 cmd/api/            HTTP handlers, routing, middleware, the embedded UI
-  ui/src/index.html   JSX source for the whole frontend
+  ui/src/index.html   the shell: head, fonts, boot script, mount point
+  ui/src/styles/      fonts.css and app.css
+  ui/src/app/         one .jsx module per page or subsystem
   ui/index.html       compiled output, committed
-  ui/build.mjs        the compiler
+  ui/build.mjs        the build: manifest, CSS includes, esbuild
 internal/data/       models, queries, migrations-aware business rules
 internal/report/     PDF, XLSX and attendance renderers
 internal/validator/  input validation

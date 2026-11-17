@@ -24,11 +24,22 @@ IF YOU RENAME A COMPONENT, UPDATE EXEMPT_COMPONENTS. A renamed component stops
 matching and the rota's own names get reported as misses -- which is a loud,
 obvious failure rather than a silent one, which is the right way round for this
 list to fail.
-"""
-import re, sys
 
-PATH = "cmd/api/ui/src/index.html"
-lines = open(PATH, "rb").read().decode("utf-8").split("\n")
+WHAT IT READS. Every module under cmd/api/ui/src/app, which the build concatenates
+into one script; components never span two files, so each is scanned whole. The
+scan resets at every file for that reason. Findings name the FILE as well as the
+line, because a line number alone no longer identifies a place.
+"""
+import glob, os, re, sys
+
+DIR = "cmd/api/ui/src/app"
+
+# Read from the directory, not from a list kept here. build.mjs already fails if a
+# module on disk is missing from its manifest, so a file this finds is a file that
+# ships -- there is no second list to forget to update.
+SOURCES = sorted(glob.glob(os.path.join(DIR, "*.jsx")))
+if not SOURCES:
+    sys.exit(f"  no source found in {DIR}")
 
 EXEMPT_COMPONENTS = {
     # The rota grid and the page around it.
@@ -49,7 +60,7 @@ EXEMPT_COMPONENTS = {
 #     installation to its shortened form on the next profile save.
 #
 # The other two are local view objects whose single render site IS wrapped:
-# onNextCell becomes onNext (printed at 7755) and res.user.name becomes
+# onNextCell becomes onNext (printed by the issue form) and res.user.name becomes
 # resetCode.name (printed by ResetCodeDialog). Wrapping at the source instead
 # would be equally correct and would put the decision in a component that also
 # does unrelated work.
@@ -88,36 +99,43 @@ NOT_PERSON_OBJ = {"c", "item", "draft", "shift", "s", "d", "a", "b", "x", "ty", 
 
 WRAP = "shortName("
 
-current = None
 wrapped, missed, skipped = [], [], []
-for n, line in enumerate(lines, start=1):
-    m = COMPONENT.match(line)
-    if m:
-        current = m.group(1)
-    if line.lstrip().startswith("//") or "function shortName" in line:
-        continue
-    if current in EXEMPT_COMPONENTS or TEXT_EXEMPT.search(line):
-        skipped.extend((n, hit.group(0)) for hit in PERSON.finditer(line))
-        continue
-    for hit in PERSON.finditer(line):
-        # The segment IMMEDIATELY before the field, not the first one.
-        # `res.department.name` and `m.shift.name` both start with an object that
-        # looks like a person -- res, m -- and taking the first segment reported
-        # both as unwrapped people when neither is. The question is always "what is
-        # the thing being named", which is the last segment before the field.
-        parts = hit.group(1).split(".")
-        field, obj = parts[-1], parts[-2]
-        if obj in NOT_PERSON_OBJ:
+for path in SOURCES:
+    # A component never spans two modules -- the build's cut points are all at
+    # top-level statements -- so the current component is known again from the
+    # first line of each file.
+    current = None
+    name = os.path.basename(path)
+    lines = open(path, "rb").read().decode("utf-8").split("\n")
+    for n, line in enumerate(lines, start=1):
+        where = f"{name}:{n}"
+        m = COMPONENT.match(line)
+        if m:
+            current = m.group(1)
+        if line.lstrip().startswith("//") or "function shortName" in line:
             continue
-        start = hit.start()
-        if line[max(0, start - len(WRAP)):start] == WRAP:
-            wrapped.append((n, hit.group(1)))
-        else:
-            missed.append((n, hit.group(1), line.strip()[:100]))
+        if current in EXEMPT_COMPONENTS or TEXT_EXEMPT.search(line):
+            skipped.extend((where, hit.group(0)) for hit in PERSON.finditer(line))
+            continue
+        for hit in PERSON.finditer(line):
+            # The segment IMMEDIATELY before the field, not the first one.
+            # `res.department.name` and `m.shift.name` both start with an object that
+            # looks like a person -- res, m -- and taking the first segment reported
+            # both as unwrapped people when neither is. The question is always "what is
+            # the thing being named", which is the last segment before the field.
+            parts = hit.group(1).split(".")
+            field, obj = parts[-1], parts[-2]
+            if obj in NOT_PERSON_OBJ:
+                continue
+            start = hit.start()
+            if line[max(0, start - len(WRAP)):start] == WRAP:
+                wrapped.append((where, hit.group(1)))
+            else:
+                missed.append((where, hit.group(1), line.strip()[:100]))
 
 print(f"  wrapped {len(wrapped)}, exempt {len(skipped)}, MISSED {len(missed)}")
-for n, expr, text in missed:
-    print(f"    line {n}: {expr}")
+for where, expr, text in missed:
+    print(f"    {where}: {expr}")
     print(f"      {text}")
 if missed:
     print("")

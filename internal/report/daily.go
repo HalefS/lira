@@ -512,7 +512,7 @@ func initials(name string) string {
 // A SINGLE WORD IS RETURNED UNCHANGED, and deliberately: there is no surname to
 // keep, and doubling it would be worse than saying nothing.
 //
-// IT IS THE SAME RULE AS shortName in cmd/api/ui/src/index.html, and that
+// IT IS THE SAME RULE AS shortName in cmd/api/ui/src/app/ui.jsx, and that
 // duplication is unavoidable rather than convenient — Go cannot call into the
 // browser. The two must agree, or a person's name is spelled two different ways in
 // a report and on the screen it came from. The attendance workbook is the export
