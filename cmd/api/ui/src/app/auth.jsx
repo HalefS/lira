@@ -8,12 +8,13 @@
    every render, so React sees a different element type each time, throws the
    old one away and mounts a fresh one. The input is therefore recreated on
    every keystroke and loses focus after the first character. Keep it here. */
-function PwField({ label, id, value, onChange, placeholder, showPw, onToggleShow }) {
+function PwField({ label, id, value, onChange, placeholder, showPw, onToggleShow, autoComplete='current-password' }) {
   return (
     <div className="form-group">
       <label htmlFor={id}>{label}</label>
       <div className="pw-wrap">
-        <input id={id} className="form-control" type={showPw?'text':'password'}
+        <input id={id} name={id} className="form-control" type={showPw?'text':'password'}
+          autoComplete={autoComplete} spellCheck="false"
           placeholder={placeholder} value={value}
           onChange={e=>onChange(e.target.value)} required/>
         <button type="button" className="pw-toggle" onClick={onToggleShow}
@@ -194,7 +195,8 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange, notice 
                 so the cursor belongs on the code instead. Coming in cold from the
                 link, it belongs on the address. Exactly one of the two takes
                 autoFocus — both cannot. */}
-            <input id="auth-reset-email" className="form-control" type="email" placeholder={t.emailPlaceholder}
+            <input id="auth-reset-email" name="email" className="form-control" type="email"
+              autoComplete="username" spellCheck="false" placeholder={t.emailPlaceholder}
               value={email} onChange={e=>setEmail(e.target.value)} autoFocus={!locked} required/>
           </div>
           <div className="form-group">
@@ -210,7 +212,7 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange, notice 
             </div>
           </div>
           <PwField id="auth-reset-pw" label={t.newPassword} value={newPw} onChange={setNewPw}
-            placeholder="••••••••" {...pwProps}/>
+            autoComplete="new-password" placeholder="••••••••" {...pwProps}/>
           {newPw && newPw.length < 6 && (
             <div style={{fontSize:12,color:'var(--amber)',marginTop:4}}>{t.passwordTooShort}</div>
           )}
@@ -276,14 +278,18 @@ function AuthScreen({ onLogin, lang, onLangChange, theme, onThemeChange, notice 
             {mode==='register' && (
               <div className="form-group">
                 <label htmlFor="auth-name">{t.fullName}</label>
-                <input id="auth-name" className="form-control" placeholder={t.fullNamePlaceholder} value={name} onChange={e=>setName(e.target.value)} required />
+                <input id="auth-name" name="name" className="form-control" autoComplete="name"
+                  placeholder={t.fullNamePlaceholder} value={name} onChange={e=>setName(e.target.value)} required />
               </div>
             )}
             <div className="form-group">
               <label htmlFor="auth-email">{t.email}</label>
-              <input id="auth-email" className="form-control" type="email" placeholder={t.emailPlaceholder} value={email} onChange={e=>setEmail(e.target.value)} required />
+              <input id="auth-email" name="email" className="form-control" type="email"
+                autoComplete="username" spellCheck="false" enterKeyHint="next"
+                placeholder={t.emailPlaceholder} value={email} onChange={e=>setEmail(e.target.value)} required />
             </div>
             <PwField id="auth-pw" label={t.password} value={pw} onChange={setPw}
+              autoComplete={mode==='register' ? 'new-password' : 'current-password'}
               placeholder={mode==='register'?t.passwordPlaceholder:'••••••••'} {...pwProps}/>
 
             <button type="submit" className="btn btn-primary btn-full" style={{marginTop:4}} disabled={loading}>

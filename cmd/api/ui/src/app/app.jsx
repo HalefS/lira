@@ -677,7 +677,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
               <a className="btn btn-ghost" href="/">{t.signInBtn}</a>
             </div>
           </div>
-          <div className="content">
+          <div className="content" role="main">
             {/* token is undefined here, which is the case the rota API answers with
                 can_edit:false. Passing anything else would be inventing an identity
                 this visitor does not have. */}
@@ -774,10 +774,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
                 )}
               </div>
             ) : (
-              <button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>go(n.id)}
-                aria-label={n.id === 'inbox' && notifUnread > 0
-                  ? t.notifNavUnread.replace('{label}', n.label).replace('{count}', notifUnread)
-                  : undefined}>
+              <button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>go(n.id)}>
                 {(() => {
                   // Alerts counts outstanding recurring issues; Maintenance counts
                   // devices due or overdue. Different questions, so each nav entry
@@ -884,7 +881,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             </div>
           )}
 
-          <div className="content">
+          <div className="content" role="main">
             {/* resetKey={page} so a crash is contained to the page that caused
                 it — navigating away clears it and the rest of the app keeps
                 working. */}

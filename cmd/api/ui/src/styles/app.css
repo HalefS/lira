@@ -1,152 +1,189 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Native widgets -- the calendar glyph, the select arrow, checkboxes, the scrollbar
+   thumb -- follow color-scheme, not --gray-900. dark is declared only under html.dark:
+   the theme here is stored, not a system preference. The inline boot script and the
+   toggle keep the element's own color-scheme in step. */
 :root {
-  /* Native widgets -- the calendar glyph on a date field, the drop arrow on a
-     select, checkboxes, the scrollbar thumb -- are painted by the browser, not
-     by this stylesheet, and they follow this property rather than --gray-900.
-     The inline boot script and the theme toggle keep the element's own
-     color-scheme in step; these two rules are what the page wears if that
-     script has not run yet or the setting was cleared. dark is declared only
-     under html.dark -- a light-theme user on a dark OS must still get light
-     widgets, because the theme here is stored, not a system preference. */
+  /* One system: a neutral ramp, one accent, one radius family, one spacing scale.
+     Semantic names are what the rest of the stylesheet uses; the raw values live
+     here so a theme is one edit, not a hundred. */
   color-scheme: light;
-  --blue:        #1769AA;
-  --blue-hover:  #125480;
-  --blue-light:  #E8F2FC;
-  --blue-mid:    #A9D1F0;
-  --teal:        #1D9E75;
+
+  /* --gray-50 is the raised surface, --gray-100 the canvas, --gray-200/300 the
+     hairlines, --gray-900 the ink. --gray-400 and --gray-500 clear 4.5:1 on every
+     light wash they land on, including the tinted badges and the table header.
+     --gray-700 is the dark ink used ON pale fills; it deliberately stays dark in
+     both themes, because those fills (blue, tint washes) do not invert. */
+  --gray-50:     #FFFFFF;
+  --gray-100:    #F4F6F9;
+  --gray-200:    #E5E9F0;
+  --gray-300:    #CDD4DE;
+  --gray-400:    #606B7B;
+  --gray-500:    #667085;
+  --gray-600:    #414B5C;
+  --gray-700:    #111827;
+  --gray-900:    #111827;
+  --surface:     #FFFFFF;
+  --canvas:      #F4F6F9;
+
+  /* One accent. White on --blue is 5.8:1; --blue on --blue-light is 6.9:1. */
+  --blue:        #2F5BD9;
+  --blue-hover:  #2449B8;
+  --blue-light:  #EDF2FF;
+  --blue-mid:    #B9C9F7;
+  --on-blue:     #FFFFFF;
+
+  /* Status inks sit one step darker than their washes so small labels clear AA
+     on the tint they sit on: teal 5.1:1, green 5.5:1, amber 4.9:1, orange 4.9:1,
+     red 4.6:1. The mid values are borders only. */
+  --teal:        #0C7355;
   --teal-light:  #E1F5EE;
-  --teal-mid:    #9FE1CB;
-  /* Orange sits between the amber and the red on purpose. Amber is too close to
-     white to carry 13px text -- #D88A18 on #FFF4DF measures 2.54:1 -- and red is
-     this app's error colour, already spoken for by the API error banner and every
-     "incorrect details" message. This pair is a deeper, redder orange that clears
-     4.5:1 against its own wash (4.9:1) while still reading as caution rather than
-     as something having gone wrong. */
+  --teal-mid:    #A5DDC8;
   --orange:      #C2410C;
   --orange-light:#FFF7ED;
-  --amber:       #D88A18;
+  --amber:       #9C5B00;
   --amber-light: #FFF4DF;
-  --green:       #2E8B57;
+  --green:       #206F45;
   --green-light: #EAF6EE;
-  /* Red is used as ink on its own wash more often than as a fill, and #D94B4B on
-     --red-light measured 3.57:1 -- passing as large text only, while the SLA
-     breach pill and the overdue badges on the maintenance card are both small.
-     #C13A3A reaches 4.59:1 on the same wash. The dark value is a separate colour
-     for a separate surface; do not assume this one carries over. */
+  --green-mid:   #A5D8BC;
   --red:         #C13A3A;
   --red-light:   #FBEAEA;
-  --red-mid:     #F0B8B8;
-  /* Hover fill for destructive buttons. --red-mid is a wash for borders and
-     badges, not a background to put white text on: it measured under 2:1. This
-     is a shade of the same hue, dark enough for the white label. */
-  --red-strong:  #A32E2E;
-  /* -- shift tints and absences -------------------------------------------------
-     Two new hues and one wash, for three reasons each.
-     --violet carries "holiday" in the absence set and appears nowhere else, so a
-       reader who learns it once keeps it. It is 84 degrees from --orange, the hue
-       that already means "overnight" and must never mean anything else.
-     --abs-wash is shared by ALL FOUR absence kinds, which is the whole design. A
-       tinted shift cell and an absence cell cannot be told apart by colour at any
-       wash strength -- the nearest of the six tint washes measures 1.00:1 to 1.11:1
-       against this one, because a wash is a wash. What separates them is the hatch,
-       the 3px top rule, the kind word and the kind glyph. Colour is the fourth cue,
-       not the first.
-     --gray-900 on --abs-wash measures 11.73:1, so the word in an absence cell is
-       exactly as legible as a shift name. */
+  --red-mid:     #EFAFB4;
+  --red-strong:  #92252E;
+
+  /* Absence encoding, kept verbatim: --violet means holiday and appears nowhere
+     else, --abs-wash is shared by all four absence kinds. The hatch, the top rule,
+     the kind word and the glyph carry the meaning; colour is the fourth cue. */
   --violet:     #6D28D9;
   --abs-wash:   #DFDBF1;
-  --gray-50:     #FAFAF8;
-  --gray-100:    #F5F4F0;
-  --gray-200:    #E4E5E7;
-  --gray-300:    #D2D4D7;
-  /* The app's secondary text, and it carries nearly all of it: table headers,
-     stat labels, tile captions, metadata lines, placeholders. #7A8490 measured
-     3.63:1 on --gray-50, 3.80:1 on white and 3.45:1 on --gray-100, so it failed
-     AA on every surface it was used on -- but only in this theme. The dark value
-     below sits at 5.33:1 on its card surface, which is why a dark-only audit
-     never saw it. #5F6A78 clears 4.5:1 on all three. */
-  --gray-400:    #5F6A78;
-  --gray-600:    #4B5563;
-  --gray-900:    #17202A;
-  --radius-sm:   6px;
-  --radius-md:   8px;
-  --radius-lg:   12px;
-  --radius-xl:   16px;
-  --shadow-md:   0 4px 20px rgba(0,0,0,0.10);
-  --shadow-lg:   0 8px 40px rgba(0,0,0,0.14);
+
+  /* Spacing: 4, 8, 12, 16, 24, 32, 48, 64, 96, 128. */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px; --s-5: 24px;
+  --s-6: 32px; --s-7: 48px; --s-8: 64px; --s-9: 96px; --s-10: 128px;
+
+  /* One radius family: soft squares, not pills. */
+  --radius-sm:   8px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   18px;
+
+  /* Layered shadows: a hairline of contact, then a soft halo. */
+  --shadow-sm:   0 1px 2px rgba(17,24,39,0.05);
+  --shadow-md:   0 1px 2px rgba(17,24,39,0.04), 0 8px 24px rgba(17,24,39,0.06);
+  --shadow-lg:   0 2px 4px rgba(17,24,39,0.05), 0 18px 48px rgba(17,24,39,0.12);
+
+  /* Motion: enter slower than exit, press faster than both. */
+  --ease:        cubic-bezier(.2,.8,.2,1);
+  --t-in:        160ms;
+  --t-out:       120ms;
+  --t-press:     90ms;
 }
 
 html.dark {
   color-scheme: dark;
-  /* A dark --blue is mostly ink on a tinted fill rather than a fill itself, and
-     --blue-light is the tint it lands on for every "you are here" state -- the
-     active nav item, the selected chip, the active language button, the printer
-     chip, the avatar, the tick on the chosen room. #4C9FE0 on #123655 measured
-     4.36:1, so all ten of those failed. #5FB0E8 reaches 5.26:1 on the same tint
-     and 6.98:1 on the card surface, which is where the rest of it is used. */
-  --blue:        #5FB0E8;
-  --blue-hover:  #79BCEE;
-  --blue-light:  #123655;
-  --blue-mid:    #1D5F91;
+  /* The surfaces are one ramp darker than the light theme, never a tint of the
+     accent. --gray-50 is still the raised surface and --gray-100 the canvas. */
+  --gray-50:     #191F29;
+  --gray-100:    #111720;
+  --gray-200:    #2A323F;
+  --gray-300:    #3B4553;
+  --gray-400:    #98A2B3;
+  --gray-500:    #A7B2C2;
+  --gray-600:    #C6CEDA;
+  --gray-700:    #111827;
+  --gray-900:    #EDF1F7;
+  --surface:     #191F29;
+  --canvas:      #111720;
+
+  /* The accent inverts to a light blue: 8.3:1 against the dark ink used on
+     filled buttons and 6.8:1 on --blue-light, the "you are here" tint. */
+  --blue:        #8FB4FF;
+  --blue-hover:  #A9C7FF;
+  --blue-light:  #182B4D;
+  --blue-mid:    #2C4E80;
+  --on-blue:     #111827;
   --teal:        #5DCAA5;
   --teal-light:  #085041;
   --teal-mid:    #0F6E56;
-  /* Lightened for a dark surface, the same way --red and --amber are: a mid-dark
-     wash with a bright hue on it, 5.9:1 here. */
   --orange:      #F59B5C;
   --orange-light:#4A2A10;
   --amber:       #F0A63C;
   --amber-light: #4A320D;
   --green:       #52B37F;
   --green-light: #17301F;
+  --green-mid:   #2E6F4B;
   --red:         #E8817E;
   --red-light:   #4A1E1E;
   --red-mid:     #7A3232;
   --red-strong:  #5E2424;
   --violet:     #A78BFA;
   --abs-wash:   #272244;
-  --gray-50:     #1B1F25;
-  --gray-100:    #12151A;
-  --gray-200:    #262B33;
-  --gray-300:    #3A4048;
-  --gray-400:    #8A93A0;
-  --gray-600:    #C3C9D1;
-  --gray-900:    #EDEFF2;
-  --shadow-md:   0 4px 20px rgba(0,0,0,0.40);
-  --shadow-lg:   0 8px 40px rgba(0,0,0,0.55);
+  --shadow-md:   0 1px 2px rgba(0,0,0,0.28), 0 12px 28px rgba(0,0,0,0.34);
+  --shadow-lg:   0 2px 6px rgba(0,0,0,0.32), 0 20px 56px rgba(0,0,0,0.48);
 }
 
 /* ── theme toggle ── */
 .theme-btn {
   width: 36px; height: 36px; border-radius: var(--radius-md);
-  border: 1px solid var(--gray-200); background: #fff;
+  border: 1px solid var(--gray-200); background: var(--surface);
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; transition: all 0.15s; flex-shrink: 0; position: relative; overflow: hidden;
+  cursor: pointer; transition: background var(--t-out) var(--ease), border-color var(--t-out) var(--ease), transform var(--t-press) var(--ease);
+  flex-shrink: 0; position: relative; overflow: hidden;
 }
 html.dark .theme-btn { background: var(--gray-50); border-color: var(--gray-300); }
 .theme-btn:hover { background: var(--gray-100); border-color: var(--gray-300); }
 html.dark .theme-btn:hover { background: var(--gray-200); }
 .theme-btn svg { width: 16px; height: 16px; transition: transform 0.3s, opacity 0.2s; }
-.theme-icon-sun  { color: #D88A18; }
-.theme-icon-moon { color: #1769AA; }
+.theme-icon-sun  { color: var(--amber); }
+.theme-icon-moon { color: var(--blue); }
 html, body, #root { height: 100%; }
-body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: var(--gray-900); font-size: 14px; line-height: 1.5; transition: background 0.2s, color 0.2s; }
+body {
+  font-family: 'DM Sans', sans-serif; background: var(--canvas); color: var(--gray-900);
+  font-size: 15px; line-height: 1.55; letter-spacing: -0.006em;
+  /* Theme colours are deliberately not transitioned. The class is applied by the
+     inline boot script before this stylesheet loads; animating the inherited
+     ink makes the first paint of a stored dark theme briefly light -- and a
+     background tab pauses the transition before it ever reaches dark. */
+}
+/* Typography: one scale, balanced short headings, no orphaned body lines. */
+h1, h2, h3 { text-wrap: balance; letter-spacing: -0.022em; }
+p, li { text-wrap: pretty; }
+/* One focus ring for every control, including the ones whose own rule had a
+   different one. Outline (not shadow) so it survives Forced Colors Mode. */
+:where(a, button, input, select, textarea, [role="button"]):focus-visible {
+  outline: 2px solid var(--blue); outline-offset: 2px;
+}
+/* A touch is less precise than a mouse. Grow the hit area, not the glyph. */
+@media (pointer: coarse) {
+  :where(button, select, textarea, input:not([type="checkbox"], [type="radio"]), [role="button"], nav a, label:has(input[type="checkbox"], input[type="radio"])) {
+    min-block-size: 44px; min-inline-size: 44px;
+  }
+  /* The minimum above already sizes these; extending the hit area as well would
+     make neighbouring row actions overlap each other. */
+}
+/* Reduced motion is a preference, not an edge case: one rule covers every
+   entrance, hover and loop in this file. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important; scroll-behavior: auto !important;
+  }
+}
 
 /* ── Auth ── */
 .auth-screen { min-height: 100vh; display: flex; }
 .auth-left {
-  width: 400px; min-width: 400px; background: var(--blue);
+  width: 420px; min-width: 420px; background: #111827;
   display: flex; flex-direction: column; justify-content: space-between;
   padding: 48px 44px; position: relative; overflow: hidden;
 }
+/* One quiet glow cut from the accent, not two decorative circles. */
 .auth-left::before {
-  content: ''; position: absolute; top: -80px; right: -80px;
-  width: 280px; height: 280px; border-radius: 50%; background: rgba(255,255,255,0.07);
+  content: ''; position: absolute; top: -140px; right: -120px;
+  width: 320px; height: 320px; border-radius: 50%;
+  background: color-mix(in srgb, var(--blue) 38%, transparent);
 }
-.auth-left::after {
-  content: ''; position: absolute; bottom: -60px; left: -60px;
-  width: 200px; height: 200px; border-radius: 50%; background: rgba(255,255,255,0.05);
-}
+.auth-left::after { content: none; }
 .auth-brand { position: relative; z-index: 1; }
 .auth-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 48px; }
 .auth-logo-mark {
@@ -154,9 +191,9 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
   background: rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center;
 }
 .auth-logo-mark svg { width: 20px; height: 20px; }
-.auth-logo-name { font-size: 18px; font-weight: 600; color: #fff; }
-.auth-headline { font-size: 26px; font-weight: 600; color: #fff; line-height: 1.35; margin-bottom: 14px; }
-.auth-sub { font-size: 13.5px; color: rgba(255,255,255,0.65); line-height: 1.65; }
+.auth-logo-name { font-size: 17px; font-weight: 600; color: #fff; letter-spacing: -0.02em; }
+.auth-headline { font-size: 30px; font-weight: 600; color: #fff; line-height: 1.22; letter-spacing: -0.035em; margin-bottom: 14px; }
+.auth-sub { font-size: 14px; color: rgba(255,255,255,0.68); line-height: 1.6; }
 .auth-features { position: relative; z-index: 1; }
 .auth-feature {
   display: flex; align-items: center; gap: 10px; padding: 10px 0;
@@ -165,13 +202,13 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
 .auth-feature-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.5); flex-shrink: 0; }
 .auth-right { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; }
 .auth-card {
-  background: #fff; border-radius: var(--radius-xl); border: 1px solid var(--gray-200);
-  padding: 40px; width: 100%; max-width: 400px; box-shadow: var(--shadow-md);
-  animation: fadeUp 0.22s ease;
+  background: var(--surface); border-radius: var(--radius-xl); border: 1px solid var(--gray-200);
+  padding: 36px; width: 100%; max-width: 420px; box-shadow: var(--shadow-lg);
+  animation: fadeUp var(--t-in) var(--ease);
 }
 @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
-.auth-card-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
-.auth-card-sub { font-size: 13px; color: var(--gray-400); margin-bottom: 28px; }
+.auth-card-title { font-size: 24px; font-weight: 600; letter-spacing: -0.03em; margin-bottom: 6px; }
+.auth-card-sub { font-size: 14px; color: var(--gray-400); margin-bottom: 28px; }
 .auth-form { display: flex; flex-direction: column; gap: 14px; }
 .auth-toggle { text-align: center; font-size: 13px; color: var(--gray-400); margin-top: 20px; }
 .auth-toggle button {
@@ -198,22 +235,22 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
   margin-top: 16px; padding: 12px 14px;
   background: var(--gray-50); border-radius: var(--radius-md); border: 1px solid var(--gray-200);
 }
-.demo-box-label { font-size: 10px; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 7px; }
+.demo-box-label { font-size: 11.5px; font-weight: 600; color: var(--gray-400); margin-bottom: 7px; }
 .demo-row { font-size: 12px; color: var(--gray-600); padding: 2px 0; }
 .demo-sep { color: var(--gray-300); margin: 0 6px; }
 
 /* ── App layout ── */
 .app { display: flex; height: 100vh; overflow: hidden; }
 .sidebar {
-  width: 230px; min-width: 230px; background: #fff;
+  width: 248px; min-width: 248px; background: var(--surface);
   border-right: 1px solid var(--gray-200); display: flex; flex-direction: column; overflow-y: auto;
 }
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .topbar {
-  background: #fff; border-bottom: 1px solid var(--gray-200); padding: 14px 28px;
+  background: var(--surface); border-bottom: 1px solid var(--gray-200); padding: 18px 32px;
   display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
 }
-.content { flex: 1; overflow-y: auto; padding: 24px 28px; }
+.content { flex: 1; overflow-y: auto; padding: 28px 32px 48px; }
 
 /* A message that sits under the topbar and applies to the whole page rather than
    to one panel: an API error, and the inactivity warning.
@@ -224,7 +261,7 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
    several-hundred-pixel slab with a giant icon in it. The API error banner had
    been doing exactly that for as long as it had existed. */
 .page-banner {
-  margin: 16px 28px 0; border-radius: var(--radius-md); padding: 11px 16px;
+  margin: 16px 32px 0; border-radius: var(--radius-md); padding: 11px 16px;
   font-size: 13px; display: flex; align-items: center; gap: 9px;
 }
 .page-banner svg { width: 15px; height: 15px; flex-shrink: 0; }
@@ -241,32 +278,33 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
   color: inherit; font: inherit; font-weight: 500; padding: 4px 10px; border-radius: var(--radius-sm);
   white-space: nowrap;
 }
-.page-banner-action:hover { background: rgba(23,105,170,0.08); }
+.page-banner-action:hover { background: color-mix(in srgb, var(--blue) 10%, transparent); }
 
 /* ── Sidebar ── */
 .sidebar-logo {
-  padding: 20px 18px 18px; display: flex; align-items: center; gap: 10px;
+  padding: 22px 18px 20px; display: flex; align-items: center; gap: 11px;
   border-bottom: 1px solid var(--gray-200);
 }
 .logo-mark {
-  width: 32px; height: 32px; border-radius: 8px; background: var(--blue);
+  width: 36px; height: 36px; border-radius: var(--radius-md); background: var(--blue);
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--blue) 28%, transparent);
 }
-.logo-mark svg { width: 16px; height: 16px; }
-.logo-text { font-size: 15px; font-weight: 600; }
+.logo-mark svg { width: 17px; height: 17px; }
+.logo-text { font-size: 16px; font-weight: 600; letter-spacing: -0.025em; }
 .logo-sub { font-size: 11px; color: var(--gray-400); margin-top: 1px; }
-.sidebar-section { padding: 16px 10px 6px; }
+.sidebar-section { padding: 20px 10px 6px; }
 .sidebar-section-label {
-  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em;
-  color: var(--gray-400); padding: 0 8px; margin-bottom: 4px;
+  font-size: 11px; font-weight: 600; color: var(--gray-400);
+  padding: 0 10px; margin-bottom: 6px;
 }
 .nav-item {
-  display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: var(--radius-md);
-  font-size: 13.5px; color: var(--gray-600); cursor: pointer; transition: all 0.12s;
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--radius-md);
+  font-size: 13.5px; color: var(--gray-600); cursor: pointer; min-height: 38px;
   border: none; background: none; width: 100%; text-align: left; user-select: none;
 }
 .nav-item:hover { background: var(--gray-100); color: var(--gray-900); }
-.nav-item.active { background: var(--blue-light); color: var(--blue); font-weight: 500; }
+.nav-item.active { background: var(--blue-light); color: var(--blue); font-weight: 600; }
 
 /* ── Collapsible nav group ────────────────────────────────────────────── */
 /* A group is a parent button that reveals its children; the chevron rotates to
@@ -305,7 +343,7 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
   display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 2px;
   width: 100%; border: none; background: none; border-radius: var(--radius-md);
   color: inherit; font-family: 'DM Sans', sans-serif; text-align: left;
-  cursor: pointer; transition: all 0.12s;
+  cursor: pointer;
 }
 .sidebar-user:hover { background: var(--gray-100); }
 .sidebar-user:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
@@ -317,7 +355,7 @@ body { font-family: 'DM Sans', sans-serif; background: var(--gray-100); color: v
   width: 100%; padding: 8px 10px; border-radius: var(--radius-md);
   border: none; background: none; color: var(--gray-600);
   font-size: 13.5px; font-weight: 400; cursor: pointer; font-family: 'DM Sans', sans-serif;
-  display: flex; align-items: center; gap: 9px; transition: all 0.12s; text-align: left;
+  display: flex; align-items: center; gap: 9px; text-align: left;
 }
 .logout-btn svg, .sidebar-install svg { width: 15px; height: 15px; flex-shrink: 0; }
 .logout-btn:hover { background: var(--red-light); color: var(--red); }
@@ -343,19 +381,24 @@ img.avatar-circle { object-fit: cover; background: var(--gray-100); }
 .av-4 { background: #FDF2F8; color: #9D174D; }
 
 /* ── Topbar ── */
-.topbar-left h1 { font-size: 16px; font-weight: 600; }
-.topbar-left p { font-size: 12px; color: var(--gray-400); margin-top: 1px; }
+.topbar-left h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.025em; }
+.topbar-left p { font-size: 12.5px; color: var(--gray-400); margin-top: 2px; }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 .btn {
-  display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius-md);
-  font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid transparent;
-  transition: all 0.12s; font-family: 'DM Sans', sans-serif;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 8px 15px; min-height: 36px; border-radius: var(--radius-md);
+  font-size: 13.5px; font-weight: 600; cursor: pointer; border: 1px solid transparent;
+  font-family: 'DM Sans', sans-serif;
+  transition: background var(--t-out) var(--ease), border-color var(--t-out) var(--ease),
+              color var(--t-out) var(--ease), transform var(--t-press) var(--ease),
+              box-shadow var(--t-out) var(--ease);
 }
-.btn-primary { background: var(--blue); color: #fff; }
-.btn-primary:hover { background: var(--blue-hover); }
+.btn-primary { background: var(--blue); color: var(--on-blue); }
+.btn-primary:hover { background: var(--blue-hover); transform: translateY(-2px); box-shadow: 0 4px 12px color-mix(in srgb, var(--blue) 26%, transparent); }
+.btn:active { transform: translateY(1px) scale(0.985); }
 .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn-ghost { background: #fff; color: var(--gray-600); border-color: var(--gray-200); }
-.btn-ghost:hover { background: var(--gray-100); color: var(--gray-900); }
+.btn-ghost { background: var(--surface); color: var(--gray-600); border-color: var(--gray-300); }
+.btn-ghost:hover { background: var(--gray-100); color: var(--gray-900); transform: translateY(-2px); }
 /* Destructive action that needs a deliberate click (the delete confirmation). */
 .btn-danger { background: var(--red); color: #fff; }
 .btn-danger:hover { background: var(--red-strong); }
@@ -365,15 +408,20 @@ img.avatar-circle { object-fit: cover; background: var(--gray-100); }
 .btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* ── Stats ── */
-.stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 22px; }
-.stat-card { background: #fff; border-radius: var(--radius-lg); border: 1px solid var(--gray-200); padding: 16px 18px; }
-.stat-label { font-size: 11.5px; color: var(--gray-400); font-weight: 500; margin-bottom: 6px; }
-.stat-value { font-size: 26px; font-weight: 600; line-height: 1; }
-.stat-sub { font-size: 11.5px; color: var(--gray-400); margin-top: 5px; display: flex; align-items: center; gap: 5px; }
+.stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 24px; }
+.stat-card {
+  background: var(--surface); border-radius: var(--radius-lg); border: 1px solid var(--gray-200);
+  padding: 18px 20px; box-shadow: var(--shadow-sm);
+  transition: transform var(--t-out) var(--ease), box-shadow var(--t-out) var(--ease);
+}
+.stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.stat-label { font-size: 12px; color: var(--gray-400); font-weight: 600; margin-bottom: 8px; }
+.stat-value { font-size: 28px; font-weight: 600; line-height: 1.05; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; }
+.stat-sub { font-size: 12px; color: var(--gray-400); margin-top: 7px; display: flex; align-items: center; gap: 5px; }
 .stat-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
 
 /* ── Table ── */
-.table-card { background: #fff; border-radius: var(--radius-lg); border: 1px solid var(--gray-200); margin-bottom: 20px; overflow: hidden; }
+.table-card { background: var(--surface); border-radius: var(--radius-lg); border: 1px solid var(--gray-200); margin-bottom: 24px; overflow: hidden; box-shadow: var(--shadow-sm); }
 
 /* The register tables are wider than a phone and, at 720-760px, wider than the
    345px card they sit in. .table-card clips its own corners with overflow:hidden,
@@ -402,10 +450,10 @@ img.avatar-circle { object-fit: cover; background: var(--gray-100); }
    focused container with the arrow keys without some affordance; the ring is it. */
 .table-scroll:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 .table-header {
-  padding: 14px 18px; border-bottom: 1px solid var(--gray-200);
+  padding: 16px 20px; border-bottom: 1px solid var(--gray-200);
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
 }
-.table-title { font-size: 13.5px; font-weight: 600; }
+.table-title { font-size: 14px; font-weight: 600; letter-spacing: -0.015em; }
 /* Footer under a catalog list that is showing only its first rows. Centred,
    because the button is about the list as a whole rather than an action on any
    one row, and ruled off from the table above it so the two do not read as one
@@ -415,16 +463,18 @@ img.avatar-circle { object-fit: cover; background: var(--gray-100); }
 .table-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .filter-chips { display: flex; gap: 6px; }
 .chip {
-  padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
-  cursor: pointer; border: 1px solid var(--gray-200); background: #fff; color: var(--gray-600);
-  transition: all 0.12s; font-family: 'DM Sans', sans-serif;
+  padding: 6px 12px; min-height: 32px; border-radius: var(--radius-sm);
+  font-size: 12.5px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--gray-300); background: var(--surface); color: var(--gray-600);
+  font-family: 'DM Sans', sans-serif;
+  transition: color var(--t-out) var(--ease), border-color var(--t-out) var(--ease), transform var(--t-press) var(--ease);
 }
-.chip:hover { border-color: var(--blue-mid); color: var(--blue); }
+.chip:hover { border-color: var(--blue-mid); color: var(--blue); transform: translateY(-1px); }
 .chip.active { background: var(--blue-light); color: var(--blue); border-color: var(--blue-mid); }
 .chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .search-wrap {
   display: flex; align-items: center; gap: 7px;
-  background: var(--gray-100); border: 1px solid var(--gray-200); border-radius: var(--radius-md); padding: 5px 11px;
+  background: var(--canvas); border: 1px solid var(--gray-300); border-radius: var(--radius-md); padding: 6px 12px;
 }
 .search-wrap svg { width: 13px; height: 13px; color: var(--gray-400); flex-shrink: 0; }
 .search-wrap input {
@@ -433,16 +483,17 @@ img.avatar-circle { object-fit: cover; background: var(--gray-100); }
 }
 .search-wrap input::placeholder { color: var(--gray-400); }
 .search-wrap input:focus { outline: none; }
-.search-wrap:focus-within { border-color: var(--blue-mid); box-shadow: 0 0 0 3px rgba(24,95,165,0.1); }
+.search-wrap:focus-within { border-color: var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 14%, transparent); }
 table { width: 100%; border-collapse: collapse; }
 thead th {
-  padding: 9px 18px; text-align: left; font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.07em; color: var(--gray-400);
-  border-bottom: 1px solid var(--gray-200); background: var(--gray-50); white-space: nowrap;
+  padding: 11px 20px; text-align: left; font-size: 12px; font-weight: 600;
+  color: var(--gray-400);
+  border-bottom: 1px solid var(--gray-200); background: var(--canvas); white-space: nowrap;
 }
-tbody td { padding: 11px 18px; border-bottom: 1px solid var(--gray-100); vertical-align: middle; }
+.table-card thead th { position: sticky; top: 0; z-index: 1; }
+tbody td { padding: 13px 20px; border-bottom: 1px solid var(--gray-200); vertical-align: middle; font-size: 13.5px; }
 tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover td { background: #F8FAFC; }
+tbody tr:hover td { background: var(--gray-100); }
 /* Rows the current user is allowed to edit open the issue form when clicked
    anywhere, so they advertise it with a pointer. Rows belonging to another
    technician (visible to managers only) deliberately get no pointer and no
@@ -457,8 +508,8 @@ tbody tr.row-clickable { cursor: pointer; }
 .row-enter td { animation: rowFadeSlide 200ms ease-out; }
 
 @keyframes statusHighlightPulse {
-  0%   { box-shadow: 0 0 0 0 rgba(37,99,235,0.35); }
-  100% { box-shadow: 0 0 0 6px rgba(37,99,235,0); }
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 35%, transparent); }
+  100% { box-shadow: 0 0 0 6px transparent; }
 }
 .status-highlight { animation: statusHighlightPulse 700ms ease-out; }
 @media (prefers-reduced-motion: reduce) {
@@ -468,7 +519,7 @@ tbody tr.row-clickable { cursor: pointer; }
 /* ── Badges ── */
 .badge {
   display: inline-flex; align-items: center; gap: 4px;
-  padding: 3px 9px; border-radius: 20px; font-size: 11.5px; font-weight: 500; white-space: nowrap;
+  padding: 3px 9px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; white-space: nowrap;
 }
 .badge-ok { background: var(--green-light); color: var(--green); }
 /* An issue whose resolution time ran past the SLA. A filled pill rather than red
@@ -478,7 +529,7 @@ tbody tr.row-clickable { cursor: pointer; }
    an override of its own. */
 .sla-breach {
   display: inline-block; font-weight: 600;
-  padding: 1px 6px; border-radius: 5px;
+  padding: 2px 7px; border-radius: var(--radius-sm);
   background: var(--red-light); color: var(--red); border: 1px solid var(--red-mid);
 }
 .badge-pending { background: var(--amber-light); color: var(--amber); }
@@ -504,11 +555,13 @@ tbody tr.row-clickable { cursor: pointer; }
 
 /* ── Icon btn ── */
 .icon-btn {
-  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  width: 32px; height: 32px; border-radius: var(--radius-md);
   display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer; border: none; background: none; color: var(--gray-400); transition: all 0.12s;
+  cursor: pointer; border: none; background: none; color: var(--gray-400);
+  transition: background var(--t-out) var(--ease), color var(--t-out) var(--ease), transform var(--t-press) var(--ease);
 }
-.icon-btn:hover { background: var(--gray-100); color: var(--gray-900); }
+.icon-btn:hover { background: var(--gray-100); color: var(--gray-900); transform: translateY(-1px); }
+.icon-btn:active { transform: scale(0.94); }
 .icon-btn.danger:hover { background: var(--red-light); color: var(--red); }
 .icon-btn svg { width: 14px; height: 14px; }
 .icon-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
@@ -576,7 +629,7 @@ tbody tr.row-clickable { cursor: pointer; }
   position: relative; overflow: hidden;
   display: flex; flex-direction: column; gap: 6px;
   padding: 10px 11px 9px;
-  background: #fff; border: 1px solid var(--gray-200); border-radius: 9px;
+  background: var(--surface); border: 1px solid var(--gray-200); border-radius: 9px;
   border-left: 3px solid var(--gray-200);
   transition: border-color 0.25s ease;
 }
@@ -698,7 +751,7 @@ tbody tr.row-clickable { cursor: pointer; }
 .maint-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
 .maint-tile {
   position: relative; overflow: hidden;
-  background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg);
+  background: var(--surface); border: 1px solid var(--gray-200); border-radius: var(--radius-lg);
   padding: 12px 15px 13px 17px;
   /* A button, so the browser's own chrome is undone: the tile supplies its own
      surface, and the label has to sit left like every other one in the app. */
@@ -816,7 +869,7 @@ tbody tr.row-clickable { cursor: pointer; }
   display: flex; align-items: center; gap: 8px;
   padding: 11px 12px; cursor: pointer; text-align: left;
   border: 1px solid var(--gray-200); border-radius: var(--radius-md);
-  background: #fff; font-size: 13.5px; color: var(--gray-600);
+  background: var(--surface); font-size: 13.5px; color: var(--gray-600);
   font-family: inherit; transition: border-color 0.12s, background 0.12s, color 0.12s;
 }
 .maint-choice:hover { border-color: var(--blue-mid); }
@@ -842,7 +895,7 @@ html.dark .maint-choice.on   { background: var(--blue-light); border-color: var(
 .admin-form-inline .ci-preview { flex: 1 1 auto; min-width: 0; }
 .admin-form-inline .btn { flex: 0 0 auto; height: 36px; white-space: nowrap; }
 .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.mini-card { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: 18px 20px; }
+.mini-card { background: var(--surface); border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: 18px 20px; }
 .mini-card-title { font-size: 13px; font-weight: 600; margin-bottom: 14px; }
 
 /* ── Settings: collapsible groups ────────────────────────────────────────
@@ -862,7 +915,7 @@ html.dark .maint-choice.on   { background: var(--blue-light); border-color: var(
    way to reach the rows behind it. At 0fr the row collapses to the height of a
    hidden child, which is right for any content and needs no number kept in step
    with the data. */
-.set-group { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); }
+.set-group { background: var(--surface); border: 1px solid var(--gray-200); border-radius: var(--radius-lg); }
 .set-group + .set-group { margin-top: 14px; }
 
 /* One button, not a heading with a toggle button beside it: the native element
@@ -1099,14 +1152,11 @@ html.dark .rota-readonly { background: var(--gray-200) !important; border-color:
    Deliberately layout-only classes, so html.dark inherits .rota-week's existing
    override below and this block adds no dark rules of its own.
 
-   Both states are --gray-600, which is a choice and not a shortcut. The obvious
-   move --grey for the quiet state, darker for the firm one -- needs --gray-500
-   and --gray-700, and NEITHER IS DEFINED anywhere in this file. An undefined custom
-   property is invalid at computed-value time and falls back to currentColor, so
-   those would have inherited whatever the parent happened to be and looked fine in
-   one place and wrong in another. The states are separated by weight and by the
-   strength of the rule instead, which is what actually differs about them; see the
-   note on .is-past. */
+   Both states are --gray-600: the states are separated by weight and by the
+   strength of the rule, which is what actually differs about them; see the note
+   on .is-past. The ramp is defined in :root now, so the old workaround is no
+   longer needed -- but leaving this pair on the same ink keeps the two chips
+   visually adjacent when they appear in the same header. */
 .rota-weekstate {
   display: inline-flex; align-items: center; flex-shrink: 0;
   padding: 3px 9px; border-radius: var(--radius-sm);
@@ -1157,7 +1207,7 @@ html.dark .rota-readonly { background: var(--gray-200) !important; border-color:
 /* Only reachable for a manager: /v1/shifts honours include_retired for managers
    alone, so nobody else is told a retired shift exists. */
 .rota-legend-retired {
-  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: 10px; font-weight: 600; text-transform: none; letter-spacing: 0;
   padding: 1px 6px; border-radius: 999px; white-space: nowrap;
   background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200);
 }
@@ -1364,7 +1414,7 @@ html.dark .rota-free { background: var(--gray-200) !important; border-color: var
 .rota-picker-panel {
   position: fixed; z-index: 30; top: 0; left: 0;
   min-width: 216px; max-height: none; overflow-y: auto; padding: 4px;
-  background: #fff; border: 1px solid var(--gray-200);
+  background: var(--surface); border: 1px solid var(--gray-200);
   border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
 }
 html.dark .rota-picker-panel { background: var(--gray-50); border-color: var(--gray-300); }
@@ -1391,7 +1441,7 @@ html.dark .rota-picker-panel { background: var(--gray-50); border-color: var(--g
 .rota-picker-sep { height: 1px; margin: 5px 6px 3px; background: var(--gray-200); }
 .rota-picker-subhead {
   padding: 4px 10px 3px; font-size: 10px; font-weight: 700;
-  letter-spacing: .08em; text-transform: uppercase; color: var(--gray-400);
+  letter-spacing: 0; text-transform: none; color: var(--gray-400);
 }
 /* The absence options carry the shared wash, so the picker and the grid agree on what
    an absence looks like BEFORE the manager has chosen one. */
@@ -1409,14 +1459,13 @@ html.dark .rota-picker-panel { background: var(--gray-50); border-color: var(--g
 
    --blue INVERTS between themes, so any rule pairing it with --blue-light is correct in
    both automatically and any rule pairing it with a grey surface has to be read per
-   theme. The only non-token literal here is #fff on the checked tick, matching
-   .btn-primary and .rota-cell.is-away. */
+   theme. The checked tick uses --on-blue, the same ink as .btn-primary. */
 
 .roster-section {
   display: flex; align-items: baseline; gap: 8px;
   margin: 16px 0 6px;
   font-size: 10px; font-weight: 700;
-  letter-spacing: .08em; text-transform: uppercase; color: var(--gray-400);
+  letter-spacing: 0; text-transform: none; color: var(--gray-400);
 }
 /* The count sits beside the heading rather than in SetGroup's own badge, because the
    badge belongs to the collapsed group header and this number changes with every tick --
@@ -1469,14 +1518,10 @@ html.dark .roster-row:hover { background: var(--gray-200); }
      --gray-400 measures 5.5:1 and 5.33:1 on this same row. */
   border: 1.5px solid var(--gray-400); background: var(--gray-50);
   display: flex; align-items: center; justify-content: center;
-  /* Two inks on one fill, because --blue INVERTS between themes. White is right on the
-     dark blue (5.77:1) and unreadable on the pale one (2.37:1, measured) -- the same
-     trap as the run-count pill and the range multiplier, and written here from the
-     pattern rather than measured, so it got wrong a third time. --gray-700 resolves to
-     the same dark ink in BOTH themes, which is why one dark rule covers it. */
-  color: #FFFFFF;
+  /* --on-blue follows the inversion: white on the dark blue of the light theme
+     (5.8:1), dark ink on the pale blue of the dark theme (8.3:1). */
+  color: var(--on-blue);
 }
-html.dark .roster-tick { color: var(--gray-700); }
 .roster-tick svg { width: 13px; height: 13px; }
 .roster-box:checked ~ .roster-tick { background: var(--blue); border-color: var(--blue); }
 /* Checked, the border is the fill, so it is not a separate contrast question -- but the
@@ -1657,7 +1702,7 @@ html.dark .roster-row.is-moved { background: var(--gray-200); }
 .now-group + .now-group { margin-top: 14px; }
 .now-group-head {
   display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;
-  font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none;
   color: var(--gray-400);
 }
 .now-group-count { font-family: 'DM Mono', monospace; letter-spacing: 0; color: var(--gray-400); }
@@ -1796,7 +1841,7 @@ html.dark .rota-rosterlink:hover { color: var(--gray-900); }.rota-picker-foot {
   display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
   padding: 4px 11px; border-radius: 999px; white-space: nowrap;
   font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 700;
-  color: var(--blue); background: #fff; border: 1px solid var(--blue-mid);
+  color: var(--blue); background: var(--surface); border: 1px solid var(--blue-mid);
 }
 html.dark .rota-dirty { background: var(--gray-50); }
 .rota-savebar {
@@ -1978,27 +2023,20 @@ html.dark .rota-dirty { background: var(--gray-50); }
    transient state and the row's permanent two lines -- name and hours -- must not be
    pushed around by it appearing and disappearing.
 
-   Two inks on one fill, because --blue INVERTS between themes: rgb(23,105,170) light,
-   rgb(95,176,232) dark. White is right on the first (5.77:1) and unreadable on the
-   second (2.37:1, measured, against a 4.5:1 floor for 10.5px text). --gray-700 is the
-   one token that is the same dark ink in both themes, but on its own it only reaches
-   2.85:1 in light -- so it is the dark-theme half, not a universal answer.
-
-   Scoped to html.dark rather than given a token pair, because this is plain CSS with
-   no inline declaration for a theme selector to lose to. */
+   --on-blue follows the inversion: white on the dark light-theme blue (5.8:1),
+   dark ink on the pale dark-theme blue (8.3:1). */
 .rota-sel-count {
   display: inline-flex; margin-top: 4px; padding: 1px 7px; border-radius: 999px;
   font-size: 10.5px; font-weight: 700; white-space: nowrap;
-  background: var(--blue); color: #FFFFFF;
+  background: var(--blue); color: var(--on-blue);
 }
-html.dark .rota-sel-count { color: var(--gray-700); }
 /* The multiplier on a picker's options. NOT margin-left:auto: the panel overflows its
    scroll container on a right-hand column, and the right edge is what gets clipped.
 
-   --blue is right on the panel's own background (5.77:1 light, 6.98:1 dark) and wrong
-   on a wash: measured at 4.47:1 on Night's indigo, just under the 4.5:1 floor for
-   11px text. So the tint gets its own ink, scoped rather than global -- the same
-   failure the legend count had, with the same answer.
+   --blue is right on the panel's own background and wrong on a saturated wash:
+   the tinted options need a fixed dark ink so the glyph clears 4.5:1 on every
+   tint. Scoped rather than global -- the same failure the legend count had,
+   with the same answer.
 
    --gray-700 because it resolves to the same dark ink in BOTH themes, so one
    declaration covers light and dark. Only .is-tinted needs it: the absence options
@@ -2110,7 +2148,7 @@ html.dark .rota-tint-dot { background: var(--tint-dot-dark); }
   box-shadow: 0 0 0 1px var(--gray-200), 0 0 0 2px var(--gray-400);
   transition: box-shadow .12s;
 }
-.rota-tint-btn.is-set { background: var(--tint-wash); color: var(--tint-ink); }
+.rota-tint-btn.is-set { background: var(--tint-wash); color: var(--gray-900); }
 .rota-tint-btn:hover { box-shadow: 0 0 0 1px var(--gray-300), 0 0 0 2px var(--gray-600); }
 .rota-tint-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
 .rota-tint-btn-ic { display: inline-flex; }
@@ -2132,10 +2170,10 @@ html.dark .rota-tint-dot { background: var(--tint-dot-dark); }
    whole tile is the hit target. opacity 0 rather than display:none, so it stays in
    the accessibility tree and keeps the group's arrow-key traversal. */
 .rota-tint input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
-.rota-tint.is-none { background: #fff; box-shadow: inset 0 0 0 1px var(--gray-200); color: var(--gray-400); }
+.rota-tint.is-none { background: var(--surface); box-shadow: inset 0 0 0 1px var(--gray-200); color: var(--gray-400); }
 html.dark .rota-tint.is-none { background: var(--gray-50); box-shadow: inset 0 0 0 1px var(--gray-300); color: var(--gray-600); }
-.rota-tint:not(.is-none) { background: var(--tint-wash); color: #FFFFFF; }
-html.dark .rota-tint:not(.is-none) { background: var(--tint-wash-dark); color: #FFFFFF; }
+.rota-tint:not(.is-none) { background: var(--tint-wash); color: var(--gray-900); }
+html.dark .rota-tint:not(.is-none) { background: var(--tint-wash-dark); color: var(--gray-900); }
 .rota-tint:hover { border-color: var(--blue-mid); }
 .rota-tint.is-on { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
 .rota-tint:focus-within { outline: 2px solid var(--blue); outline-offset: 1px; }
@@ -2236,7 +2274,7 @@ html.dark .team-you { background: var(--blue-light) !important; color: var(--blu
 }
 .team-segmented button:hover { color: var(--gray-900); }
 .team-segmented button.active {
-  background: #fff; color: var(--blue);
+  background: var(--surface); color: var(--blue);
   box-shadow: 0 1px 2px rgba(0,0,0,.06);
 }
 html.dark .team-segmented button.active { background: var(--gray-50); }
@@ -2252,7 +2290,7 @@ html.dark .team-segmented button.active { background: var(--gray-50); }
   min-width: 150px; text-align: center;
 }
 .week-nav button {
-  border: 1px solid var(--gray-200); background: #fff; cursor: pointer;
+  border: 1px solid var(--gray-200); background: var(--surface); cursor: pointer;
   border-radius: var(--radius-md); padding: 6px 10px;
   display: flex; align-items: center; color: var(--gray-600);
 }
@@ -2275,7 +2313,7 @@ html.dark .week-nav button { background: var(--gray-50); }
 }
 .daycol .fill { width: 100%; background: var(--blue); border-radius: var(--radius-sm); min-height: 2px; }
 .daycol.empty .fill { background: var(--gray-300); }
-.daycol .dow { font-size: 10px; color: var(--gray-400); margin-top: 6px; text-transform: uppercase; }
+.daycol .dow { font-size: 10px; color: var(--gray-400); margin-top: 6px; text-transform: none; }
 .daycol .dom { font-size: 10px; color: var(--gray-300); }
 
 .week-breakdowns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
@@ -2300,8 +2338,8 @@ html.dark .week-nav button { background: var(--gray-50); }
   text-align: center; line-height: 1.25;
 }
 .lcu-day-dow {
-  display: block; font-size: 10px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.06em; color: var(--gray-400);
+  display: block; font-size: 10px; font-weight: 600; text-transform: none;
+  letter-spacing: 0; color: var(--gray-400);
 }
 .lcu-day-date { display: block; font-size: 12px; color: var(--gray-600); }
 /* The light itself: green means the reader took the card, red means it did not. */
@@ -2325,7 +2363,7 @@ html.dark .week-nav button { background: var(--gray-50); }
 .lcu-choice-btn {
   flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px;
   padding: 12px 14px; border-radius: var(--radius-md); cursor: pointer;
-  border: 1.5px solid var(--gray-200); background: #fff; color: var(--gray-600);
+  border: 1.5px solid var(--gray-200); background: var(--surface); color: var(--gray-600);
   font-size: 13.5px; font-weight: 500; transition: all 0.12s;
 }
 .lcu-choice-btn:hover { border-color: var(--gray-400); }
@@ -2378,7 +2416,7 @@ html.dark .week-nav button { background: var(--gray-50); }
 .lcu-resting-table { width: 100%; border-collapse: collapse; }
 .lcu-resting-table th {
   text-align: left; padding: 9px 20px;
-  font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none;
   color: var(--gray-400); border-bottom: 1px solid var(--gray-200);
   /* Wrapping heads, because the longest one is "LEITORES RECONDICIONADOS" and
      uppercase plus letter-spacing makes it wider than the column it names. */
@@ -2416,14 +2454,14 @@ html.dark .lcu-resting-table td { border-color: var(--gray-200); }
 
 /* ── Modal ── */
 .modal-overlay {
-  position: fixed; inset: 0; background: rgba(28,28,26,0.45);
+  position: fixed; inset: 0; background: rgba(17,24,39,0.48);
   display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px;
-  animation: fadeIn 0.15s ease;
+  animation: fadeIn var(--t-out) var(--ease);
 }
 @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
 .modal {
-  background: #fff; border-radius: var(--radius-lg); width: 100%; max-width: 520px;
-  max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-lg); animation: slideUp 0.18s ease;
+  background: var(--surface); border-radius: var(--radius-xl); width: 100%; max-width: 540px;
+  max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-lg); animation: slideUp var(--t-in) var(--ease);
   /* When the panel's own scroll reaches its end, the gesture stops there instead
      of continuing into the page behind it. */
   overscroll-behavior: contain;
@@ -2433,7 +2471,7 @@ html.dark .lcu-resting-table td { border-color: var(--gray-200); }
   padding: 20px 24px 16px; border-bottom: 1px solid var(--gray-200);
   display: flex; align-items: center; justify-content: space-between;
 }
-.modal-header h2 { font-size: 15px; font-weight: 600; }
+.modal-header h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
 .modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
 .modal-footer { padding: 14px 24px 20px; border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px; }
 
@@ -2480,14 +2518,15 @@ html.dark .lcu-resting-table td { border-color: var(--gray-200); }
   .form-row { grid-template-columns: 1fr; }
 }
 .form-group { display: flex; flex-direction: column; gap: 5px; }
-.form-group label { font-size: 11px; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.07em; }
-.form-group .form-group-h { font-size: 11px; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.07em; }
+.form-group label { font-size: 12.5px; font-weight: 600; color: var(--gray-600); }
+.form-group .form-group-h { font-size: 12.5px; font-weight: 600; color: var(--gray-600); }
 .form-control {
-  padding: 8px 11px; border: 1px solid var(--gray-200); border-radius: var(--radius-md);
-  font-size: 13.5px; color: var(--gray-900); background: #fff;
-  font-family: 'DM Sans', sans-serif; outline: none; transition: border-color 0.12s;
+  padding: 9px 12px; min-height: 40px; border: 1px solid var(--gray-300); border-radius: var(--radius-md);
+  font-size: 14px; color: var(--gray-900); background: var(--surface);
+  font-family: 'DM Sans', sans-serif; outline: none;
+  transition: border-color var(--t-out) var(--ease), box-shadow var(--t-out) var(--ease);
 }
-.form-control:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(24,95,165,0.1); }
+.form-control:focus { border-color: var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 14%, transparent); }
 .form-control::placeholder { color: var(--gray-400); }
 select.form-control { cursor: pointer; }
 
@@ -2505,7 +2544,7 @@ select.form-control { cursor: pointer; }
 .room-picker-panel {
   position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; right: 0;
   max-height: 232px; overflow-y: auto;
-  background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+  background: var(--surface); border: 1px solid var(--gray-200); border-radius: var(--radius-md);
   box-shadow: var(--shadow-md); padding: 4px;
 }
 html.dark .room-picker-panel { background: var(--gray-50) !important; border-color: var(--gray-300) !important; }
@@ -2726,11 +2765,11 @@ html.dark .room-picker-empty { color: var(--gray-400) !important; }
 
 /* The support page: one stat card per company */
 .support-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 8px; }
-.support-stat-card { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: 16px 18px; }
+.support-stat-card { background: var(--surface); border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: 16px 18px; }
 .support-stat-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .support-stat-name { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700; color: var(--gray-900); }
 .support-stat-figures { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 14px; }
-.support-figure-label { font-size: 10.5px; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.06em; }
+.support-figure-label { font-size: 10.5px; font-weight: 600; color: var(--gray-400); text-transform: none; letter-spacing: 0; }
 .support-figure-value { font-size: 17px; font-weight: 700; color: var(--gray-900); font-variant-numeric: tabular-nums; margin-top: 1px; }
 .support-figure-note { font-size: 11.5px; color: var(--gray-400); margin-top: 1px; }
 .support-stat-empty { font-size: 12.5px; color: var(--gray-400); padding: 6px 0 2px; }
@@ -2768,7 +2807,7 @@ html.dark .room-picker-empty { color: var(--gray-400) !important; }
 .cpick-card.selected, .cpick-card.selected:hover { border-color: var(--blue); background: var(--blue-light); transform: none; }
 .cpick-check {
   position: absolute; top: 8px; right: 8px; width: 18px; height: 18px; border-radius: 50%;
-  background: var(--blue); color: #fff; display: flex; align-items: center; justify-content: center;
+  background: var(--blue); color: var(--on-blue); display: flex; align-items: center; justify-content: center;
   transform: scale(0); transition: transform 0.18s cubic-bezier(0.3, 1.6, 0.6, 1);
 }
 .cpick-check svg { width: 10px; height: 10px; }
@@ -2846,7 +2885,7 @@ html.dark .room-picker-empty { color: var(--gray-400) !important; }
 .sys-detail-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 @media (max-width: 1100px) { .sys-detail-grid { grid-template-columns: repeat(2, 1fr); } }
 .sys-detail-item { padding: 14px 16px; }
-.sys-detail-label { font-size: 11px; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+.sys-detail-label { font-size: 11px; font-weight: 600; color: var(--gray-400); text-transform: none; letter-spacing: 0; margin-bottom: 5px; }
 .sys-detail-value { font-size: 15px; font-weight: 600; color: var(--gray-900); }
 
 /* False-positive checkbox on the issue form, and its badge in the tables */
@@ -2900,12 +2939,12 @@ tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
 .cicon-btn { padding: 0; border: none; background: none; border-radius: 10px; cursor: pointer; display: inline-flex; }
 .cicon-btn:hover .cicon { box-shadow: 0 0 0 2px var(--blue-mid); }
 .icon-editor-row td { background: var(--gray-100); padding: 12px 16px; }
-.icon-editor-label { font-size: 11px; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
+.icon-editor-label { font-size: 11px; font-weight: 600; color: var(--gray-600); text-transform: none; letter-spacing: 0; margin-bottom: 8px; }
 .ci-preview { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; font-size: 13px; font-weight: 500; }
 .ci-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Empty ── */
-.empty-state { padding: 48px; text-align: center; color: var(--gray-400); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.empty-state { padding: 56px 32px; text-align: center; color: var(--gray-400); display: flex; flex-direction: column; align-items: center; gap: 12px; }
 
 /* Shown on a recurring alert whose issues have all been deleted. */
 .alert-stale { padding: 20px; text-align: center; border-top: 1px solid var(--gray-200); }
@@ -2917,7 +2956,7 @@ tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
 .error-boundary { display: flex; align-items: center; justify-content: center; padding: 48px 24px; min-height: 60vh; }
 .error-boundary-card {
   max-width: 560px; width: 100%; text-align: center;
-  background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg);
+  background: var(--surface); border: 1px solid var(--gray-200); border-radius: var(--radius-lg);
   padding: 32px 28px; box-shadow: var(--shadow-md);
 }
 .error-boundary-icon { color: var(--red); display: flex; justify-content: center; margin-bottom: 12px; }
@@ -2946,7 +2985,7 @@ tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
 .notif-toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
 .notif-toolbar-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
 .notif-card { overflow:hidden; }
-.notif-list-head { padding:11px 16px; border-bottom:1px solid var(--gray-200); font-size:11px; font-weight:600; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.07em; }
+.notif-list-head { padding:12px 16px; border-bottom:1px solid var(--gray-200); font-size:12px; font-weight:600; color:var(--gray-400); }
 .notif-list { list-style:none; margin:0; padding:0; }
 .notif-item { position:relative; display:grid; grid-template-columns:30px minmax(0,1fr) auto; gap:12px; align-items:start; padding:12px 16px; border-top:1px solid var(--gray-200); }
 .notif-item:first-child { border-top:none; }
@@ -3011,11 +3050,9 @@ tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
    case screen readers routinely miss. */
 .toast-region { position: fixed; bottom: 24px; right: 24px; z-index: 200; pointer-events: none; }
 .toast {
-  /* The inverted pair, taken from tokens rather than from #fff. The old
-     `background: var(--gray-900); color: #fff` was invisible in the dark theme:
-     there --gray-900 is #EDEFF2, so the message was white on near-white, 1.0:1.
-     Pairing --gray-900 with --gray-50 flips to light-on-dark in the light theme
-     and dark-on-light in the dark theme, which is the same slab either way. */
+  /* The inverted pair, taken from tokens rather than from #fff. Pairing
+     --gray-900 with --gray-50 flips to light-on-dark in the light theme and
+     dark-on-light in the dark theme, which is the same slab either way. */
   background: var(--gray-900); color: var(--gray-50);
   padding: 10px 18px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500;
   line-height: 1.4;
@@ -3040,12 +3077,12 @@ tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
 /* ── lang toggle ── */
 .lang-toggle {
   display: inline-flex; align-items: center; border-radius: var(--radius-md);
-  border: 1px solid var(--gray-200); background: #fff; overflow: hidden; flex-shrink: 0;
+  border: 1px solid var(--gray-300); background: var(--surface); overflow: hidden; flex-shrink: 0;
 }
 .lang-btn {
-  padding: 6px 11px; font-size: 12px; font-weight: 500; cursor: pointer;
-  border: none; background: none; color: var(--gray-500);
-  font-family: 'DM Sans', sans-serif; transition: all 0.12s; line-height: 1;
+  padding: 8px 12px; min-height: 36px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  border: none; background: none; color: var(--gray-400);
+  font-family: 'DM Sans', sans-serif; line-height: 1;
   display: flex; align-items: center; gap: 5px;
 }
 .lang-btn:first-child { border-right: 1px solid var(--gray-200); }
@@ -3117,7 +3154,7 @@ textarea.form-control { resize: vertical; min-height: 88px; line-height: 1.5; }
   display: none; align-items: center; justify-content: center;
   width: 36px; height: 36px; padding: 0; flex-shrink: 0;
   border: 1px solid var(--gray-200); border-radius: var(--radius-md);
-  background: #fff; color: var(--gray-700); cursor: pointer;
+  background: var(--surface); color: var(--gray-700); cursor: pointer;
 }
 .menu-btn:hover { background: var(--gray-100); }
 .menu-btn svg { width: 16px; height: 16px; }
@@ -3156,9 +3193,9 @@ textarea.form-control { resize: vertical; min-height: 88px; line-height: 1.5; }
     display: inline-flex; align-items: center; gap: 6px;
     position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom));
     z-index: 40; border: none; border-radius: 999px; padding: 12px 18px;
-    background: var(--blue); color: #fff; cursor: pointer;
+    background: var(--blue); color: var(--on-blue); cursor: pointer;
     font-family: 'DM Sans', sans-serif; font-size: 13.5px; font-weight: 600;
-    box-shadow: 0 6px 20px rgba(24,95,165,0.35);
+    box-shadow: 0 6px 20px color-mix(in srgb, var(--blue) 30%, transparent);
   }
   .mobile-capture-fab svg { width: 15px; height: 15px; }
 }
@@ -3223,9 +3260,9 @@ html.dark .maint-tile.live::after { opacity: 0.25; }
 html.dark .error-boundary-card { border-color: var(--gray-200) !important; }
 html.dark .support-counts { border-color: var(--gray-200) !important; }
 
-html.dark thead th { background: var(--gray-200) !important; border-color: var(--gray-300) !important; }
+html.dark thead th { background: var(--gray-100) !important; border-color: var(--gray-200) !important; }
 html.dark tbody td { border-color: var(--gray-200) !important; }
-html.dark tbody tr:hover td { background: var(--gray-200) !important; }
+html.dark tbody tr:hover td { background: #1E2632 !important; }
 
 html.dark .form-control {
   border-color: var(--gray-300) !important;
@@ -3241,13 +3278,17 @@ html.dark .form-control {
    without this the hover would never apply in dark at all. It keeps
    --blue-hover, which in this theme is lighter than --blue rather than darker --
    the correct direction now that the ink sitting on it is dark, at 8.35:1. */
-html.dark .btn-primary       { background: var(--blue); color: #0B1D2C; }
+html.dark .btn-primary       { background: var(--blue); color: var(--on-blue); }
+html.dark .btn-primary:hover { box-shadow: 0 4px 12px rgba(143,180,255,0.22); }
 html.dark .btn-primary:hover { background: var(--blue-hover); }
 
 html.dark .btn-ghost {
   color: var(--gray-600) !important;
   border-color: var(--gray-300) !important;
 }
+/* .menu-btn uses --gray-700 as dark ink on light surfaces elsewhere; on the
+   dark topbar its own surface flips, so the ink flips with it. */
+html.dark .menu-btn { color: var(--gray-900); }
 html.dark .btn-ghost:hover { background: var(--gray-200) !important; color: var(--gray-900) !important; }
 /* In dark mode --red is a light salmon, so white text on it would be barely
    legible. Flip the pairing to a dark red fill with the light red as the text,
@@ -3259,7 +3300,7 @@ html.dark .btn-danger:hover  { background: var(--red-strong) !important; }
    Dark --red is a pale salmon, so white on it measured 2.67:1 at 10px. Dark ink
    on the same fill gives 6.71:1. The light pairing needs no override of its own:
    it is the light --red on white, which now clears at 5.34:1. */
-html.dark .nav-badge { color: #2A0F0F; }
+html.dark .nav-badge { color: var(--gray-700); }
 
 html.dark .nav-item.active { background: var(--blue-light) !important; color: var(--blue) !important; }
 html.dark .nav-item:hover  { background: var(--gray-200) !important; }
@@ -3295,7 +3336,7 @@ html.dark .auth-right  { background: var(--gray-50) !important; }
       Using --blue-light rather than a new value also keeps the panel inside the
       dark theme's own surfaces, so the eye is drawn to the login card on the right
       rather than to a bright slab on the left. */
-html.dark .auth-left   { background: var(--blue-light) !important; }
+html.dark .auth-left   { background: #0C1119 !important; }
 
 @media (max-width: 900px) {
   .stats-grid { grid-template-columns: repeat(2,1fr); }
@@ -3362,7 +3403,7 @@ html.dark .auth-left   { background: var(--blue-light) !important; }
 }
 .rm-summary-card {
   display: flex; flex-direction: column; gap: 3px; text-align: left;
-  background: #fff; border: 1px solid var(--gray-200);
+  background: var(--surface); border: 1px solid var(--gray-200);
   border-radius: var(--radius-lg); padding: 11px 13px; cursor: pointer;
   font-family: inherit; transition: border-color 0.12s, box-shadow 0.12s;
 }
@@ -3375,7 +3416,7 @@ html.dark .auth-left   { background: var(--blue-light) !important; }
 .rm-floor-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .rm-floor-title {
   font-size: 12px; font-weight: 600; color: var(--gray-600);
-  text-transform: uppercase; letter-spacing: 0.06em;
+  text-transform: none; letter-spacing: 0;
 }
 .rm-floor-line { flex: 1; height: 1px; background: var(--gray-200); }
 .rm-grid {
@@ -3384,7 +3425,7 @@ html.dark .auth-left   { background: var(--blue-light) !important; }
 }
 .rm-room {
   display: flex; flex-direction: column; gap: 3px; text-align: left;
-  background: #fff; border: 1px solid var(--gray-200);
+  background: var(--surface); border: 1px solid var(--gray-200);
   border-left: 4px solid var(--gray-300);
   border-radius: var(--radius-md); padding: 9px 11px;
   cursor: pointer; font-family: inherit;
@@ -3435,7 +3476,7 @@ html.dark .auth-left   { background: var(--blue-light) !important; }
 .rm-eq-col { display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .rm-stepper-label {
   font-size: 9.5px; font-weight: 600; color: var(--gray-400);
-  text-transform: uppercase; letter-spacing: 0.06em;
+  text-transform: none; letter-spacing: 0;
 }
 .rm-stepper {
   display: flex; align-items: center; overflow: hidden;
@@ -3443,7 +3484,7 @@ html.dark .auth-left   { background: var(--blue-light) !important; }
 }
 .rm-stepper button {
   width: 32px; height: 32px; border: 0; background: var(--gray-50);
-  color: var(--gray-700); cursor: pointer;
+  color: var(--gray-900); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
 .rm-stepper button:hover:not(:disabled) { background: var(--gray-100); }
@@ -3474,7 +3515,7 @@ html.dark .auth-left   { background: var(--blue-light) !important; }
 .rm-cat-row {
   display: flex; align-items: center; gap: 10px;
   border: 1px solid var(--gray-200); border-radius: var(--radius-md);
-  padding: 9px 11px; background: #fff;
+  padding: 9px 11px; background: var(--surface);
 }
 .rm-cat-swatch { width: 15px; height: 15px; border-radius: 50%; flex-shrink: 0; }
 .rm-cat-main { min-width: 0; }

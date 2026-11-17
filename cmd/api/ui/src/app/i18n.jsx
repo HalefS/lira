@@ -134,7 +134,6 @@ const T = {
     // The feed carries a structured kind and params, never a server sentence.
     // These are the only words the reader sees for an item.
     notifNav: 'Inbox',
-    notifNavUnread: '{label}, {count} unread',
     notifSubtitle: 'Everything that needs you now.',
     notifNote: 'Read is not done — opening an item takes you to the page where it is handled.',
     notifListTitle: 'Outstanding now',
@@ -1237,7 +1236,6 @@ const T = {
 
     // ── Caixa de entrada ──
     notifNav: 'Caixa de entrada',
-    notifNavUnread: '{label}, {count} por ler',
     notifSubtitle: 'Tudo o que precisa de si agora.',
     notifNote: 'Lido não é resolvido — abrir um item leva-o à página onde é tratado.',
     notifListTitle: 'Em aberto agora',
