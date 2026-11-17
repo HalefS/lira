@@ -9,6 +9,12 @@
      rather than left to prefers-color-scheme, because this app's theme is a
      stored setting, not a system preference. -->
 <link rel="manifest" href="/manifest.webmanifest" />
+<!-- Declares both schemes up front so the browser can pick the right canvas
+     colour before the first byte of CSS is parsed, and so form controls and
+     scrollbars are drawn as themeable rather than as fixed light widgets. The
+     inline script below pins the actual choice to the stored setting; this tag
+     only tells the browser that a dark rendering is a thing this page does. -->
+<meta name="color-scheme" content="light dark" />
 <meta name="theme-color" content="#1769AA" id="theme-color-meta" />
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
@@ -80,6 +86,15 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
+  /* Native widgets -- the calendar glyph on a date field, the drop arrow on a
+     select, checkboxes, the scrollbar thumb -- are painted by the browser, not
+     by this stylesheet, and they follow this property rather than --gray-900.
+     The inline boot script and the theme toggle keep the element's own
+     color-scheme in step; these two rules are what the page wears if that
+     script has not run yet or the setting was cleared. dark is declared only
+     under html.dark -- a light-theme user on a dark OS must still get light
+     widgets, because the theme here is stored, not a system preference. */
+  color-scheme: light;
   --blue:        #1769AA;
   --blue-hover:  #125480;
   --blue-light:  #E8F2FC;
@@ -148,6 +163,7 @@
 }
 
 html.dark {
+  color-scheme: dark;
   /* A dark --blue is mostly ink on a tinted fill rather than a fill itself, and
      --blue-light is the tint it lands on for every "you are here" state -- the
      active nav item, the selected chip, the active language button, the printer
@@ -444,6 +460,33 @@ img.avatar-circle { object-fit: cover; background: var(--gray-100); }
 
 /* ── Table ── */
 .table-card { background: #fff; border-radius: var(--radius-lg); border: 1px solid var(--gray-200); margin-bottom: 20px; overflow: hidden; }
+
+/* The register tables are wider than a phone and, at 720-760px, wider than the
+   345px card they sit in. .table-card clips its own corners with overflow:hidden,
+   so without a scroller of its own the right-hand columns -- Status, Technician,
+   and the row's edit and delete buttons -- are simply past the card edge, with no
+   way to reach them. That is not a cosmetic overflow: a technician on a phone
+   cannot edit or delete the issue at all.
+
+   tabindex="0" is what makes the scroller usable without a touchpad: a container
+   with overflow is not focusable in most browsers, so a keyboard user has no way
+   to send the arrow keys into it. The focus ring is drawn inside the card so it
+   does not look like a second card border.
+   overscroll-behavior-x keeps a sideways swipe that reaches the end of the table
+   from turning into a browser back-navigation. */
+.table-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  /* --gray-400 rather than --gray-300: the thumb has to clear 3:1 against the
+     track it sits on, and --gray-300 is a border colour (1.9:1 on the dark
+     card). --gray-400 is 5.0:1 on white and 7:1 on the dark surface. */
+  scrollbar-color: var(--gray-400) transparent;
+}
+/* A tab stop with nothing visible to say why it is there is a puzzle, so the
+   scroller says so when it holds focus. Safari and Firefox do not scroll a
+   focused container with the arrow keys without some affordance; the ring is it. */
+.table-scroll:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 .table-header {
   padding: 14px 18px; border-bottom: 1px solid var(--gray-200);
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
@@ -2467,6 +2510,9 @@ html.dark .lcu-resting-table td { border-color: var(--gray-200); }
 .modal {
   background: #fff; border-radius: var(--radius-lg); width: 100%; max-width: 520px;
   max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-lg); animation: slideUp 0.18s ease;
+  /* When the panel's own scroll reaches its end, the gesture stops there instead
+     of continuing into the page behind it. */
+  overscroll-behavior: contain;
 }
 @keyframes slideUp { from { transform:translateY(12px); opacity:0; } to { transform:translateY(0); opacity:1; } }
 .modal-header {
@@ -3044,11 +3090,27 @@ tbody tr.fp-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
   .notif-item, .notif-mark, .digest-stat { transition:none; }
 }
 
-/* ── Toast ── */
+/* ── Toast ──
+   The fixed corner belongs to the always-present region, not to the message.
+   When the message owned the positioning it was inserted and removed from the
+   document, and a live region that arrives with its text already in it is the
+   case screen readers routinely miss. */
+.toast-region { position: fixed; bottom: 24px; right: 24px; z-index: 200; pointer-events: none; }
 .toast {
-  position: fixed; bottom: 24px; right: 24px; background: var(--gray-900); color: #fff;
+  /* The inverted pair, taken from tokens rather than from #fff. The old
+     `background: var(--gray-900); color: #fff` was invisible in the dark theme:
+     there --gray-900 is #EDEFF2, so the message was white on near-white, 1.0:1.
+     Pairing --gray-900 with --gray-50 flips to light-on-dark in the light theme
+     and dark-on-light in the dark theme, which is the same slab either way. */
+  background: var(--gray-900); color: var(--gray-50);
   padding: 10px 18px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500;
-  z-index: 200; animation: toastIn 0.2s ease; display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow-md);
+  line-height: 1.4;
+  animation: toastIn 0.2s ease; display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow-md);
+  pointer-events: auto;
+  /* A long message on a 320px screen wraps inside the viewport instead of
+     running off the left edge, and stays clear of the notch/home bar. */
+  max-width: min(calc(100vw - 32px), 420px);
+  margin-left: auto;
 }
 @keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
 @media (prefers-reduced-motion: reduce) {
@@ -7149,10 +7211,42 @@ function TypeBadge({ type }) {
 }
 
 
-/* ── Toast ── */
+/* Every table that scrolls sideways does it through one wrapper, so there is one
+   place to give it a keyboard route in and a name to announce. The label is the
+   table's own visible heading, passed in by the caller. */
+function TableScroll({ label, children }) {
+  return (
+    <div className="table-scroll" role="region" aria-label={label} tabIndex={0}>
+      {children}
+    </div>
+  );
+}
+
+/* ── Toast ──
+   The wrapper is rendered whether or not a message is present, and that is the
+   whole mechanism: a live region that appears at the same moment as its text is
+   announced unreliably, because the screen reader never saw the region become
+   non-empty. Keeping it in the document and swapping its contents means every
+   toast is an insertion into a region that was already being watched.
+
+   aria-atomic="true" reads the message as one sentence rather than announcing
+   the dot and the text as two separate changes. Hover and focus hold the
+   dismissal, so a message that arrives while someone is already reading it does
+   not vanish mid-line. */
 function Toast({ msg, onDone }) {
-  useEffect(() => { const t = setTimeout(onDone, 2800); return ()=>clearTimeout(t); }, []);
-  return <div className="toast"><span className="toast-dot"></span>{msg}</div>;
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    if (!msg || held) return;
+    const t = setTimeout(onDone, 2800);
+    return ()=>clearTimeout(t);
+  }, [msg, held]);
+  return (
+    <div className="toast-region" role="status" aria-live="polite" aria-atomic="true"
+         onMouseEnter={()=>setHeld(true)} onMouseLeave={()=>setHeld(false)}
+         onFocus={()=>setHeld(true)} onBlur={()=>setHeld(false)}>
+      {msg && <div className="toast"><span className="toast-dot" aria-hidden="true"></span>{msg}</div>}
+    </div>
+  );
 }
 
 /* ── LangToggle ── */
@@ -7798,6 +7892,24 @@ function useDialog({ onClose, initialFocus, preventClose = false }) {
     if (!panel) return;
     const restoreTo = document.activeElement;
 
+    // Hold the page still while the dialog is up. A wheel or a flick over a
+    // fixed overlay does not stop at the overlay: it keeps scrolling the
+    // nearest scroll ancestor behind it, which here is .content -- the app is
+    // 100vh and clips, so the body never scrolls in the first place.
+    //
+    // Deliberately .content and not html/body: locking the root scroller
+    // removes its scrollbar, which shifts the whole layout sideways the moment
+    // a dialog opens. The native <dialog> route gets this for free by making
+    // the page inert; these overlays are hand-built and predate it, so holding
+    // the app's own scroll container is the equivalent that costs no layout.
+    //
+    // The previous value is saved rather than written back as '' so stacked
+    // dialogs still work: the picker inside the issue form saves 'hidden' and
+    // restores it, leaving the form's lock intact.
+    const scrollers = [document.querySelector('.content')].filter(Boolean);
+    const previousOverflow = scrollers.map(el => el.style.overflow);
+    scrollers.forEach(el => { el.style.overflow = 'hidden'; });
+
     if (!panel.contains(document.activeElement)) {
       // The body before the whole panel. Every panel here opens with a close
       // button in its header, so focusing the first focusable outright would put
@@ -7848,6 +7960,7 @@ function useDialog({ onClose, initialFocus, preventClose = false }) {
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
+      scrollers.forEach((el, i) => { el.style.overflow = previousOverflow[i]; });
       // Only take focus back if it belongs to this dialog. Two cases count: it is
       // still inside the panel, or it has fallen to <body> because the element
       // that held it was just removed -- which is what a browser does with focus
@@ -9928,8 +10041,10 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
            its own corners -- so without this the last column and the row's edit and
            delete buttons sit past the card's right edge with no way to reach them,
            and a technician on a narrow screen cannot edit or delete an issue at all.
-           Same wrapper the team list and the maintenance activity table use. */
-        <div style={{overflowX:'auto'}}>
+           TableScroll is the shared wrapper: it also makes the strip a named,
+           focusable region, which is what lets a keyboard reach the columns that
+           are scrolled out of view. */
+        <TableScroll label={tableMode==='apt' ? t.aptIssuesTitle : t.deptIssuesTitle}>
         <table>
           <thead>
             <tr>
@@ -9977,7 +10092,7 @@ function IssuesTable({ token, issueTypes, tableMode, date='', epoch=0, currentUs
             ))}
           </tbody>
         </table>
-        </div>
+        </TableScroll>
       )}
       <LoadMore list={list} t={t}/>
     </div>
@@ -12932,7 +13047,7 @@ function TeamPage({ token, users, userIssueStats, currentUser, onUsersUpdate, se
       <div className="table-header">
         <span className="table-title">{t.teamMembers}</span>
       </div>
-      <div style={{overflowX:'auto'}}>
+      <TableScroll label={t.teamMembers}>
         <table>
           <thead>
             <tr>
@@ -13004,7 +13119,7 @@ function TeamPage({ token, users, userIssueStats, currentUser, onUsersUpdate, se
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
       <LoadMore list={list} t={t}/>
     </div>
   );
@@ -14180,7 +14295,7 @@ function MaintenancePage({ token, currentUser, departments, setToast, onCountsUp
             <div className="empty-state">{Ic.clock}<p>{t.maintenanceRecentEmpty}</p></div>
           ) : (
             <div className="table-card">
-              <div style={{overflowX:'auto'}}>
+              <TableScroll label={t.maintenanceRecent}>
                 <table>
                   <thead>
                     <tr>
@@ -14219,7 +14334,7 @@ function MaintenancePage({ token, currentUser, departments, setToast, onCountsUp
                     })}
                   </tbody>
                 </table>
-              </div>
+              </TableScroll>
             </div>
           )}
         </div>
@@ -14921,8 +15036,9 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
           {(report.apt_issues||[]).length > 0 && (
             <div className="table-card" style={{marginBottom:20}}>
               <div className="table-header">
-                <span className="table-title">Apartment issues <span style={{fontSize:12,color:'var(--gray-400)',fontWeight:400}}>({report.apt_issues.length})</span></span>
+                <span className="table-title">{t.aptIssuesTitle} <span style={{fontSize:12,color:'var(--gray-400)',fontWeight:400}}>({report.apt_issues.length})</span></span>
               </div>
+              <TableScroll label={t.aptIssuesTitle}>
               <table>
                 <thead>
                   <tr><th>Apt.</th><th>{t.date}</th><th>Type</th><th>Problem</th><th>Resolution</th><th>Time</th><th>Status</th><th>Technician</th></tr>
@@ -14947,6 +15063,7 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
                   ))}
                 </tbody>
               </table>
+              </TableScroll>
             </div>
           )}
 
@@ -14954,8 +15071,9 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
           {(report.dept_issues||[]).length > 0 && (
             <div className="table-card">
               <div className="table-header">
-                <span className="table-title">Department issues <span style={{fontSize:12,color:'var(--gray-400)',fontWeight:400}}>({report.dept_issues.length})</span></span>
+                <span className="table-title">{t.deptIssuesTitle} <span style={{fontSize:12,color:'var(--gray-400)',fontWeight:400}}>({report.dept_issues.length})</span></span>
               </div>
+              <TableScroll label={t.deptIssuesTitle}>
               <table>
                 <thead>
                   <tr><th>Dept.</th><th>{t.date}</th><th>Type</th><th>Problem</th><th>Resolution</th><th>Time</th><th>Status</th><th>Technician</th></tr>
@@ -14980,6 +15098,7 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
                   ))}
                 </tbody>
               </table>
+              </TableScroll>
             </div>
           )}
 
@@ -21173,7 +21292,9 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
           <ConfirmDeleteIssue issue={pending.issue} deleting={!!pending.busy}
             onCancel={()=>setPending(null)} onConfirm={delIssue}/>
         )}
-        {toast && <Toast msg={toast} onDone={()=>setToast(null)}/>}
+        {/* Mounted unconditionally, not behind `toast &&`: the live region has to
+            exist before the message does, or screen readers miss the change. */}
+        <Toast msg={toast} onDone={()=>setToast(null)}/>
       </div>
     </TypeColorCtx.Provider>
     </LangCtx.Provider>
