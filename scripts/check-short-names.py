@@ -93,9 +93,16 @@ PERSON = re.compile(
 )
 # `c.name` is consumables, `a`/`b` are sort comparators over catalog rows, and
 # `users` is this script's own prose -- none of them a person on any page.
-NOT_PERSON_OBJ = {"c", "item", "draft", "shift", "s", "d", "a", "b", "x", "ty", "it",
-                  "ci", "value", "o", "t", "users", "department", "connecta_agent",
-                  "consumable_item", "issue_type"}
+#
+# `et` is an equipment TYPE on the Rooms page, and it is here under a new name:
+# the rooms work renamed the old `ty` to `et`, and this list was not updated with
+# it, so ten equipment names were reported as unwrapped people and the gate had
+# been failing since. `device` is the handset identity (deviceIdentity), and `e`
+# is the row of `c.equipment.map(e => ...)`; both single letters and catalog rows
+# are the same exemption the existing entries already make.
+NOT_PERSON_OBJ = {"c", "item", "draft", "shift", "s", "d", "a", "b", "e", "x", "ty",
+                  "et", "device", "it", "ci", "value", "o", "t", "users", "department",
+                  "connecta_agent", "consumable_item", "issue_type"}
 
 WRAP = "shortName("
 
