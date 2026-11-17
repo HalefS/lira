@@ -475,7 +475,8 @@ function formatSupportDuration(minutes) {
   const days   = Math.floor(total / 1440);
   const hours  = Math.floor((total % 1440) / 60);
   const mins   = total % 60;
-  const unit = (n, u) => `${n}${u}${n === 1 ? '' : 's'}`;
+  // Compact units: "1h 30m" reads as a turnaround, "30ms" as milliseconds.
+  const unit = (n, u) => `${n}${u}`;
   if (days > 0 && hours > 0) return `${unit(days,'d')} ${unit(hours,'h')}`;
   if (days > 0)             return unit(days, 'd');
   if (hours > 0 && mins > 0) return `${unit(hours,'h')} ${unit(mins,'m')}`;

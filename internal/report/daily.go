@@ -20,7 +20,7 @@ import (
 	"github.com/HalefS/lira/internal/data"
 )
 
-//go:embed templates/base.css templates/consumables.html templates/daily.html templates/rota.html templates/attendance.xlsx
+//go:embed templates/base.css templates/consumables.html templates/daily.html templates/rota.html templates/support.html templates/attendance.xlsx
 var templateFS embed.FS
 
 // baseCSSMarker is where each report template puts its shared stylesheet.
@@ -45,6 +45,7 @@ var (
 	dailyTemplate       = mustLoadTemplate("templates/daily.html")
 	consumablesTemplate = mustLoadTemplate("templates/consumables.html")
 	attendanceTemplate  = mustLoadTemplate("templates/rota.html")
+	supportTemplate     = mustLoadTemplate("templates/support.html")
 )
 
 func mustLoadTemplate(name string) *template.Template {

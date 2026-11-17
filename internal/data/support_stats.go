@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"database/sql"
 	"time"
 )
 
@@ -125,18 +126,39 @@ type SupportListRow struct {
 // to their issue so the page can say which problem each one is about, plus the
 // total number in the range.
 func (m SupportRequestModel) GetList(from, to string, limit int) ([]*SupportListRow, int, error) {
+	ctx, cancel := listContext()
+	defer cancel()
+	return m.list(ctx, from, to, limit)
+}
+
+// GetAll returns every handover in the range with no page limit. The printable
+// report uses it: a PDF is an archive of the period, so a capped list would look
+// complete while quietly leaving rows out.
+func (m SupportRequestModel) GetAll(from, to string) ([]*SupportListRow, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	rows, _, err := m.list(ctx, from, to, 0)
+	return rows, err
+}
+
+// list is the shared implementation behind GetList and GetAll. A limit of zero
+// or less means every row, matching the convention in IssueModel.GetReport.
+func (m SupportRequestModel) list(ctx context.Context, from, to string, limit int) ([]*SupportListRow, int, error) {
 	fromWhere := `
 		FROM issue_support_requests s
 		INNER JOIN issues i ON i.id = s.issue_id
 		WHERE ($1 = '' OR s.created_at::date >= $1::date)
 		  AND ($2 = '' OR s.created_at::date <= $2::date)`
 
-	ctx, cancel := listContext()
-	defer cancel()
-
-	total, err := CountMatching(ctx, m.DB, fromWhere, []any{from, to})
-	if err != nil {
-		return nil, 0, err
+	// The page needs the count to drive "load more"; the report needs every row
+	// and has no use for it, so do not pay for a second query there.
+	total := 0
+	var err error
+	if limit > 0 {
+		total, err = CountMatching(ctx, m.DB, fromWhere, []any{from, to})
+		if err != nil {
+			return nil, 0, err
+		}
 	}
 
 	query := `
@@ -145,10 +167,15 @@ func (m SupportRequestModel) GetList(from, to string, limit int) ([]*SupportList
 		       COALESCE(s.telefonica_ticket_id, s.telnet_technician, ''),
 		       i.id, i.problem, i.mode, i.location
 		` + fromWhere + `
-		ORDER BY s.started_at DESC NULLS LAST, s.id DESC
-		LIMIT $3`
+		ORDER BY s.started_at DESC NULLS LAST, s.id DESC`
 
-	rows, err := m.DB.QueryContext(ctx, query, from, to, limit)
+	var rows *sql.Rows
+	if limit > 0 {
+		query += "\n\t\tLIMIT $3"
+		rows, err = m.DB.QueryContext(ctx, query, from, to, limit)
+	} else {
+		rows, err = m.DB.QueryContext(ctx, query, from, to)
+	}
 	if err != nil {
 		return nil, 0, err
 	}
@@ -168,4 +195,36 @@ func (m SupportRequestModel) GetList(from, to string, limit int) ([]*SupportList
 		out = append(out, &r)
 	}
 	return out, total, rows.Err()
+}
+
+// SupportReport is everything the printable third-party support report shows:
+// the same per-company summary the page displays, the full list of handovers
+// behind it, and the window they were taken over. It is the mirror of the issue
+// reports, which deliberately leave these handovers out.
+type SupportReport struct {
+	From        string            `json:"from"`
+	To          string            `json:"to"`
+	GeneratedAt time.Time         `json:"generated_at"`
+	Stats       *SupportStats     `json:"stats"`
+	Rows        []*SupportListRow `json:"rows"`
+}
+
+// GetReport builds the printable report for a date range. An empty from or to is
+// unbounded, matching the support page's "All time" option.
+func (m SupportRequestModel) GetReport(from, to string) (*SupportReport, error) {
+	stats, err := m.GetStats(from, to)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := m.GetAll(from, to)
+	if err != nil {
+		return nil, err
+	}
+	return &SupportReport{
+		From:        from,
+		To:          to,
+		GeneratedAt: time.Now(),
+		Stats:       stats,
+		Rows:        rows,
+	}, nil
 }

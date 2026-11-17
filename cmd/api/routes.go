@@ -163,6 +163,9 @@ func (app *application) routes() http.Handler {
 	// with per-company statistics. Read-only here: handovers are edited through
 	// the issue they belong to, so the owner-or-manager check lives in one place.
 	router.HandlerFunc(http.MethodGet, "/v1/support-requests", app.requireAuth(app.listSupportRequestsHandler))
+	// The printable report of those same handovers. Named alongside the JSON
+	// endpoint, with the ".pdf" kept in the path so it cannot collide with it.
+	router.HandlerFunc(http.MethodGet, "/v1/support-requests/report.pdf", app.requireAuth(app.supportReportPDFHandler))
 
 	// Settings — readable by any authenticated user, editable by managers only
 	router.HandlerFunc(http.MethodGet, "/v1/settings", app.requireAuth(app.getSettingsHandler))

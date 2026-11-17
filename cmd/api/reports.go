@@ -300,6 +300,98 @@ func (app *application) rangeReportPDFHandler(w http.ResponseWriter, r *http.Req
 	w.Write(pdf)
 }
 
+// supportReportRange validates the optional range of the third-party support
+// report. Unlike the issue reports, an unbounded range is legitimate here: the
+// support page opens on "All time", so a missing from or to means "no bound".
+func (app *application) supportReportRange(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+	from := app.readString(r.URL.Query(), "from", "")
+	to := app.readString(r.URL.Query(), "to", "")
+	for _, value := range []string{from, to} {
+		if value == "" {
+			continue
+		}
+		// Shape first for the message, then a real parse: 2026-13-45 has the
+		// right shape but would otherwise reach the query as 501-worthy input.
+		if !dateParamPattern.MatchString(value) {
+			app.errorResponse(w, r, http.StatusBadRequest, "from and to must be dates in YYYY-MM-DD format")
+			return "", "", false
+		}
+		if _, err := time.Parse("2006-01-02", value); err != nil {
+			app.errorResponse(w, r, http.StatusBadRequest, "from and to must be dates in YYYY-MM-DD format")
+			return "", "", false
+		}
+	}
+	// YYYY-MM-DD sorts lexicographically, so this is the same test as comparing
+	// parsed dates without giving a malformed-but-shaped value a second chance.
+	if from != "" && to != "" && from > to {
+		app.errorResponse(w, r, http.StatusBadRequest, "from must not be after to")
+		return "", "", false
+	}
+	return from, to, true
+}
+
+// GET /v1/support-requests/report.pdf?from=YYYY-MM-DD&to=YYYY-MM-DD
+//
+// The third-party handovers as a printable report. This is where issues with a
+// handover ARE reported: the issue reports leave them out so that a vendor's
+// turnaround cannot drag down the team's average resolution time, and this
+// document is the other half of that picture rather than a duplicate of it.
+//
+// Readable by any authenticated user, matching the JSON endpoint it sits beside.
+func (app *application) supportReportPDFHandler(w http.ResponseWriter, r *http.Request) {
+	from, to, ok := app.supportReportRange(w, r)
+	if !ok {
+		return
+	}
+
+	if app.browser == nil {
+		reason := "no chromium-based browser was found on this server"
+		if app.browserErr != nil && !errors.Is(app.browserErr, report.ErrNoBrowser) {
+			reason = "the configured pdf report browser could not be used: " + app.browserErr.Error()
+		}
+		app.errorResponse(w, r, http.StatusNotImplemented, "pdf reports are unavailable: "+reason)
+		return
+	}
+
+	rep, err := app.models.SupportRequests.GetReport(from, to)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	html, err := report.RenderSupportHTML(rep)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// The request context bounds the browser run, so a client that gives up
+	// doesn't leave a Chrome process behind.
+	pdf, err := app.browser.Render(r.Context(), html)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	name := "LIRA-Third-Party-Support"
+	switch {
+	case from != "" && to != "":
+		name += "-" + from + "-to-" + to
+	case to != "":
+		name += "-until-" + to
+	case from != "":
+		name += "-from-" + from
+	}
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", contentDisposition("attachment", name+".pdf"))
+	// Generated per request from a range the user chooses, so it must never be
+	// reused for a different one.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Length", strconv.Itoa(len(pdf)))
+	w.WriteHeader(http.StatusOK)
+	w.Write(pdf)
+}
+
 // GET /v1/reports/consumables/weekly?week=YYYY-MM-DD
 //
 // The weekly consumables report as JSON. The anchor date may be any day in the

@@ -262,6 +262,52 @@ func TestDailyReportPDFReportsMissingBrowser(t *testing.T) {
 
 // A browser that was named explicitly but did not resolve must report that,
 // not send the operator looking for an install that is already there.
+// The support report shares the range report's validation idea but not its
+// limits: the support page has an "All time" option, so both dates are optional.
+func TestSupportReportPDFRangeValidation(t *testing.T) {
+	app := &application{browserErr: report.ErrNoBrowser}
+
+	cases := []struct {
+		endpoint   string
+		wantCode   int
+		wantInBody string
+	}{
+		{"/v1/support-requests/report.pdf?from=nope", http.StatusBadRequest, "YYYY-MM-DD"},
+		{"/v1/support-requests/report.pdf?to=2026-13-45", http.StatusBadRequest, "YYYY-MM-DD"},
+		{"/v1/support-requests/report.pdf?from=2026-11-17&to=2026-11-01", http.StatusBadRequest, "after"},
+		// No bounds is the "All time" window, so validation must let it through;
+		// the missing browser is what stops it here.
+		{"/v1/support-requests/report.pdf", http.StatusNotImplemented, "chromium"},
+	}
+	for _, tc := range cases {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, tc.endpoint, nil)
+		app.supportReportPDFHandler(w, r)
+
+		if w.Code != tc.wantCode {
+			t.Errorf("%s: status = %d, want %d", tc.endpoint, w.Code, tc.wantCode)
+		}
+		if !strings.Contains(w.Body.String(), tc.wantInBody) {
+			t.Errorf("%s: body = %q, want it to contain %q", tc.endpoint, w.Body.String(), tc.wantInBody)
+		}
+	}
+}
+
+func TestSupportReportPDFReportsMissingBrowser(t *testing.T) {
+	app := &application{browserErr: report.ErrNoBrowser}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/support-requests/report.pdf?from=2026-11-01&to=2026-11-17", nil)
+	app.supportReportPDFHandler(w, r)
+
+	if w.Code != http.StatusNotImplemented {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+	}
+	if !strings.Contains(w.Body.String(), "chromium") {
+		t.Errorf("body = %q, want it to explain that no browser was found", w.Body.String())
+	}
+}
+
 func TestDailyReportPDFReportsBadConfiguredBrowser(t *testing.T) {
 	app := &application{browserErr: errors.New(`browser "C:\nope\chrome.exe": no such file`)}
 

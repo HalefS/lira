@@ -10,6 +10,20 @@ const SUPPORT_RANGES = [
   {id:'90',   days:90},
 ];
 
+/* The window behind the selected chip. Shared by the list and the PDF download
+   so the report cannot cover a different period from the one on screen. */
+function supportRangeParams(range) {
+  const days = SUPPORT_RANGES.find(r=>r.id===range).days;
+  const params = new URLSearchParams();
+  if (days > 0) {
+    // Inclusive of today, so "last 30 days" is 30 days wide rather than 29.
+    const from = new Date(); from.setDate(from.getDate() - (days - 1));
+    params.set('from', localISODate(from));
+    params.set('to', localISODate(new Date()));
+  }
+  return params;
+}
+
 function SupportStatCard({ stats, label, t, isOverall }) {
   const hasData = stats.timed > 0;
   const name = isOverall ? t.supportOverall
@@ -61,20 +75,19 @@ function SupportPage({ token }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [range, setRange] = useState('all');
+  // The printable report is fetched as a blob so the Authorization header can
+  // go with it. One notice carries both the "downloaded" confirmation and any
+  // error: a click on a button with no visible state leaves nobody wiser.
+  const [downloading, setDownloading] = useState(false);
+  const [notice, setNotice] = useState(null);
 
   /* The table pages; the statistics above it do not. Both come from the same
      request, and the server computes the figures over every matching row whatever
      the limit is -- so the headline numbers keep describing the whole period
      while only a pageful of handovers is on screen. */
   const paged = usePagedList(limit => {
-    const days = SUPPORT_RANGES.find(r=>r.id===range).days;
-    const params = new URLSearchParams({limit: String(limit)});
-    if (days > 0) {
-      // Inclusive of today, so "last 30 days" is 30 days wide rather than 29.
-      const from = new Date(); from.setDate(from.getDate() - (days - 1));
-      params.set('from', localISODate(from));
-      params.set('to', localISODate(new Date()));
-    }
+    const params = supportRangeParams(range);
+    params.set('limit', String(limit));
     return `/support-requests?${params}`;
   }, token, {rowsKey:'requests', filterKey: range});
 
@@ -89,6 +102,42 @@ function SupportPage({ token }) {
     return new Date(r.started_at).toDateString() === new Date(r.resolved_at).toDateString();
   });
 
+  async function downloadReport() {
+    if (downloading) return;
+    setDownloading(true);
+    setNotice(null);
+    try {
+      const params = supportRangeParams(range);
+      const res = await fetch(`${API}/support-requests/report.pdf?${params}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        let msg = t.supportReportError;
+        try {
+          const body = await res.json();
+          if (body.error) msg = typeof body.error === 'string' ? body.error : Object.values(body.error).join(', ');
+        } catch {}
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const from = params.get('from'), to = params.get('to');
+      a.download = `LIRA-Third-Party-Support${from ? `-${from}-to-${to}` : ''}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Release the object URL once the browser has the download in hand.
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      setNotice({kind:'ok', text:t.supportReportReady});
+    } catch (ex) {
+      setNotice({kind:'error', text:`${t.supportReportError}: ${ex.message}`});
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <>
       <p style={{fontSize:13,color:'var(--gray-400)',margin:'-6px 0 18px',maxWidth:760}}>{t.supportSubtitle}</p>
@@ -96,13 +145,25 @@ function SupportPage({ token }) {
       <div className="table-card" style={{marginBottom:18}}>
         <div className="table-header">
           <span className="table-title">{t.supportRange}</span>
-          <div className="filter-chips">
-            {SUPPORT_RANGES.map(r=>(
-              <button key={r.id} className={`chip ${range===r.id?'active':''}`} onClick={()=>setRange(r.id)}>
-                {t[`supportRange${r.id==='all'?'All':r.id}`]}
-              </button>
-            ))}
+          <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+            <div className="filter-chips" role="group" aria-label={t.supportRange}>
+              {SUPPORT_RANGES.map(r=>(
+                <button type="button" key={r.id} className={`chip ${range===r.id?'active':''}`}
+                  onClick={()=>{setRange(r.id); setNotice(null);}}>
+                  {t[`supportRange${r.id==='all'?'All':r.id}`]}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="btn btn-primary" onClick={downloadReport}
+              disabled={downloading} aria-busy={downloading}>
+              {Ic.download} {downloading ? t.generatingPdf : t.supportDownloadPdf}
+            </button>
           </div>
+        </div>
+        {/* Always in the DOM so a screen reader is listening before the click.
+            The same message is visible, so the confirmation is not exclusive. */}
+        <div aria-live="polite" aria-atomic="true" style={{minHeight:0,padding:notice?'8px 16px 0':0,fontSize:12.5,color:notice&&notice.kind==='error'?'var(--red)':'var(--green)'}}>
+          {notice && <span>{notice.text}</span>}
         </div>
       </div>
 

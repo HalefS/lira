@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>LIRA Third-party Support Report - {{.RangeLabel}}</title>
+<style>
+{{BASE_CSS}}
+
+/* Support-report-specific rules. Everything shared lives in base.css. */
+.support-company {
+  display: inline-block; width: 2.6mm; height: 2.6mm; border-radius: 0.7mm;
+  background: var(--accent, var(--blue)); margin-right: 1.8mm;
+}
+tr.overall td { background: var(--blue-lt); font-weight: 600; }
+tbody tr.pending td { background: var(--amber-lt); }
+.support-note { font-size: 7pt; color: var(--gray-400); }
+.support-clock { font-size: 6.5pt; color: var(--gray-400); }
+</style>
+</head>
+<body>
+
+<div class="band-top">
+  <div class="logo-mark">L</div>
+  <div style="margin-left:3.5mm">
+    <div class="title">Third-party Support</div>
+    <div class="subtitle">LIRA — Llana IT Reporting &amp; Alerts</div>
+  </div>
+  <div class="right" style="margin-left:auto">
+    <div class="date">{{.RangeLabel}}</div>
+    <div class="gen">Generated {{.GeneratedAt}}</div>
+  </div>
+</div>
+
+<div class="band-bottom">
+  <span>LIRA — Llana IT Reporting &amp; Alerts</span>
+  <span>Report for {{.RangeLabel}}</span>
+</div>
+
+<div class="sheet">
+
+  {{if .Empty}}
+    <div class="empty">No third-party handovers were logged in this period.</div>
+  {{else}}
+
+  <div class="section">
+    <h2>Summary <span class="count">(external turnaround, not our working time)</span></h2>
+    <div class="cards cards-4">
+      {{range .Summary}}
+      <div class="card" style="--accent:{{.Color}}">
+        <div class="label">{{.Label}}</div>
+        <div class="value">{{.Value}}</div>
+        <div class="sub">{{.Sub}}</div>
+      </div>
+      {{end}}
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>By company</h2>
+    <table>
+      <colgroup>
+        <col style="width:18%" /><col style="width:10%" /><col style="width:10%" />
+        <col style="width:10%" /><col style="width:8%" /><col style="width:11%" />
+        <col style="width:11%" /><col style="width:11%" /><col style="width:11%" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Company</th><th>Handovers</th><th>Resolved</th>
+          <th>Waiting</th><th>Timed</th><th>Average</th>
+          <th>Median</th><th>Fastest</th><th>Slowest</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Companies}}
+        <tr{{if .Overall}} class="overall"{{end}}>
+          <td><span class="support-company" style="--accent:{{.Color}}"></span>{{.Name}}</td>
+          <td class="cell-num">{{.Total}}</td>
+          <td class="cell-num">{{.Solved}}</td>
+          <td class="cell-num">{{.Pending}}</td>
+          <td class="cell-num">{{.Timed}}</td>
+          <td class="cell-num">{{.Avg}}</td>
+          <td class="cell-num">{{.Median}}</td>
+          <td class="cell-num">{{.Fastest}}</td>
+          <td class="cell-num">{{.Slowest}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Handovers <span class="count">({{.Total}})</span></h2>
+    <table>
+      <colgroup>
+        <col style="width:10%" /><col style="width:18%" /><col style="width:9%" />
+        <col style="width:10%" /><col style="width:11%" /><col style="width:11%" />
+        <col style="width:8%" /><col style="width:7%" /><col style="width:16%" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Location</th><th>Issue</th><th>Company</th>
+          <th>Reference</th><th>Reported</th><th>Solution</th>
+          <th>Turnaround</th><th>Status</th><th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Rows}}
+        <tr{{if .Pending}} class="pending"{{end}}>
+          <td class="cell-loc">{{.Location}}</td>
+          <td class="cell-muted">#{{.IssueID}} {{.Problem}}</td>
+          <td><span class="support-company" style="--accent:{{.CompanyColor}}"></span>{{.Company}}</td>
+          <td class="cell-muted">{{.Reference}}</td>
+          <td class="cell-date">{{.ReportedDate}}<div class="support-clock">{{.ReportedTime}}</div></td>
+          <td class="cell-date">{{.SolvedDate}}<div class="support-clock">{{.SolvedTime}}</div></td>
+          <td class="cell-num">{{.Duration}}</td>
+          <td><span class="pill {{.StatusClass}}">{{.Status}}</span></td>
+          <td class="support-note">{{.Note}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  {{end}}
+</div>
+
+</body>
+</html>

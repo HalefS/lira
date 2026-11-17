@@ -799,6 +799,15 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*Report, error) {
 	return m.GetReport(date, date, limit, "")
 }
 
+// noHandoutClause is the one exclusion every report query shares. An issue that
+// was handed to a third party is reported from the Third-party support page, so
+// it must not be listed on the issue reports either — and, more importantly, a
+// vendor's turnaround must not be averaged into the team's resolution time.
+// alias is the name (or alias) of the issues table in the surrounding query.
+func noHandoutClause(alias string) string {
+	return fmt.Sprintf("NOT EXISTS (SELECT 1 FROM issue_support_requests h WHERE h.issue_id = %s.id)", alias)
+}
+
 // GetReport builds a report over an inclusive range of days [from, to].
 //
 // limit caps each of the two issue lists independently; the summary, the
@@ -815,6 +824,11 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*Report, error) {
 // issueType, when non-empty, restricts every aggregate and every issue list to
 // that type. It is a display filter, not a different report: the shape of the
 // response is unchanged, only the rows that feed it.
+//
+// Issues with a third-party handover are excluded from every aggregate and every
+// list below. They are reported from the Third-party support page instead, so
+// counting them here would both show them in the wrong place and let a vendor's
+// turnaround pull down the team's average resolution time.
 func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Report, error) {
 	if from == "" {
 		from = time.Now().Format("2006-01-02")
@@ -903,7 +917,8 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 			COUNT(*) FILTER (WHERE false_positive)                AS false_positives
 		FROM issues
 		WHERE COALESCE(started_at, created_at) >= $1 AND COALESCE(started_at, created_at) < $2
-		  AND ($3 = '' OR type = $3)`
+		  AND ($3 = '' OR type = $3)
+		  AND ` + noHandoutClause("issues")
 
 	var s ReportSummary
 	err = m.DB.QueryRowContext(ctx, summaryQ, fromStr, nextDay, issueType).Scan(
@@ -932,6 +947,7 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 		FROM issues
 		WHERE COALESCE(started_at, created_at) >= $1 AND COALESCE(started_at, created_at) < $2
 		  AND ($3 = '' OR type = $3)
+		  AND ` + noHandoutClause("issues") + `
 		GROUP BY mode, type, status`
 
 	breakdownRows, err := m.DB.QueryContext(ctx, breakdownQ, fromStr, nextDay, issueType)
@@ -974,6 +990,7 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 		INNER JOIN users u ON i.logged_by = u.id
 		WHERE COALESCE(i.started_at, i.created_at) >= $1 AND COALESCE(i.started_at, i.created_at) < $2 AND i.mode = $3
 		  AND ($4 = '' OR i.type = $4)
+		  AND ` + noHandoutClause("i") + `
 		ORDER BY COALESCE(i.started_at, i.created_at) DESC, i.id DESC`
 
 		if limit > 0 {
@@ -1035,6 +1052,7 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 		FROM users u
 		LEFT JOIN issues i ON i.logged_by = u.id AND COALESCE(i.started_at, i.created_at) >= $1 AND COALESCE(i.started_at, i.created_at) < $2
 		                   AND ($3 = '' OR i.type = $3)
+		                   AND ` + noHandoutClause("i") + `
 		GROUP BY u.id, u.name, u.avatar_idx, u.role
 		HAVING u.role = 'technician' OR COUNT(i.id) > 0
 		ORDER BY total DESC`

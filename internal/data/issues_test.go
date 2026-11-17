@@ -1,6 +1,7 @@
 package data
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -114,6 +115,57 @@ func TestValidClientUUID(t *testing.T) {
 	for _, s := range invalid {
 		if ValidClientUUID(s) {
 			t.Errorf("%q should be rejected", s)
+		}
+	}
+}
+
+// An issue with a third-party handover belongs to the support report, not the
+// issue reports. There is no test database in this package, so this is a source
+// assertion in the same spirit as issue_attachments_test.go: it fails if any of
+// the four report queries loses the shared exclusion, or if that exclusion
+// stops looking at the handover table.
+func TestGetReportExcludesThirdPartyHandovers(t *testing.T) {
+	src := lcuSource(t, "issues.go")
+
+	helperAt := strings.Index(src, "func noHandoutClause(")
+	if helperAt < 0 {
+		t.Fatal("noHandoutClause not found")
+	}
+	helper := src[helperAt:]
+	if end := strings.Index(helper, "\n}\n"); end >= 0 {
+		helper = helper[:end]
+	}
+	if !strings.Contains(helper, "issue_support_requests") {
+		t.Error("noHandoutClause no longer checks issue_support_requests")
+	}
+	if got := noHandoutClause("i"); !strings.Contains(got, "h.issue_id = i.id") {
+		t.Errorf("noHandoutClause(%q) = %q, want it to match the issues alias", "i", got)
+	}
+
+	reportAt := strings.Index(src, "func (m IssueModel) GetReport(")
+	if reportAt < 0 {
+		t.Fatal("GetReport not found")
+	}
+	body := src[reportAt:]
+	if end := strings.Index(body, "\n}\n"); end >= 0 {
+		body = body[:end]
+	}
+
+	markers := []string{"summaryQ := `", "breakdownQ := `", "issueQ := `", "techQ := `"}
+	for i, marker := range markers {
+		at := strings.Index(body, marker)
+		if at < 0 {
+			t.Errorf("%s not found in GetReport", marker)
+			continue
+		}
+		end := len(body)
+		if i+1 < len(markers) {
+			if next := strings.Index(body[at+len(marker):], markers[i+1]); next >= 0 {
+				end = at + len(marker) + next
+			}
+		}
+		if !strings.Contains(body[at:end], "noHandoutClause(") {
+			t.Errorf("query starting at %q has no third-party handover exclusion", marker)
 		}
 	}
 }
