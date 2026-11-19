@@ -46,6 +46,7 @@ function App() {
   // out of every issue App held in memory.
   const [userIssueStats, setUserIssueStats] = useState([]);
   const [issueTypes, setIssueTypes] = useState([]);
+  const [issuePresets, setIssuePresets] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [connectaAgents, setConnectaAgents] = useState([]);
   const [consumableItems, setConsumableItems] = useState([]);
@@ -406,6 +407,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
       // every item to choose from. The inventory table on the Consumables page
       // asks for its own pageful.
       consumables: apiFetch('/consumable-items?limit=1000', {token}),
+      presets:     apiFetch('/issue-presets', {token}),
       userStats:   apiFetch('/user-issue-stats', {token}),
       // Only the count is wanted from here, for the nav badge. The queue itself is
       // the Maintenance page's, fetched when it is opened.
@@ -428,6 +430,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
       // The counts only. The lists belong to the Alerts page.
       if (ok.alerts)      setAlertsPendingCount(ok.alerts.pending_count || 0);
       if (ok.consumables) setConsumableItems(ok.consumables.consumable_items || []);
+      if (ok.presets)     setIssuePresets(ok.presets.issue_presets || []);
       if (ok.userStats)   setUserIssueStats(ok.userStats.stats || []);
       if (ok.maintenance) setMaintenanceDueCount(ok.maintenance.due_count || 0);
 
@@ -492,7 +495,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     setSession(null);
     setIdleWarning(false);
     setSignedOutIdle(reason === 'idle');
-    setUsers([]); setStats(null); setIssueTypes([]); setDepartments([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlertsPendingCount(0); setUserIssueStats([]); setMaintenanceDueCount(0); setMaintIssue(null); setNotifUnread(0); setNotifDigest(undefined);
+    setUsers([]); setStats(null); setIssueTypes([]); setIssuePresets([]); setDepartments([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlertsPendingCount(0); setUserIssueStats([]); setMaintenanceDueCount(0); setMaintIssue(null); setNotifUnread(0); setNotifDigest(undefined);
   }
 
   useIdleSignOut(!!session, {
@@ -935,6 +938,8 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
               onFocusGroupHandled={() => setFocusGroup(null)}
               issueTypes={issueTypes}
               onTypesUpdate={setIssueTypes}
+              issuePresets={issuePresets}
+              onIssuePresetsUpdate={setIssuePresets}
               departments={departments}
               onDepartmentsUpdate={setDepartments}
               connectaAgents={connectaAgents}
@@ -969,7 +974,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
         )}
 
         {modal && (
-          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)} onPhotosChanged={bumpIssues}/>
+          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} issuePresets={issuePresets} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)} onPhotosChanged={bumpIssues}/>
         )}
         {/* Opened by the Maintenance page when a check found a fault worth logging.
             onLinked runs once the issue exists, with its id, so the check that
@@ -979,6 +984,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
           prefill={maintIssue.prefill}
           currentUser={me}
           issueTypes={issueTypes}
+          issuePresets={issuePresets}
           departments={departments}
           connectaAgents={connectaAgents}
           consumableItems={consumableItems}
@@ -1008,7 +1014,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             onLogout={()=>logout()}/>
         )}
         {editing && (
-          <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token}
+          <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} issuePresets={issuePresets} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token}
             onClose={()=>setEditing(null)} onSave={form=>saveEdit(form,editing.mode,editing.issue.id)} onPhotosChanged={bumpIssues}/>
         )}
         {pending && (

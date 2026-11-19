@@ -419,7 +419,7 @@ function PhotoViewer({ issueId, photos, viewKey, token, t, currentUser, onClose,
   );
 }
 
-function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, departments, connectaAgents, consumableItems, token, onClose, onSave, onPhotosChanged }) {
+function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, issuePresets, departments, connectaAgents, consumableItems, token, onClose, onSave, onPhotosChanged }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const isEdit = !!editIssue;
@@ -484,6 +484,8 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
   const [pickerOpen, setPickerOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
+  const [presetId, setPresetId] = useState('');
+  const [presetApplied, setPresetApplied] = useState('');
 
   // Photos are deliberately outside `form`. `form` is what addIssue/saveEdit
   // serialise, and a File object cannot go into that JSON. These tiles have
@@ -519,6 +521,29 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
     .filter(c => c.name);
 
   function set(k,v) { setForm(f=>({...f,[k]:v})); }
+
+  // Presets belong to an issue type, so the selector only offers the ones for
+  // the type currently chosen. Applying one replaces only the three fields it
+  // describes -- location, clock, status, handovers, swaps and photos are the
+  // technician's own and must survive.
+  const presetsForType = (issuePresets || []).filter(p => p.issue_type === form.type);
+  function applyPreset(id) {
+    setPresetId(id);
+    setPresetApplied('');
+    if (!id) return;
+    const preset = presetsForType.find(p => String(p.id) === String(id));
+    if (!preset) return;
+    const uses = (preset.consumables || [])
+      .filter(c => catalogById[c.item_id])
+      .map(c => ({ itemId: c.item_id, quantity: c.quantity }));
+    setForm(f => ({
+      ...f,
+      problem: preset.problem || '',
+      resolution: f.status === 'Pending' ? '' : (preset.resolution || ''),
+      consumables: uses,
+    }));
+    setPresetApplied(t.presetApplied.replace('{name}', preset.name));
+  }
   const duration = useMemo(()=>computeDurationMinutes(form.startTime, form.endTime), [form.startTime, form.endTime]);
   const timeRangeInvalid = form.startTime && form.endTime && duration === null;
 
@@ -738,12 +763,23 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, de
             )}
             <div className="form-group">
               <label htmlFor="issue-type">{t.issueType}</label>
-              <select id="issue-type" className="form-control" value={form.type} onChange={e=>set('type',e.target.value)}>
+              <select id="issue-type" className="form-control" value={form.type} onChange={e=>{ set('type',e.target.value); setPresetId(''); setPresetApplied(''); }}>
                 {typeNames.length === 0 && <option value="">{t.selectDept}</option>}
                 {typeNames.map(t2=><option key={t2}>{t2}</option>)}
               </select>
             </div>
           </div>
+          {presetsForType.length > 0 && (
+            <div className="form-group">
+              <label htmlFor="issue-preset">{t.presetLabel}</label>
+              <select id="issue-preset" className="form-control" value={presetId} onChange={e=>applyPreset(e.target.value)}>
+                <option value="">{t.presetSelect}</option>
+                {presetsForType.map(preset=><option key={preset.id} value={preset.id}>{preset.name}</option>)}
+              </select>
+              <div className="ph-hint">{t.presetHint}</div>
+              {presetApplied && <div className="ph-note" role="status" aria-live="polite">{presetApplied}</div>}
+            </div>
+          )}
           {dupeInfo && dupeInfo.count > 0 && (
             <div style={{background:'var(--amber-light)',borderRadius:'var(--radius-md)',padding:'10px 14px',fontSize:13,color:'var(--amber)',display:'flex',alignItems:'flex-start',gap:8}}>
               <span style={{flexShrink:0,marginTop:1}}>{Ic.clock}</span>

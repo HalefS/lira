@@ -178,6 +178,13 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPatch, "/v1/issue-types/:id/tracks-swaps", app.requireAuth(app.requireManager(app.updateIssueTypeTracksSwapsHandler)))
 	router.HandlerFunc(http.MethodDelete, "/v1/issue-types/:id", app.requireAuth(app.requireManager(app.deleteIssueTypeHandler)))
 
+	// Issue presets -- readable by any authenticated user (for logging issues),
+	// configurable by managers only.
+	router.HandlerFunc(http.MethodGet, "/v1/issue-presets", app.requireAuth(app.listIssuePresetsHandler))
+	router.HandlerFunc(http.MethodPost, "/v1/issue-presets", app.requireAuth(app.requireManager(app.createIssuePresetHandler)))
+	router.HandlerFunc(http.MethodPatch, "/v1/issue-presets/:id", app.requireAuth(app.requireManager(app.updateIssuePresetHandler)))
+	router.HandlerFunc(http.MethodDelete, "/v1/issue-presets/:id", app.requireAuth(app.requireManager(app.deleteIssuePresetHandler)))
+
 	// Departments — list for all authenticated users; mutate for managers only
 	router.HandlerFunc(http.MethodGet, "/v1/departments", app.requireAuth(app.listDepartmentsHandler))
 	router.HandlerFunc(http.MethodPost, "/v1/departments", app.requireAuth(app.requireManager(app.createDepartmentHandler)))

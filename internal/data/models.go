@@ -22,6 +22,7 @@ var (
 	ErrDuplicateShift = errors.New("duplicate shift")
 
 	ErrDuplicateConsumableItem = errors.New("duplicate consumable item")
+	ErrDuplicateIssuePreset    = errors.New("duplicate issue preset")
 	// ErrDuplicateSupportTicket: this Telefónica ticket id is already logged
 	// against this issue.
 	ErrDuplicateSupportTicket = errors.New("duplicate third-party support ticket")
@@ -41,6 +42,7 @@ type Models struct {
 	Analytics        AnalyticsModel
 	Consumables      ConsumableModel
 	ConsumableItems  ConsumableItemModel
+	IssuePresets     IssuePresetModel
 	SupportRequests  SupportRequestModel
 	TVSwaps          TVSwapModel
 	TVSwapAlerts     TVSwapAlertModel
@@ -85,6 +87,7 @@ func NewModels(db *sql.DB) Models {
 		Analytics:        AnalyticsModel{DB: db},
 		Consumables:      ConsumableModel{DB: db},
 		ConsumableItems:  ConsumableItemModel{DB: db},
+		IssuePresets:     IssuePresetModel{DB: db},
 		SupportRequests:  SupportRequestModel{DB: db},
 		TVSwaps:          TVSwapModel{DB: db},
 		TVSwapAlerts:     TVSwapAlertModel{DB: db},

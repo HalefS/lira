@@ -102,7 +102,7 @@ PERSON = re.compile(
 # are the same exemption the existing entries already make.
 NOT_PERSON_OBJ = {"c", "item", "draft", "shift", "s", "d", "a", "b", "e", "x", "ty",
                   "et", "device", "it", "ci", "value", "o", "t", "users", "department",
-                  "connecta_agent", "consumable_item", "issue_type"}
+                  "connecta_agent", "consumable_item", "issue_type", "preset"}
 
 WRAP = "shortName("
 

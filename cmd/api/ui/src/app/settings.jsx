@@ -23,7 +23,7 @@ function previewRoomRun(text) {
   return { from, to, count: to - from + 1 };
 }
 
-function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTypesUpdate, departments, onDepartmentsUpdate, connectaAgents, onConnectaAgentsUpdate, consumableItems, onConsumableItemsUpdate, settings, onSettingsUpdate, setToast }) {
+function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTypesUpdate, issuePresets, onIssuePresetsUpdate, departments, onDepartmentsUpdate, connectaAgents, onConnectaAgentsUpdate, consumableItems, onConsumableItemsUpdate, settings, onSettingsUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [name, setName] = useState('');
@@ -56,6 +56,17 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
   const [savingCi, setSavingCi] = useState(false);
   const [ciErr, setCiErr] = useState('');
   const [editingIconId, setEditingIconId] = useState(null);
+
+  // Issue presets -- manager-configured starting points for the issue form.
+  const [presetTypeID, setPresetTypeID] = useState('');
+  const [presetName, setPresetName] = useState('');
+  const [presetProblem, setPresetProblem] = useState('');
+  const [presetResolution, setPresetResolution] = useState('');
+  const [presetConsumables, setPresetConsumables] = useState([]);
+  const [editingPresetId, setEditingPresetId] = useState(null);
+  const [savingPreset, setSavingPreset] = useState(false);
+  const [presetErr, setPresetErr] = useState('');
+  const [presetPickerOpen, setPresetPickerOpen] = useState(false);
 
   // The room inventory. Held here rather than lifted into the app, because the
   // only other thing that needs rooms is the typeahead on the issue form, and that
@@ -305,6 +316,60 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
       onConsumableItemsUpdate(prev => prev.map(ci => ci.id===id ? res.consumable_item : ci));
       setEditingIconId(null);
       setToast(t.toastConsumableIconUpdated);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  function presetBody() {
+    return {
+      issue_type_id: Number(presetTypeID),
+      name: presetName.trim(),
+      problem: presetProblem.trim(),
+      resolution: presetResolution.trim(),
+      consumables: presetConsumables.map(c => ({item_id: c.itemId, quantity: c.quantity})),
+    };
+  }
+
+  function resetPresetForm() {
+    setPresetTypeID(''); setPresetName(''); setPresetProblem(''); setPresetResolution('');
+    setPresetConsumables([]); setEditingPresetId(null); setPresetErr('');
+  }
+
+  function startPresetEdit(preset) {
+    setEditingPresetId(preset.id);
+    setPresetTypeID(String(preset.issue_type_id || ''));
+    setPresetName(preset.name || '');
+    setPresetProblem(preset.problem || '');
+    setPresetResolution(preset.resolution || '');
+    setPresetConsumables((preset.consumables || []).map(c => ({itemId: c.item_id, quantity: c.quantity})));
+    setPresetErr('');
+  }
+
+  async function savePreset(e) {
+    e.preventDefault();
+    if (!presetTypeID || !presetName.trim() || !presetProblem.trim()) return;
+    setSavingPreset(true); setPresetErr('');
+    try {
+      const body = presetBody();
+      const res = editingPresetId
+        ? await apiFetch(`/issue-presets/${editingPresetId}`, {method:'PATCH', body, token})
+        : await apiFetch('/issue-presets', {method:'POST', body, token});
+      const saved = res.issue_preset;
+      onIssuePresetsUpdate(prev => {
+        const next = editingPresetId ? prev.map(p => p.id===saved.id ? saved : p) : [...prev, saved];
+        return next.sort((a,b) => (a.issue_type||'').localeCompare(b.issue_type||'') || a.name.localeCompare(b.name));
+      });
+      setToast(editingPresetId ? t.toastPresetUpdated : t.toastPresetAdded);
+      resetPresetForm();
+    } catch(ex) { setPresetErr(ex.message); }
+    finally { setSavingPreset(false); }
+  }
+
+  async function removePreset(id) {
+    try {
+      await apiFetch(`/issue-presets/${id}`, {method:'DELETE', token});
+      onIssuePresetsUpdate(prev => prev.filter(p => p.id !== id));
+      if (editingPresetId === id) resetPresetForm();
+      setToast(t.toastPresetDeleted);
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
@@ -669,6 +734,100 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
           </div>
         </SetGroup>
 
+        <SetGroup id="cat-presets" level={1} title={t.adminIssuePresets} sub={t.adminIssuePresetsSub}
+          count={issuePresets.length}>
+          <div className="set-body">
+            <div className="set-form">
+              {presetErr && <div className="auth-error" style={{marginBottom:14}} role="alert">{presetErr}</div>}
+              <form onSubmit={savePreset}>
+                <div className="form-group">
+                  <label htmlFor="set-preset-type">{t.issueType}</label>
+                  <select id="set-preset-type" className="form-control" value={presetTypeID}
+                    onChange={e=>setPresetTypeID(e.target.value)}>
+                    <option value="">{t.presetSelectType}</option>
+                    {issueTypes.map(it=><option key={it.id} value={it.id}>{it.name}</option>)}
+                  </select>
+                </div>
+                <div className="form-group" style={{marginTop:14}}>
+                  <label htmlFor="set-preset-name">{t.presetName}</label>
+                  <input id="set-preset-name" className="form-control" placeholder={t.presetNamePlaceholder}
+                    value={presetName} onChange={e=>setPresetName(e.target.value)} maxLength={100}/>
+                </div>
+                <div className="form-group" style={{marginTop:14}}>
+                  <label htmlFor="set-preset-problem">{t.problemDesc}</label>
+                  <input id="set-preset-problem" className="form-control" placeholder={t.presetProblemPlaceholder}
+                    value={presetProblem} onChange={e=>setPresetProblem(e.target.value)} maxLength={500}/>
+                </div>
+                <div className="form-group" style={{marginTop:14}}>
+                  <label htmlFor="set-preset-resolution">{t.resolutionLabel}</label>
+                  <input id="set-preset-resolution" className="form-control" placeholder={t.presetResolutionPlaceholder}
+                    value={presetResolution} onChange={e=>setPresetResolution(e.target.value)} maxLength={500}/>
+                </div>
+                <div className="form-group" style={{marginTop:14}}>
+                  <div className="form-group-h" id="set-preset-consumables-h">{t.consumablesLabel}</div>
+                  <div className={`consumable-box ${presetConsumables.length ? 'has-items' : ''}`}
+                       role="group" aria-labelledby="set-preset-consumables-h">
+                    {presetConsumables.map(c=>{
+                      const item = consumableItems.find(ci=>ci.id===c.itemId);
+                      if (!item) return null;
+                      return (
+                        <span className="consumable-chip" key={c.itemId}>
+                          <ConsumableIcon name={item.icon} size={22}/>
+                          <span className="consumable-chip-name">{item.name}</span>
+                          {c.quantity > 1 && <span className="consumable-chip-qty">A-{c.quantity}</span>}
+                          <button type="button" className="consumable-chip-x" aria-label={t.consumableRemove}
+                            onClick={()=>setPresetConsumables(prev=>prev.filter(x=>x.itemId!==c.itemId))}>{Ic.x}</button>
+                        </span>
+                      );
+                    })}
+                    <button type="button" className="consumable-add-btn" onClick={()=>setPresetPickerOpen(true)}>
+                      {presetConsumables.length ? Ic.edit : Ic.plus}
+                      {presetConsumables.length ? t.editConsumables : t.addConsumables}
+                    </button>
+                  </div>
+                </div>
+                <div className="admin-form-inline" style={{marginTop:16}}>
+                  <button type="submit" className="btn btn-primary"
+                    disabled={savingPreset || !presetTypeID || !presetName.trim() || !presetProblem.trim()}
+                    aria-busy={savingPreset}>
+                    {Ic.check} {savingPreset ? '…' : (editingPresetId ? t.saveChanges : t.addPreset)}
+                  </button>
+                  {editingPresetId && (
+                    <button type="button" className="btn btn-ghost" onClick={resetPresetForm} disabled={savingPreset}>
+                      {t.cancel}
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+
+            <div className="table-card">
+              {issuePresets.length === 0
+                ? <div className="empty-state">{Ic.list}<p>{t.noIssuePresets}</p></div>
+                : <table>
+                    <thead>
+                      <tr><th>{t.issueType}</th><th>{t.presetName}</th><th>{t.problemDesc}</th><th>{t.consumablesLabel}</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {issuePresets.map(preset=>(
+                        <tr key={preset.id}>
+                          <td><TypeBadge type={preset.issue_type}/></td>
+                          <td style={{fontWeight:500}}>{preset.name}</td>
+                          <td style={{maxWidth:360,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{preset.problem}</td>
+                          <td>{(preset.consumables || []).length}</td>
+                          <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                            <button className="icon-btn" title={t.editPreset} onClick={()=>startPresetEdit(preset)}>{Ic.edit}</button>
+                            <button className="icon-btn" title={t.removePreset} onClick={()=>removePreset(preset.id)}>{Ic.trash}</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+              }
+            </div>
+          </div>
+        </SetGroup>
+
         {/* Rooms, grouped with the others because it is the same kind of thing: a
             list a manager maintains, and an issue form that cannot be filled in
             without it. Its count is the number of rooms rather than the number of
@@ -777,6 +936,12 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
         </SetGroup>
 
       </SetGroup>
+
+      {presetPickerOpen && (
+        <ConsumablePicker items={consumableItems || []} value={presetConsumables}
+          onCancel={()=>setPresetPickerOpen(false)}
+          onDone={list=>{ setPresetConsumables(list); setPresetPickerOpen(false); }}/>
+      )}
     </div>
   );
 }
