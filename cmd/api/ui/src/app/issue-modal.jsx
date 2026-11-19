@@ -530,19 +530,22 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, is
   function applyPreset(id) {
     setPresetId(id);
     setPresetApplied('');
-    if (!id) return;
-    const preset = presetsForType.find(p => String(p.id) === String(id));
-    if (!preset) return;
-    const uses = (preset.consumables || [])
+    const preset = id ? presetsForType.find(p => String(p.id) === String(id)) : null;
+    // The selected preset owns the consumables on this form. Choosing "no
+    // preset", or a preset with no items, replaces the previous list with an
+    // empty one instead of leaving the old preset's items behind.
+    const uses = (preset?.consumables || [])
       .filter(c => catalogById[c.item_id])
       .map(c => ({ itemId: c.item_id, quantity: c.quantity }));
     setForm(f => ({
       ...f,
-      problem: preset.problem || '',
-      resolution: f.status === 'Pending' ? '' : (preset.resolution || ''),
+      ...(preset ? {
+        problem: preset.problem || '',
+        resolution: f.status === 'Pending' ? '' : (preset.resolution || ''),
+      } : {}),
       consumables: uses,
     }));
-    setPresetApplied(t.presetApplied.replace('{name}', preset.name));
+    if (preset) setPresetApplied(t.presetApplied.replace('{name}', preset.name));
   }
   const duration = useMemo(()=>computeDurationMinutes(form.startTime, form.endTime), [form.startTime, form.endTime]);
   const timeRangeInvalid = form.startTime && form.endTime && duration === null;
@@ -763,7 +766,7 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, is
             )}
             <div className="form-group">
               <label htmlFor="issue-type">{t.issueType}</label>
-              <select id="issue-type" className="form-control" value={form.type} onChange={e=>{ set('type',e.target.value); setPresetId(''); setPresetApplied(''); }}>
+              <select id="issue-type" className="form-control" value={form.type} onChange={e=>{ set('type',e.target.value); applyPreset(''); }}>
                 {typeNames.length === 0 && <option value="">{t.selectDept}</option>}
                 {typeNames.map(t2=><option key={t2}>{t2}</option>)}
               </select>
