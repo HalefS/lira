@@ -29,14 +29,23 @@ type consumableItemRow struct {
 	Pct      float64
 }
 
-// consumableLocationRow is one line of the "by location" table.
+// consumableLocationRow is one line of the "by location" table. The final row
+// can stand in for the locations that did not fit: IsOverflow is set and
+// Overflow counts them.
 type consumableLocationRow struct {
-	Location string
-	Mode     string
-	Quantity int
-	Records  int
-	Pct      float64
+	Location   string
+	Mode       string
+	Quantity   int
+	Records    int
+	Pct        float64
+	Overflow   int
+	IsOverflow bool
 }
+
+// maxLocationRows bounds the "by location" column so a busy month cannot push
+// the breakdown across the page. The remainder is reported as a count rather
+// than silently dropped.
+const maxLocationRows = 8
 
 // consumableTechRow is one line of the "by technician" table.
 type consumableTechRow struct {
@@ -153,7 +162,14 @@ func newConsumablesView(r *data.ConsumablesWeeklyReport) consumablesView {
 	}
 
 	locMax := maxLocation(r.ByLocation)
-	for _, t := range r.ByLocation {
+	for i, t := range r.ByLocation {
+		if i == maxLocationRows {
+			v.Location = append(v.Location, consumableLocationRow{
+				IsOverflow: true,
+				Overflow:   len(r.ByLocation) - maxLocationRows,
+			})
+			break
+		}
 		v.Location = append(v.Location, consumableLocationRow{
 			Location: t.Location,
 			Mode:     t.Mode,

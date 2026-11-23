@@ -111,11 +111,15 @@
         <h2>By location</h2>
         {{if .Location}}
           {{range .Location}}
+          {{if .IsOverflow}}
+          <div class="bar-more">{{.Overflow}} more</div>
+          {{else}}
           <div class="bar-row">
             <div class="bar-label">{{.Location}}</div>
             <div class="bar-track"><div class="bar-fill" style="width:{{.Pct}}%;background:var(--teal)"></div></div>
             <div class="bar-count">{{.Quantity}}</div>
           </div>
+          {{end}}
           {{end}}
         {{else}}
           <div class="bar-more">Nothing used.</div>

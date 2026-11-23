@@ -1,6 +1,7 @@
 package report
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -361,6 +362,68 @@ func TestConsumablesEntriesSplitByMode(t *testing.T) {
 	}
 	if len(v.Entries) != 3 {
 		t.Errorf("total entries = %d, want 3", len(v.Entries))
+	}
+}
+
+// tenLocations returns more locations than the column displays, so the tail
+// is exercised. Quantities descend so the first row is unambiguously the max.
+func tenLocations(n int) []*data.ConsumableLocationTotal {
+	rows := make([]*data.ConsumableLocationTotal, 0, n)
+	for i := 0; i < n; i++ {
+		rows = append(rows, &data.ConsumableLocationTotal{
+			Mode:     "apt",
+			Location: fmt.Sprintf("Room %d", i+1),
+			Quantity: n - i,
+			Records:  1,
+		})
+	}
+	return rows
+}
+
+// The location column stops at eight rows; the rest are summarised so a busy
+// month cannot stretch the breakdown.
+func TestConsumablesLocationOverflow(t *testing.T) {
+	rep := sampleWeekly()
+	rep.ByLocation = tenLocations(10)
+
+	v := newConsumablesView(rep)
+	if len(v.Location) != maxLocationRows+1 {
+		t.Fatalf("location rows = %d, want %d", len(v.Location), maxLocationRows+1)
+	}
+	last := v.Location[len(v.Location)-1]
+	if !last.IsOverflow || last.Overflow != 2 {
+		t.Errorf("last row = %+v, want an overflow row for 2 locations", last)
+	}
+	if v.Location[0].Pct != 100 {
+		t.Errorf("first bar = %v%%, want 100%% (width still relative to every row)", v.Location[0].Pct)
+	}
+
+	html, err := RenderConsumablesHTML(rep)
+	if err != nil {
+		t.Fatalf("RenderConsumablesHTML: %v", err)
+	}
+	if !strings.Contains(html, "2 more") {
+		t.Error("rendered report should summarise the locations that did not fit")
+	}
+	if strings.Contains(html, "Room 9") || strings.Contains(html, "Room 10") {
+		t.Error("locations beyond the cap should not be listed individually")
+	}
+}
+
+// Exactly eight rows fit without an overflow line, so the summary only appears
+// when something is actually hidden.
+func TestConsumablesLocationFitsAtLimit(t *testing.T) {
+	rep := sampleWeekly()
+	rep.ByLocation = tenLocations(maxLocationRows)
+
+	v := newConsumablesView(rep)
+	if len(v.Location) != maxLocationRows {
+		t.Fatalf("location rows = %d, want %d", len(v.Location), maxLocationRows)
+	}
+	for _, row := range v.Location {
+		if row.IsOverflow {
+			t.Error("eight locations should not produce an overflow row")
+		}
 	}
 }
 

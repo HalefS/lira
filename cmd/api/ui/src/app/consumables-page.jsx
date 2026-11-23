@@ -316,6 +316,10 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
   const itemMax    = report ? Math.max(1, ...(report.by_item || []).map(x => x.quantity)) : 1;
   const locMax     = report ? Math.max(1, ...(report.by_location || []).map(x => x.quantity)) : 1;
   const techMax    = report ? Math.max(1, ...(report.by_technician || []).map(x => x.quantity)) : 1;
+  // A busy month can list dozens of places. The column keeps its shape by
+  // showing the top eight and folding the rest into a single count.
+  const locLimit   = 8;
+  const locRows    = report ? (report.by_location || []) : [];
   const aptRows    = report ? (report.entries || []).filter(e => e.mode === 'apt') : [];
   const deptRows   = report ? (report.entries || []).filter(e => e.mode !== 'apt') : [];
 
@@ -675,7 +679,7 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
 
                 <div className="mini-card">
                   <div className="mini-card-title">{t.byLocation}</div>
-                  {(report.by_location||[]).map(x=>(
+                  {locRows.slice(0, locLimit).map(x=>(
                     <div className="week-bar-row" key={`${x.mode}:${x.location}`}>
                       <div className="week-bar-label"><span>{x.location}</span></div>
                       <div className="week-bar-track">
@@ -684,6 +688,11 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
                       <div className="week-bar-count">{x.quantity}</div>
                     </div>
                   ))}
+                  {locRows.length > locLimit && (
+                    <div style={{fontSize:12,color:'var(--gray-400)',paddingTop:8}}>
+                      {t.reportMore.replace('{n}', locRows.length - locLimit)}
+                    </div>
+                  )}
                 </div>
 
                 <div className="mini-card">

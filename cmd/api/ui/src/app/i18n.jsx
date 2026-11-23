@@ -659,6 +659,7 @@ const T = {
     generatingPdf: 'Generating…',
     nothingUsedThisWeek: 'No consumables were recorded this week.',
     nothingUsedThisMonth: 'No consumables were recorded this month.',
+    reportMore: '{n} more',
     // Collapsible group in the sidebar, and LCU testing
     miscellaneous: 'Miscellaneous',
     lcuTesting: 'LCU Testing',
@@ -1817,6 +1818,7 @@ const T = {
     generatingPdf: 'A gerar…',
     nothingUsedThisWeek: 'Não foram registados consumíveis esta semana.',
     nothingUsedThisMonth: 'Não foram registados consumíveis este mês.',
+    reportMore: 'mais {n}',
     // Grupo expansível na barra lateral, e testes LCU
     miscellaneous: 'Diversos',
     lcuTesting: 'Teste LCU',
