@@ -10,7 +10,8 @@ import (
 )
 
 // systemStatusHandler powers the System page: CPU and RAM usage, database
-// latency and connection pool stats, and a few process-level numbers. It's
+// latency and connection pool stats, PostgreSQL statistics for every database
+// on the instance, and a few process-level numbers. It's
 // manager-only (see routes.go) since it's operational/infra information
 // rather than something technicians need day to day.
 func (app *application) systemStatusHandler(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +37,23 @@ func (app *application) systemStatusHandler(w http.ResponseWriter, r *http.Reque
 	}
 	if dbErr != nil {
 		database["error"] = dbErr.Error()
+	}
+
+	// Statistics for every database on the instance are extra detail, not a
+	// precondition for the rest of the page. A restricted role may be able to
+	// ping but not read pg_stat_database, so a failure is reported in the body
+	// and the CPU/RAM/latency figures above are still returned.
+	if dbErr == nil {
+		statsCtx, cancelStats := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancelStats()
+		pg, err := data.ReadPostgresStats(statsCtx, app.models.Users.DB)
+		if err != nil {
+			database["stats_error"] = "database statistics are unavailable: " + err.Error()
+		} else {
+			database["server_version"] = pg.Version
+			database["server_started_at"] = pg.StartedAt
+			database["databases"] = pg.Databases
+		}
 	}
 
 	app.writeJSON(w, http.StatusOK, envelope{

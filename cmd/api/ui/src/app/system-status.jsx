@@ -7,6 +7,13 @@ function sysTone(value, warn, bad) {          // lower is better (usage %, laten
   return 'green';
 }
 
+function cacheTone(percent, hasReads) {       // here higher is better
+  if (!hasReads) return 'gray';
+  if (percent >= 95) return 'green';
+  if (percent >= 80) return 'amber';
+  return 'red';
+}
+
 function formatBytes(bytes) {
   if (!bytes && bytes !== 0) return '—';
   const units = ['B','KB','MB','GB','TB'];
@@ -98,6 +105,9 @@ function SystemStatusPage({ token }) {
   const cpu = data?.cpu;
   const mem = data?.memory;
   const db = data?.database;
+  const pgDbs = db?.databases || null;
+  const pgStarted = db?.server_started_at ? new Date(db.server_started_at) : null;
+  const pgTotalSize = pgDbs ? pgDbs.reduce((sum, d) => sum + (d.size_bytes || 0), 0) : 0;
   const cpuTone = cpu?.available ? sysTone(cpu.percent, 60, 85) : 'gray';
   const memTone = mem?.system_wide ? sysTone(mem.percent, 70, 90) : 'gray';
   const srvTone = sysTone(serverLatency, 100, 300);
@@ -151,6 +161,97 @@ function SystemStatusPage({ token }) {
           <div className="sys-detail-item"><div className="sys-detail-label">{t.goVersion}</div><div className="sys-detail-value">{data?.go_version || '—'}</div></div>
         </div>
       </div>
+
+      {pgDbs && (
+        <>
+          <div className="mini-card" style={{marginTop:16,marginBottom:16}}>
+            <div className="mini-card-title">{t.pgInstance}</div>
+            <div className="sys-detail-grid">
+              <div className="sys-detail-item"><div className="sys-detail-label">{t.pgVersion}</div><div className="sys-detail-value">{db.server_version || '—'}</div></div>
+              <div className="sys-detail-item"
+                title={pgStarted ? pgStarted.toLocaleString() : undefined}>
+                <div className="sys-detail-label">{t.pgUptime}</div>
+                <div className="sys-detail-value">
+                  {pgStarted ? formatUptime(Math.max(0, (Date.now() - pgStarted.getTime()) / 1000), t) : '—'}
+                </div>
+              </div>
+              <div className="sys-detail-item"><div className="sys-detail-label">{t.pgDatabaseCount}</div><div className="sys-detail-value">{pgDbs.length}</div></div>
+              <div className="sys-detail-item"><div className="sys-detail-label">{t.pgTotalSize}</div><div className="sys-detail-value">{formatBytes(pgTotalSize)}</div></div>
+            </div>
+          </div>
+
+          <div className="table-card">
+            <div className="table-header">
+              <span className="table-title">{t.pgDatabases}</span>
+              <span style={{fontSize:12,color:'var(--gray-400)'}}>{pgDbs.length}</span>
+            </div>
+            <TableScroll label={t.pgDatabases}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t.pgDatabase}</th>
+                    <th>{t.pgSize}</th>
+                    <th>{t.pgConnections}</th>
+                    <th>{t.pgTransactions}</th>
+                    <th>{t.pgCacheHit}</th>
+                    <th>{t.pgDeadlocks}</th>
+                    <th>{t.pgTempFiles}</th>
+                    <th>{t.pgStatsSince}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pgDbs.map(d=>{
+                    const hasReads = (d.blocks_hit || 0) + (d.blocks_read || 0) > 0;
+                    const tone = cacheTone(d.cache_hit_percent, hasReads);
+                    return (
+                      <tr key={d.name}>
+                        <td>
+                          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                            <span style={{fontWeight:500}}>{d.name}</span>
+                            {d.current && (
+                              <span className="badge" style={{background:'var(--blue-light)',color:'var(--blue)'}}>{t.pgCurrent}</span>
+                            )}
+                            {!d.allow_connections && (
+                              <span className="badge" style={{background:'var(--gray-100)',color:'var(--gray-500)'}}>{t.pgNoConnect}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{fontFamily:'DM Mono,monospace',fontSize:12.5,whiteSpace:'nowrap'}}>{formatBytes(d.size_bytes)}</td>
+                        <td style={{fontVariantNumeric:'tabular-nums'}}>{d.active_connections}</td>
+                        <td style={{fontVariantNumeric:'tabular-nums'}}>{(d.transactions || 0).toLocaleString()}</td>
+                        <td>
+                          {hasReads ? (
+                            <div style={{display:'flex',alignItems:'center',gap:8,minWidth:110}}
+                              title={`${(d.blocks_hit||0).toLocaleString()} / ${((d.blocks_hit||0)+(d.blocks_read||0)).toLocaleString()}`}>
+                              <div className="sys-gauge-track" style={{flex:1,marginTop:0}}>
+                                <div className={`sys-gauge-fill tone-${tone}`} style={{width:`${d.cache_hit_percent}%`}}/>
+                              </div>
+                              <span style={{fontSize:12,color:'var(--gray-600)',fontVariantNumeric:'tabular-nums'}}>{d.cache_hit_percent.toFixed(1)}%</span>
+                            </div>
+                          ) : <span style={{color:'var(--gray-400)'}}>—</span>}
+                        </td>
+                        <td style={{fontVariantNumeric:'tabular-nums'}}>{d.deadlocks}</td>
+                        <td style={{fontVariantNumeric:'tabular-nums'}}>{(d.temp_files || 0).toLocaleString()}</td>
+                        <td style={{fontSize:12,color:'var(--gray-400)',whiteSpace:'nowrap'}}>
+                          {d.stats_reset ? new Date(d.stats_reset).toLocaleString() : t.pgSinceStart}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </TableScroll>
+          </div>
+        </>
+      )}
+
+      {db?.stats_error && (
+        <div className="table-card" style={{marginTop:16,padding:'16px 20px'}}>
+          <div style={{fontSize:13,fontWeight:600,color:'var(--amber)'}}>{t.pgStatsUnavailable}</div>
+          <div style={{fontSize:12.5,color:'var(--gray-400)',marginTop:4}}>{t.pgStatsUnavailableHint}</div>
+          <div style={{fontSize:12,color:'var(--gray-400)',marginTop:8,fontFamily:'DM Mono,monospace'}}>{db.stats_error}</div>
+        </div>
+      )}
     </div>
   );
 }
