@@ -461,6 +461,74 @@ func (app *application) weeklyConsumablesPDFHandler(w http.ResponseWriter, r *ht
 	w.Write(pdf)
 }
 
+// GET /v1/reports/consumables/monthly?month=YYYY-MM
+//
+// The same consumables report as the weekly endpoint, aggregated over a
+// calendar month. Readable by any authenticated user, matching the JSON and
+// PDF endpoints before it.
+func (app *application) monthlyConsumablesReportHandler(w http.ResponseWriter, r *http.Request) {
+	month, ok := app.reportMonthParam(w, r)
+	if !ok {
+		return
+	}
+
+	rep, err := app.models.Consumables.GetMonthlyConsumablesReport(month)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.writeJSON(w, http.StatusOK, envelope{"report": rep}, nil)
+}
+
+// GET /v1/reports/consumables/monthly.pdf?month=YYYY-MM
+//
+// The monthly report, printed with the same layout as the weekly one: only the
+// window changes, so there is no second template to keep in step.
+func (app *application) monthlyConsumablesPDFHandler(w http.ResponseWriter, r *http.Request) {
+	month, ok := app.reportMonthParam(w, r)
+	if !ok {
+		return
+	}
+
+	if app.browser == nil {
+		reason := "no chromium-based browser was found on this server"
+		if app.browserErr != nil && !errors.Is(app.browserErr, report.ErrNoBrowser) {
+			reason = "the configured pdf report browser could not be used: " + app.browserErr.Error()
+		}
+		app.errorResponse(w, r, http.StatusNotImplemented, "pdf reports are unavailable: "+reason)
+		return
+	}
+
+	rep, err := app.models.Consumables.GetMonthlyConsumablesReport(month)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	html, err := report.RenderConsumablesHTML(rep)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// The request context bounds the browser run, so a client that gives up
+	// doesn't leave a Chrome process behind.
+	pdf, err := app.browser.Render(r.Context(), html)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", contentDisposition("attachment",
+		fmt.Sprintf("LIRA-Consumables-Month-%s.pdf", month.Format("2006-01"))))
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Length", strconv.Itoa(len(pdf)))
+	w.WriteHeader(http.StatusOK)
+	w.Write(pdf)
+}
+
 // GET /v1/reports/rota/weekly?week=YYYY-MM-DD
 //
 // The weekly attendance sheet as JSON. It exists so the rota page can learn the
@@ -610,6 +678,24 @@ func (app *application) reportWeekAnchor(w http.ResponseWriter, r *http.Request)
 		return time.Time{}, false
 	}
 	return anchor, true
+}
+
+// reportMonthParam reads the ?month=YYYY-MM used by monthly reports. An absent
+// month means the current one, so the UI can ask for "this month" without
+// having to work out today's date first. It writes the error response itself,
+// like reportWeekAnchor, so both handlers stay a single call at the top.
+func (app *application) reportMonthParam(w http.ResponseWriter, r *http.Request) (time.Time, bool) {
+	raw := app.readString(r.URL.Query(), "month", time.Now().Format("2006-01"))
+	if !monthParamPattern.MatchString(raw) {
+		app.errorResponse(w, r, http.StatusBadRequest, "month must be in YYYY-MM format")
+		return time.Time{}, false
+	}
+	month, err := time.ParseInLocation("2006-01", raw, time.Local)
+	if err != nil {
+		app.errorResponse(w, r, http.StatusBadRequest, "month must be in YYYY-MM format")
+		return time.Time{}, false
+	}
+	return month, true
 }
 
 // contentDisposition builds a Content-Disposition header value. The filename is

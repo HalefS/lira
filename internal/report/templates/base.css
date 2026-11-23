@@ -339,6 +339,9 @@ tbody tr.fp td:first-child { box-shadow: inset 0.8mm 0 0 var(--amber); }
   gap: 2.5mm; align-items: end; height: 34mm;
   break-inside: avoid;
 }
+/* A month squeezes 28-31 columns into the same page width. The template sets
+   the column count from the data; this only reclaims the gap. */
+.daychart.compact { gap: 0.6mm; }
 .daycol { display: flex; flex-direction: column; align-items: center; height: 100%; }
 .daycol .qty {
   font-family: 'DM Mono', ui-monospace, Consolas, monospace;

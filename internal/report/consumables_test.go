@@ -108,6 +108,41 @@ func TestWeekRangeEndIsExclusiveNextMonday(t *testing.T) {
 	}
 }
 
+// A month window runs from midnight on the first to midnight on the first of
+// the next month. The exclusive upper bound means a use logged at that midnight
+// counts towards the next month only.
+func TestMonthRangeIsFirstToFirst(t *testing.T) {
+	tests := []struct {
+		day       string
+		wantStart string
+		wantEnd   string
+		wantDays  int
+	}{
+		{"2026-09-01", "2026-09-01", "2026-10-01", 30},
+		{"2026-09-26", "2026-09-01", "2026-10-01", 30},
+		{"2026-02-14", "2026-02-01", "2026-03-01", 28},
+		{"2024-02-29", "2024-02-01", "2024-03-01", 29},
+		{"2026-12-31", "2026-12-01", "2027-01-01", 31},
+	}
+	for _, tc := range tests {
+		start, end := data.MonthRange(mustDay(t, tc.day))
+		if got := start.Format("2006-01-02"); got != tc.wantStart {
+			t.Errorf("MonthRange(%s) start = %s, want %s", tc.day, got, tc.wantStart)
+		}
+		if got := end.Format("2006-01-02"); got != tc.wantEnd {
+			t.Errorf("MonthRange(%s) end = %s, want %s", tc.day, got, tc.wantEnd)
+		}
+		if start.Day() != 1 || start.Hour() != 0 || start.Minute() != 0 {
+			t.Errorf("MonthRange(%s) start %s is not midnight on the first", tc.day, start)
+		}
+		// Reading the last day off the date avoids DST making the duration
+		// look like 29.96 days in a local timezone.
+		if got := end.AddDate(0, 0, -1).Day(); got != tc.wantDays {
+			t.Errorf("MonthRange(%s) covers %d days, want %d", tc.day, got, tc.wantDays)
+		}
+	}
+}
+
 func mustDay(t *testing.T, s string) time.Time {
 	t.Helper()
 	d, err := time.ParseInLocation("2006-01-02", s, time.Local)
@@ -242,6 +277,59 @@ func TestConsumablesDayChartCoversEveryDay(t *testing.T) {
 		if !d.Empty {
 			t.Errorf("column %d (%s) should be marked empty when nothing was used", i, d.Label)
 		}
+	}
+}
+
+// A month has 28-31 columns rather than a week's seven. The view sizes the
+// grid from the data and switches to bare day numbers so the chart fits.
+func TestConsumablesMonthDayChartIsDynamicAndCompact(t *testing.T) {
+	rep := sampleWeekly()
+	rep.From = mustDay(t, "2026-09-01")
+	rep.To = rep.From.AddDate(0, 1, 0)
+	rep.FromDate = "2026-09-01"
+	rep.ToDate = "2026-09-30"
+	rep.ByDay = []*data.ConsumableDayTotal{
+		{Date: "2026-09-01", Quantity: 2, Records: 1},
+		{Date: "2026-09-30", Quantity: 3, Records: 1},
+	}
+
+	v := newConsumablesView(rep)
+	if len(v.Days) != 30 {
+		t.Fatalf("day chart has %d columns, want 30", len(v.Days))
+	}
+	if v.DayColumns != 30 {
+		t.Errorf("DayColumns = %d, want 30", v.DayColumns)
+	}
+	if !v.CompactDays {
+		t.Error("a 30-column chart should use compact day labels")
+	}
+	if v.Days[0].DayNum != 1 || v.Days[29].DayNum != 30 {
+		t.Errorf("compact day numbers = %d..%d, want 1..30", v.Days[0].DayNum, v.Days[29].DayNum)
+	}
+	if v.Days[29].DayNum != 30 {
+		t.Errorf("last column day number = %d, want 30", v.Days[29].DayNum)
+	}
+	if v.Days[0].Empty || v.Days[29].Empty {
+		t.Error("the days with recorded usage should not be marked empty")
+	}
+	for i, d := range v.Days[1:29] {
+		if !d.Empty {
+			t.Errorf("column %d (%s) should be empty when nothing was used", i+1, d.Label)
+		}
+	}
+
+	html, err := RenderConsumablesHTML(rep)
+	if err != nil {
+		t.Fatalf("RenderConsumablesHTML: %v", err)
+	}
+	if !strings.Contains(html, "grid-template-columns: repeat(30, 1fr)") {
+		t.Error("rendered month chart should size its grid from the data")
+	}
+	if !strings.Contains(html, `class="daychart compact"`) {
+		t.Error("a month chart should carry the compact class")
+	}
+	if strings.Contains(html, `class="dow"`) {
+		t.Error("a month chart should drop the weekday labels that would collide")
 	}
 }
 

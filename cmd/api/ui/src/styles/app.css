@@ -2305,6 +2305,11 @@ html.dark .week-nav button { background: var(--gray-50); }
   display: grid; grid-template-columns: repeat(7, 1fr);
   gap: 10px; align-items: end; height: 130px;
 }
+/* A month shows 28-31 columns in the same space. The component sets the column
+   count from the data; this only reclaims the gap and shrinks the labels (the
+   weekday row is dropped in the JSX, as it is in the PDF template). */
+.daychart.compact { gap: 3px; }
+.daychart.compact .qty, .daychart.compact .dom { font-size: 9px; }
 .daycol { display: flex; flex-direction: column; align-items: center; height: 100%; }
 .daycol .qty { font-size: 12px; font-weight: 600; color: var(--gray-600); margin-bottom: 4px; }
 .daycol .track {

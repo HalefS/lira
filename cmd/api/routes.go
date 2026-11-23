@@ -347,6 +347,11 @@ func (app *application) routes() http.Handler {
 	// authenticated user, like the daily report.
 	router.HandlerFunc(http.MethodGet, "/v1/reports/consumables/weekly", app.requireAuth(app.weeklyConsumablesReportHandler))
 	router.HandlerFunc(http.MethodGet, "/v1/reports/consumables/weekly.pdf", app.requireAuth(app.weeklyConsumablesPDFHandler))
+	// The same report for a calendar month. A separate path rather than a
+	// ?period= switch so the week and month links stay directly shareable and
+	// the validation for each stays unambiguous.
+	router.HandlerFunc(http.MethodGet, "/v1/reports/consumables/monthly", app.requireAuth(app.monthlyConsumablesReportHandler))
+	router.HandlerFunc(http.MethodGet, "/v1/reports/consumables/monthly.pdf", app.requireAuth(app.monthlyConsumablesPDFHandler))
 
 	// The attendance sheet. Manager-only, because it is a signed statement about
 	// hours worked and it carries absence kinds: see weeklyRotaPDFHandler.

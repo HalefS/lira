@@ -75,13 +75,12 @@
 
   <div class="section">
     <h2>Usage by day</h2>
-    <div class="daychart">
+    <div class="daychart{{if $.CompactDays}} compact{{end}}" style="grid-template-columns: repeat({{.DayColumns}}, 1fr)">
       {{range .Days}}
       <div class="daycol{{if .Empty}} empty{{end}}">
         <div class="qty">{{.Quantity}}</div>
         <div class="track"><div class="fill" style="height:{{.Height}}%"></div></div>
-        <div class="day">{{.Label}}</div>
-        <div class="dow">{{.Weekday}}</div>
+        {{if $.CompactDays}}<div class="day">{{.DayNum}}</div>{{else}}<div class="day">{{.Label}}</div><div class="dow">{{.Weekday}}</div>{{end}}
       </div>
       {{end}}
     </div>

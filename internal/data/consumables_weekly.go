@@ -21,6 +21,14 @@ func WeekRange(date time.Time) (start, end time.Time) {
 	return start, start.AddDate(0, 0, 7)
 }
 
+// MonthRange returns the half-open window [start, end) covering the calendar
+// month that date falls in. Like WeekRange, end is the first day of the next
+// month, so a use logged at that midnight belongs to the next report only.
+func MonthRange(date time.Time) (start, end time.Time) {
+	start = time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
+	return start, start.AddDate(0, 1, 0)
+}
+
 // ConsumablesReportEntry is one recorded use of a consumable, carrying the
 // context needed to answer "what was used, where, and on what".
 //
@@ -83,9 +91,10 @@ type ConsumableDayTotal struct {
 	Records  int    `json:"records"`
 }
 
-// ConsumablesWeeklyReport is everything the weekly consumables report shows:
-// the detail rows, and four roll-ups of the same numbers.
-type ConsumablesWeeklyReport struct {
+// ConsumablesReport is everything the consumables report shows: the detail
+// rows, and four roll-ups of the same numbers. The weekly and monthly reports
+// differ only in the window they query, so they share this shape.
+type ConsumablesReport struct {
 	// From is inclusive and To is exclusive, matching WeekRange.
 	From        time.Time `json:"from"`
 	To          time.Time `json:"to"`
@@ -105,18 +114,37 @@ type ConsumablesWeeklyReport struct {
 	Entries      []*ConsumablesReportEntry  `json:"entries"`
 }
 
+// ConsumablesWeeklyReport is the name the weekly endpoint was first written
+// with. Kept as an alias so callers that use it still compile.
+type ConsumablesWeeklyReport = ConsumablesReport
+
 // GetWeeklyConsumablesReport builds the report for the week containing anchor.
 // Pass a zero anchor to report on the current week.
-func (m ConsumableModel) GetWeeklyConsumablesReport(anchor time.Time) (*ConsumablesWeeklyReport, error) {
+func (m ConsumableModel) GetWeeklyConsumablesReport(anchor time.Time) (*ConsumablesReport, error) {
 	if anchor.IsZero() {
 		anchor = time.Now()
 	}
 	start, end := WeekRange(anchor)
+	return m.getConsumablesReport(start, end)
+}
 
+// GetMonthlyConsumablesReport builds the report for the calendar month
+// containing anchor. Pass a zero anchor to report on the current month.
+func (m ConsumableModel) GetMonthlyConsumablesReport(anchor time.Time) (*ConsumablesReport, error) {
+	if anchor.IsZero() {
+		anchor = time.Now()
+	}
+	start, end := MonthRange(anchor)
+	return m.getConsumablesReport(start, end)
+}
+
+// getConsumablesReport runs the same queries for any half-open window. Keeping
+// one implementation means a monthly report cannot drift from the weekly one.
+func (m ConsumableModel) getConsumablesReport(start, end time.Time) (*ConsumablesReport, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	report := &ConsumablesWeeklyReport{
+	report := &ConsumablesReport{
 		From:         start,
 		To:           end,
 		FromDate:     start.Format("2006-01-02"),
@@ -182,7 +210,7 @@ func (m ConsumableModel) GetWeeklyConsumablesReport(anchor time.Time) (*Consumab
 	rows.Close()
 
 	if report.TotalRecords == 0 {
-		// Nothing was used this week; the roll-ups would all be empty anyway.
+		// Nothing was used in this period; the roll-ups would all be empty anyway.
 		return report, nil
 	}
 

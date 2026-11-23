@@ -53,6 +53,7 @@ type consumableTechRow struct {
 type consumableDayRow struct {
 	Label    string
 	Weekday  string
+	DayNum   int
 	Quantity int
 	Height   float64
 	Empty    bool
@@ -90,6 +91,11 @@ type consumablesView struct {
 	Techs    []consumableTechRow
 	Days     []consumableDayRow
 	Entries  []consumableEntryRow
+
+	// A month has 28-31 day columns rather than a week's seven, so the template
+	// sizes the grid from the data and drops the long labels that would collide.
+	DayColumns  int
+	CompactDays bool
 
 	// Split of the detail table into the two kinds of place, so the location
 	// names a reader cares about are grouped rather than interleaved.
@@ -180,7 +186,7 @@ func newConsumablesView(r *data.ConsumablesWeeklyReport) consumablesView {
 		})
 	}
 
-	// One bar per day of the week, so a quiet day is visibly quiet instead of
+	// One bar per day of the period, so a quiet day is visibly quiet instead of
 	// missing. Days with no usage still get a slot.
 	byDate := make(map[string]int, len(r.ByDay))
 	for _, d := range r.ByDay {
@@ -197,6 +203,7 @@ func newConsumablesView(r *data.ConsumablesWeeklyReport) consumablesView {
 		row := consumableDayRow{
 			Label:    d.Format("2 Jan"),
 			Weekday:  d.Format("Mon"),
+			DayNum:   d.Day(),
 			Quantity: q,
 			Empty:    q == 0,
 		}
@@ -211,6 +218,12 @@ func newConsumablesView(r *data.ConsumablesWeeklyReport) consumablesView {
 		}
 		v.Days = append(v.Days, row)
 	}
+	v.DayColumns = len(v.Days)
+	if v.DayColumns == 0 {
+		v.DayColumns = 1
+	}
+	// Seven columns have room for "3 Sep" and "Thu". A whole month does not.
+	v.CompactDays = v.DayColumns > 7
 
 	for _, e := range r.Entries {
 		bg, fg := avatarColors(e.LoggedByIdx)

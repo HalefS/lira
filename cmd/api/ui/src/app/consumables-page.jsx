@@ -204,39 +204,64 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
     loadCatalog().catch(() => {});
   }, [view, token]);
 
-  // ── Weekly report view ──
-  // anchor is any day inside the week being shown; the server expands it to the
-  // Monday-to-Sunday window and reports the range back.
+  // ── Consumables report view ──
+  // Both periods produce the same report shape; only the anchor and the
+  // endpoint change. A week anchor is any day inside that week, a month anchor
+  // is "YYYY-MM", and the server reports the resolved range back.
+  const [period, setPeriod] = useState('week');
   const [anchor, setAnchor] = useState(todayStr);
+  const [month, setMonth] = useState(todayStr.slice(0, 7));
   const [report, setReport] = useState(null);
   const [rLoading, setRLoading] = useState(false);
   const [rError, setRError] = useState('');
   const [downloading, setDownloading] = useState(false);
+  const isMonthly = period === 'month';
+  const periodKey = isMonthly ? month : anchor;
 
   useEffect(() => {
     if (view !== 'report') return;
     let cancelled = false;
-    setRLoading(true); setRError('');
-    apiFetch(`/reports/consumables/weekly?week=${anchor}`, {token})
+    setRLoading(true); setRError(''); setReport(null);
+    const url = isMonthly
+      ? `/reports/consumables/monthly?month=${month}`
+      : `/reports/consumables/weekly?week=${anchor}`;
+    apiFetch(url, {token})
       .then(res => { if (!cancelled) setReport(res.report || null); })
       .catch(ex => { if (!cancelled) setRError(ex.message); })
       .finally(() => { if (!cancelled) setRLoading(false); });
     return () => { cancelled = true; };
-  }, [anchor, token, view]);
+  }, [period, periodKey, token, view]);
 
-  function shiftWeek(days) {
-    const d = new Date(anchor + 'T00:00:00');
-    d.setDate(d.getDate() + days);
-    setAnchor(localISODate(d));
+  function shiftPeriod(steps) {
+    if (!isMonthly) {
+      const d = new Date(anchor + 'T00:00:00');
+      d.setDate(d.getDate() + steps * 7);
+      setAnchor(localISODate(d));
+      return;
+    }
+    // Stepping by whole months from the first avoids the 31st rolling a month
+    // over twice when moving from a long month to a short one.
+    const [y, m] = month.split('-').map(Number);
+    const d = new Date(y, m - 1 + steps, 1);
+    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+
+  function currentPeriod() {
+    const now = new Date();
+    if (isMonthly) setMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+    else setAnchor(localISODate(now));
   }
 
   // Downloading goes through fetch rather than a plain link so the
   // Authorization header reaches the endpoint.
-  async function downloadWeeklyPDF() {
+  async function downloadReportPDF() {
     if (!report || downloading) return;
     setDownloading(true);
     try {
-      const res = await fetch(`${API}/reports/consumables/weekly.pdf?week=${anchor}`, {
+      const url = isMonthly
+        ? `/reports/consumables/monthly.pdf?month=${month}`
+        : `/reports/consumables/weekly.pdf?week=${anchor}`;
+      const res = await fetch(`${API}${url}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -248,14 +273,16 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
         throw new Error(msg);
       }
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const urlDownload = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `LIRA-Consumables-Week-${report.from_date}-to-${report.to_date}.pdf`;
+      a.href = urlDownload;
+      a.download = isMonthly
+        ? `LIRA-Consumables-Month-${month}.pdf`
+        : `LIRA-Consumables-Week-${report.from_date}-to-${report.to_date}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      setTimeout(() => URL.revokeObjectURL(urlDownload), 10000);
     } catch (ex) {
       setRError('Error: ' + ex.message);
     } finally {
@@ -265,14 +292,14 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
 
   // A bar never reads as zero-width, so a day with one unit is still a day.
   const dayMax = report ? Math.max(1, ...(report.by_day || []).map(d => d.quantity)) : 1;
-  // One bar per day of the week, so a quiet day shows as quiet rather than
-  // simply missing.
+  // One bar per day of the period, so a quiet day shows as quiet rather than
+  // simply missing. The server sends back both bounds, so the same code fills
+  // seven slots for a week and 28-31 for a month.
   const dayCells = report ? (() => {
     const byDate = new Map((report.by_day || []).map(d => [d.date, d.quantity]));
     const out = [];
-    const start = new Date(report.from_date + 'T00:00:00');
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(start.getTime() + i * 86400000);
+    const d = new Date(report.from_date + 'T00:00:00');
+    while (localISODate(d) <= report.to_date) {
       const key = localISODate(d);
       const qty = byDate.get(key) || 0;
       out.push({
@@ -281,6 +308,7 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
         dom: d.getDate(),
         height: qty === 0 ? 2 : Math.max(6, (qty / dayMax) * 100),
       });
+      d.setDate(d.getDate() + 1);
     }
     return out;
   })() : [];
@@ -359,7 +387,7 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
             {Ic.list}{t.consumablesLog}
           </button>
           <button className={view==='report'?'active':''} onClick={()=>setView('report')}>
-            {Ic.report}{t.weeklyConsumables}
+            {Ic.report}{t.consumablesReport}
           </button>
         </div>
       </div>
@@ -562,21 +590,32 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
       {view==='report' && (
         <>
           <div className="table-card" style={{marginBottom:16,padding:'14px 20px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+            <div className="team-segmented">
+              <button className={!isMonthly?'active':''} onClick={()=>setPeriod('week')}>{t.weekly}</button>
+              <button className={isMonthly?'active':''} onClick={()=>setPeriod('month')}>{t.monthly}</button>
+            </div>
             <div className="week-nav">
-              <button onClick={()=>shiftWeek(-7)} title={t.prevWeek} aria-label={t.prevWeek}>
+              <button onClick={()=>shiftPeriod(-1)} title={isMonthly?t.prevMonth:t.prevWeek} aria-label={isMonthly?t.prevMonth:t.prevWeek}>
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3L5 8l5 5"/></svg>
               </button>
               <span className="label">
-                {report ? `${report.from_date} → ${report.to_date}` : `${t.weekOf} ${anchor}`}
+                {report ? `${report.from_date} → ${report.to_date}` : isMonthly ? `${t.monthOf} ${month}` : `${t.weekOf} ${anchor}`}
               </span>
-              <button onClick={()=>shiftWeek(7)} title={t.nextWeek} aria-label={t.nextWeek}>
+              <button onClick={()=>shiftPeriod(1)} title={isMonthly?t.nextMonth:t.nextWeek} aria-label={isMonthly?t.nextMonth:t.nextWeek}>
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3l5 5-5 5"/></svg>
               </button>
             </div>
-            <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setAnchor(todayStr)}>{t.thisWeek}</button>
+            <button className="btn btn-ghost" style={{fontSize:12,padding:'6px 12px'}} onClick={currentPeriod}>
+              {isMonthly ? t.thisMonth : t.thisWeek}
+            </button>
+            {isMonthly && (
+              <input type="month" className="form-control" style={{width:'auto'}} value={month}
+                aria-label={t.monthOf}
+                onChange={e=>{ if (e.target.value) setMonth(e.target.value); }} />
+            )}
             <button className="btn btn-primary" style={{marginLeft:'auto'}}
-              onClick={downloadWeeklyPDF} disabled={!report || downloading}>
-              {Ic.download} {downloading ? t.generatingPdf : t.downloadWeeklyPdf}
+              onClick={downloadReportPDF} disabled={!report || downloading}>
+              {Ic.download} {downloading ? t.generatingPdf : t.downloadReportPdf}
             </button>
           </div>
 
@@ -589,7 +628,7 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
           {rLoading ? (
             <div className="empty-state"><p>{t.analyticsLoading}</p></div>
           ) : !report || report.total_records === 0 ? (
-            <div className="empty-state">{Ic.box}<p>{t.nothingUsedThisWeek}</p></div>
+            <div className="empty-state">{Ic.box}<p>{isMonthly ? t.nothingUsedThisMonth : t.nothingUsedThisWeek}</p></div>
           ) : (
             <>
               <div className="analytics-grid" style={{marginBottom:20}}>
@@ -604,12 +643,13 @@ function ConsumablesPage({ token, currentUser, onCatalogUpdate, setToast }) {
 
               <div className="mini-card" style={{marginBottom:20}}>
                 <div className="mini-card-title">{t.usageByDay}</div>
-                <div className="daychart">
+                <div className={`daychart${isMonthly?' compact':''}`}
+                  style={{gridTemplateColumns:`repeat(${dayCells.length || 1}, minmax(0, 1fr))`}}>
                   {dayCells.map(d=>(
                     <div className={`daycol${d.qty===0?' empty':''}`} key={d.key}>
                       <div className="qty">{d.qty}</div>
                       <div className="track"><div className="fill" style={{height:`${d.height}%`}}/></div>
-                      <div className="dow">{d.dow}</div>
+                      {!isMonthly && <div className="dow">{d.dow}</div>}
                       <div className="dom">{d.dom}</div>
                     </div>
                   ))}

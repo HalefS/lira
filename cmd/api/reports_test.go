@@ -56,6 +56,86 @@ func TestWeeklyConsumablesPDFReportsMissingBrowser(t *testing.T) {
 	}
 }
 
+// A malformed month is refused before any query runs, so it can be exercised
+// without a database. "2026-13" has the right shape but is not a real month,
+// so it must be caught by the parse rather than reaching a query.
+func TestMonthlyConsumablesRejectsMalformedMonth(t *testing.T) {
+	app := &application{}
+
+	for _, endpoint := range []string{
+		"/v1/reports/consumables/monthly?month=nope",
+		"/v1/reports/consumables/monthly?month=2026-13",
+		"/v1/reports/consumables/monthly.pdf?month=2026-09-26",
+		"/v1/reports/consumables/monthly.pdf?month=2026-13",
+	} {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, endpoint, nil)
+
+		if strings.Contains(endpoint, ".pdf?") {
+			app.monthlyConsumablesPDFHandler(w, r)
+		} else {
+			app.monthlyConsumablesReportHandler(w, r)
+		}
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want %d", endpoint, w.Code, http.StatusBadRequest)
+		}
+		if !strings.Contains(w.Body.String(), "YYYY-MM") {
+			t.Errorf("%s: body = %q, want it to name the expected month format", endpoint, w.Body.String())
+		}
+	}
+}
+
+// A missing browser disables the PDF endpoint but not the JSON one, and
+// neither should be a 500.
+func TestMonthlyConsumablesPDFReportsMissingBrowser(t *testing.T) {
+	app := &application{browserErr: report.ErrNoBrowser}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/reports/consumables/monthly.pdf?month=2026-09", nil)
+	app.monthlyConsumablesPDFHandler(w, r)
+
+	if w.Code != http.StatusNotImplemented {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotImplemented)
+	}
+	if !strings.Contains(w.Body.String(), "chromium") {
+		t.Errorf("body = %q, want it to explain that no browser was found", w.Body.String())
+	}
+}
+
+// An absent month means the current month rather than an error.
+func TestReportMonthParamDefaultsToNow(t *testing.T) {
+	app := &application{}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/reports/consumables/monthly", nil)
+
+	month, ok := app.reportMonthParam(w, r)
+	if !ok {
+		t.Fatal("an absent month should be accepted")
+	}
+	if month.IsZero() {
+		t.Error("month should default to now, not the zero time")
+	}
+	if month.Day() != 1 {
+		t.Errorf("month = %s, want the first day of the month", month.Format("2006-01-02"))
+	}
+}
+
+func TestMonthParamPattern(t *testing.T) {
+	valid := []string{"2026-09", "2026-01", "1999-12"}
+	invalid := []string{"", "09-2026", "2026/09", "2026-9", "2026-09-26", "yesterday", "2026-09; DROP TABLE issues"}
+	for _, s := range valid {
+		if !monthParamPattern.MatchString(s) {
+			t.Errorf("monthParamPattern should accept %q", s)
+		}
+	}
+	for _, s := range invalid {
+		if monthParamPattern.MatchString(s) {
+			t.Errorf("monthParamPattern should reject %q", s)
+		}
+	}
+}
+
 // An absent anchor means the current week rather than an error.
 func TestReportWeekAnchorDefaultsToNow(t *testing.T) {
 	app := &application{}
