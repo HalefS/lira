@@ -532,7 +532,7 @@ function MaintenanceCheckDialog({ schedule, t, today, onCancel, onSave }) {
 
   // Escape is left live while saving: there is nothing to lose here, the note
   // and the outcome are re-entered from the card rather than recovered.
-  const panelRef = useDialog({onClose});
+  const panelRef = useDialog({onClose: onCancel});
 
   async function save() {
     if (saving) return;
