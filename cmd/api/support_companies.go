@@ -26,8 +26,9 @@ func (app *application) listSupportCompaniesHandler(w http.ResponseWriter, r *ht
 
 func (app *application) createSupportCompanyHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Name  string `json:"name"`
-		Color string `json:"color"`
+		Name   string                      `json:"name"`
+		Color  string                      `json:"color"`
+		Fields []*data.SupportCompanyField `json:"fields"`
 	}
 	if err := app.readJSON(w, r, &input); err != nil {
 		app.badRequestResponse(w, r, err)
@@ -42,9 +43,13 @@ func (app *application) createSupportCompanyHandler(w http.ResponseWriter, r *ht
 		FieldKind: data.SupportFieldReference,
 		Active:    true,
 		CreatedBy: &createdBy,
+		Fields:    input.Fields,
 	}
 	if c.Color == "" {
 		c.Color = "blue"
+	}
+	if c.Fields == nil {
+		c.Fields = data.DefaultSupportCompanyFields()
 	}
 
 	v := validator.New()
@@ -80,9 +85,10 @@ func (app *application) updateSupportCompanyHandler(w http.ResponseWriter, r *ht
 	}
 
 	var input struct {
-		Name   *string `json:"name"`
-		Color  *string `json:"color"`
-		Active *bool   `json:"active"`
+		Name   *string                     `json:"name"`
+		Color  *string                     `json:"color"`
+		Active *bool                       `json:"active"`
+		Fields []*data.SupportCompanyField `json:"fields"`
 	}
 	if err := app.readJSON(w, r, &input); err != nil {
 		app.badRequestResponse(w, r, err)
@@ -98,6 +104,12 @@ func (app *application) updateSupportCompanyHandler(w http.ResponseWriter, r *ht
 		app.serverErrorResponse(w, r, err)
 		return
 	}
+	// Keep the loaded definitions for the response. A partial update must not
+	// resave them, but the caller still needs them to render the company list.
+	currentFields := c.Fields
+	if len(currentFields) == 0 {
+		currentFields = []*data.SupportCompanyField{}
+	}
 
 	if input.Name != nil {
 		c.Name = strings.TrimSpace(*input.Name)
@@ -107,6 +119,13 @@ func (app *application) updateSupportCompanyHandler(w http.ResponseWriter, r *ht
 	}
 	if input.Active != nil {
 		c.Active = *input.Active
+	}
+	// Only an explicit fields list replaces the setup. A partial update sends
+	// nil so Update skips the field transaction altogether.
+	if input.Fields != nil {
+		c.Fields = input.Fields
+	} else {
+		c.Fields = nil
 	}
 
 	v := validator.New()
@@ -129,5 +148,10 @@ func (app *application) updateSupportCompanyHandler(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// The model received nil for a partial update, so put the loaded definitions
+	// back before answering: the Settings list must not lose its field setup.
+	if input.Fields == nil {
+		c.Fields = currentFields
+	}
 	app.writeJSON(w, http.StatusOK, envelope{"support_company": c}, nil)
 }

@@ -2773,18 +2773,21 @@ html.dark .room-picker-empty { color: var(--gray-400) !important; }
    company nor a swap and both of those hues are already spoken for. */
 .tp-strip-item.photo { background: var(--gray-200); color: var(--gray-600); }
 
-/* The company picker inside the third-party support dialog. auto-fit rather than
-   a fixed pair: the catalog can hold any number of companies, and three or more
-   should wrap onto a second row instead of squeezing. */
-.tp-company { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
-.tp-company-opt {
-  display: flex; align-items: center; gap: 10px; padding: 13px 14px;
-  border: 1.5px solid var(--gray-200); border-radius: var(--radius-md);
-  background: var(--gray-50); color: var(--gray-600); cursor: pointer;
-  text-align: left; font: 600 13.5px 'DM Sans', sans-serif; transition: all 0.12s;
+/* The company is a native select: the list is manager-configured and can grow,
+   and the placeholder makes an explicit choice part of the task rather than a
+   default the user never noticed. */
+.field-hint { font-size: 12px; color: var(--gray-500); margin-top: 5px; }
+.tp-fields {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px; margin-top: 2px;
 }
-.tp-company-opt:hover { border-color: var(--gray-300); }
-.tp-company-opt.active { border-color: var(--blue); background: var(--blue-light); color: var(--blue); }
+.tp-fields-h {
+  grid-column: 1 / -1; font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--gray-400);
+}
+.tp-fields .field-hint { grid-column: 1 / -1; }
+.tp-req { color: var(--red); font-weight: 700; }
+.tp-error { font-size: 12.5px; color: var(--red); }
 .tp-company-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .tp-company-dot.blue   { background: var(--blue); }
 .tp-company-dot.teal   { background: var(--teal); }
@@ -2811,6 +2814,58 @@ html.dark .room-picker-empty { color: var(--gray-400) !important; }
 .tp-row-company { font-size: 13.5px; font-weight: 700; color: var(--gray-900); display: flex; align-items: center; gap: 7px; }
 .tp-row-detail { font-size: 12.5px; color: var(--gray-500); margin-top: 2px; }
 .tp-row-detail strong { color: var(--gray-600); }
+
+@media (max-width: 560px) {
+  .tp-fields { grid-template-columns: 1fr; }
+}
+
+/* Settings: the per-company handover-field editor. The summary stays in the
+   company row so a manager can see what a handover asks for without opening
+   the editor; the expanded row keeps the controls close to that summary. */
+.sc-config-btn { padding: 4px 10px; font-size: 12px; }
+.sc-fields-cell { max-width: 280px; font-size: 12.5px; color: var(--gray-600); }
+.sc-field-summary { display: block; }
+.sc-field-note { display: block; margin-top: 3px; font-size: 11px; color: var(--gray-400); }
+.sc-fields-row td { padding: 0 14px 14px; background: var(--gray-50); }
+.sc-field-editor {
+  border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+  padding: 14px; background: var(--surface);
+}
+.sc-field-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px;
+  margin-bottom: 12px;
+}
+.sc-field-head strong { font-size: 13px; color: var(--gray-900); }
+.sc-field-head span { font-size: 12px; color: var(--gray-500); }
+.sc-field-grid { display: flex; flex-direction: column; gap: 8px; }
+.sc-field-grid-head, .sc-field-grid-row {
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 112px 34px;
+  gap: 10px; align-items: center;
+}
+.sc-field-grid-head span {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--gray-400);
+}
+.sc-required {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  font-size: 12.5px; color: var(--gray-600);
+}
+.sc-required input[type="checkbox"] {
+  width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--blue);
+}
+.sc-required input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: 2px;
+}
+.sc-field-actions {
+  display: flex; flex-wrap: wrap; justify-content: flex-end;
+  gap: 8px; margin-top: 12px;
+}
+@media (max-width: 760px) {
+  .sc-field-grid-head { display: none; }
+  .sc-field-grid-row { grid-template-columns: 1fr 1fr; }
+  .sc-field-grid-row > .form-control:first-child { grid-column: 1 / -1; }
+  .sc-field-grid-row > .icon-btn { justify-self: end; }
+}
 
 /* The support page: one stat card per company */
 .support-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 8px; }

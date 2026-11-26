@@ -56,6 +56,13 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
   const [scDraft, setScDraft] = useState('');
   const [savingSc, setSavingSc] = useState(false);
   const [scErr, setScErr] = useState('');
+  // The company's handover fields are edited in their own expandable row. Only
+  // active definitions are loaded: saving deactivates anything left out, while
+  // the values already recorded on handovers keep their old definition.
+  const [editingFieldsId, setEditingFieldsId] = useState(null);
+  const [fieldDrafts, setFieldDrafts] = useState([]);
+  const [savingFields, setSavingFields] = useState(false);
+  const [fieldsErr, setFieldsErr] = useState('');
 
   const [agentName, setAgentName] = useState('');
   const [savingAgent, setSavingAgent] = useState(false);
@@ -290,6 +297,9 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
       setScAll(true);
       setScName('');
       setScColor('blue');
+      // Adding a company is the moment its handover form needs deciding, so
+      // open the field editor straight away with the default reference field.
+      startFieldsEdit(res.support_company);
       setToast(t.toastSupportCompanyAdded);
     } catch(ex) { setScErr(ex.message); }
     finally { setSavingSc(false); }
@@ -340,11 +350,71 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
 
+  // ── Handover fields for one company ──
+  function startFieldsEdit(c) {
+    setEditingFieldsId(c.id);
+    setFieldDrafts((c.fields || []).filter(f => f.active).map((f, i) => ({
+      key: f.key || '', label: f.label || '', type: f.type || 'text',
+      required: !!f.required, position: i + 1,
+    })));
+    setFieldsErr('');
+  }
+
+  function cancelFieldsEdit() {
+    setEditingFieldsId(null);
+    setFieldDrafts([]);
+    setFieldsErr('');
+  }
+
+  function addFieldDraft() {
+    setFieldDrafts(prev => [...prev, {key: '', label: '', type: 'text', required: false}]);
+    setFieldsErr('');
+  }
+
+  function patchFieldDraft(index, key, value) {
+    setFieldDrafts(prev => prev.map((f, i) => i === index ? {...f, [key]: value} : f));
+    setFieldsErr('');
+  }
+
+  function removeFieldDraft(index) {
+    setFieldDrafts(prev => prev.filter((_, i) => i !== index));
+    setFieldsErr('');
+  }
+
+  async function saveFields(id) {
+    const fields = fieldDrafts.map((f, i) => ({
+      key: (f.key || '').trim(), label: (f.label || '').trim(), type: f.type,
+      required: !!f.required, active: true, position: i + 1,
+    }));
+    if (fields.length > 8) { setFieldsErr(t.supportFieldsLimit); return; }
+    if (fields.some(f => !f.label)) { setFieldsErr(t.supportFieldLabelNeeded); return; }
+    if (fields.filter(f => f.type === 'reference').length > 1) {
+      setFieldsErr(t.supportOnlyOneReference); return;
+    }
+    setSavingFields(true); setFieldsErr('');
+    try {
+      const res = await apiFetch(`/support-companies/${id}`, {
+        method:'PATCH', body:{fields}, token});
+      onSupportCompaniesUpdate(prev => prev.map(c => c.id === id ? res.support_company : c));
+      cancelFieldsEdit();
+      setToast(t.toastSupportFieldsUpdated);
+    } catch(ex) { setFieldsErr(ex.message); }
+    finally { setSavingFields(false); }
+  }
+
+  function fieldSummary(c) {
+    const active = (c.fields || []).filter(f => f.active);
+    if (!active.length) return t.supportNoFields;
+    return active.map(f => `${f.label}${f.required ? ' *' : ''}`).join(' · ');
+  }
+
   // The palette tokens the company dots and chips have classes for. Kept as a
   // list rather than free-form colour input so a company follows the theme into
   // dark mode.
   const SUPPORT_COLORS = ['blue', 'teal', 'amber', 'green', 'red', 'gray'];
+  const SUPPORT_FIELD_TYPES = ['text', 'name', 'confirmation', 'reference', 'date', 'number'];
   const colorLabel = c => t[`color${c.charAt(0).toUpperCase()}${c.slice(1)}`];
+  const fieldTypeLabel = type => t[`supportFieldType${type.charAt(0).toUpperCase()}${type.slice(1)}`];
 
   async function addAgent(e) {
     e.preventDefault();
@@ -737,61 +807,131 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
                 ? <div className="empty-state">{Ic.users}<p>{t.noSupportCompanies}</p></div>
                 : <table>
                     <thead>
-                      <tr><th>{t.supportCompanyName}</th><th style={{width:150}}>{t.supportCompanyColor}</th><th></th></tr>
+                      <tr>
+                        <th>{t.supportCompanyName}</th>
+                        <th style={{width:130}}>{t.supportCompanyColor}</th>
+                        <th>{t.supportFieldsTitle}</th>
+                        <th></th>
+                      </tr>
                     </thead>
                     <tbody>
                       {supportCompanies.slice(0, scAll ? supportCompanies.length : ADMIN_PREVIEW_ROWS).map(c=>(
-                        <tr key={c.id}>
-                          {editingScId === c.id ? (
+                        <React.Fragment key={c.id}>
+                          <tr>
+                            {editingScId === c.id ? (
+                              <td>
+                                <input className="form-control" autoFocus maxLength={50}
+                                  aria-label={`${t.renameSupportCompany} — ${c.name}`}
+                                  value={scDraft}
+                                  onChange={e=>setScDraft(e.target.value)}
+                                  onKeyDown={e=>{
+                                    if (e.key === 'Enter') saveScEdit(c.id);
+                                    if (e.key === 'Escape') cancelScEdit();
+                                  }}/>
+                                {scErr && <div style={{fontSize:12,color:'var(--red)',marginTop:5}}>{scErr}</div>}
+                              </td>
+                            ) : (
+                              <td>
+                                <span className={`tp-company-dot ${c.color || 'gray'}`}
+                                  style={{display:'inline-block',marginRight:8,verticalAlign:'middle'}}/>
+                                {c.name}
+                                {!c.active && (
+                                  <span style={{fontSize:11,color:'var(--gray-400)',marginLeft:8}}>{t.supportCompanyInactive}</span>
+                                )}
+                              </td>
+                            )}
                             <td>
-                              <input className="form-control" autoFocus maxLength={50}
-                                aria-label={`${t.renameSupportCompany} — ${c.name}`}
-                                value={scDraft}
-                                onChange={e=>setScDraft(e.target.value)}
-                                onKeyDown={e=>{
-                                  if (e.key === 'Enter') saveScEdit(c.id);
-                                  if (e.key === 'Escape') cancelScEdit();
-                                }}/>
-                              {scErr && <div style={{fontSize:12,color:'var(--red)',marginTop:5}}>{scErr}</div>}
+                              <select className="form-control" aria-label={`${t.supportCompanyColor} — ${c.name}`}
+                                value={c.color || 'gray'} onChange={e=>updateScColor(c.id, e.target.value)}>
+                                {SUPPORT_COLORS.map(col=><option key={col} value={col}>{colorLabel(col)}</option>)}
+                              </select>
                             </td>
-                          ) : (
-                            <td>
-                              <span className={`tp-company-dot ${c.color || 'gray'}`}
-                                style={{display:'inline-block',marginRight:8,verticalAlign:'middle'}}/>
-                              {c.name}
-                              {!c.active && (
-                                <span style={{fontSize:11,color:'var(--gray-400)',marginLeft:8}}>{t.supportCompanyInactive}</span>
+                            <td className="sc-fields-cell">
+                              <span className="sc-field-summary">{fieldSummary(c)}</span>
+                              {!c.active && <span className="sc-field-note">{t.supportCompanyInactive}</span>}
+                            </td>
+                            <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                              {editingScId === c.id ? (
+                                <>
+                                  <button className="btn btn-primary" style={{padding:'4px 12px',fontSize:12}}
+                                    onClick={()=>saveScEdit(c.id)} disabled={savingSc || !scDraft.trim()} aria-busy={savingSc}>
+                                    {savingSc ? '…' : t.saveChanges}
+                                  </button>
+                                  <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
+                                    onClick={cancelScEdit} disabled={savingSc}>{t.cancel}</button>
+                                </>
+                              ) : (
+                                <>
+                                  <button className="icon-btn" title={t.renameSupportCompany}
+                                    onClick={()=>startScEdit(c)}>{Ic.edit}</button>
+                                  <button className="btn btn-ghost sc-config-btn"
+                                    onClick={()=>startFieldsEdit(c)}>{t.supportConfigureFields}</button>
+                                  <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12}}
+                                    onClick={()=>toggleScActive(c)}>
+                                    {c.active ? t.supportCompanyDeactivate : t.supportCompanyActivate}
+                                  </button>
+                                </>
                               )}
                             </td>
+                          </tr>
+                          {editingFieldsId === c.id && (
+                            <tr className="sc-fields-row">
+                              <td colSpan={4}>
+                                <div className="sc-field-editor">
+                                  <div className="sc-field-head">
+                                    <strong>{t.supportFieldsTitle} — {c.name}</strong>
+                                    <span>{t.supportFieldsHint}</span>
+                                  </div>
+                                  {fieldsErr && <div className="auth-error" role="alert">{fieldsErr}</div>}
+                                  <div className="sc-field-grid">
+                                    <div className="sc-field-grid-head">
+                                      <span>{t.supportFieldLabel}</span>
+                                      <span>{t.supportFieldType}</span>
+                                      <span>{t.supportFieldRequiredCol}</span>
+                                      <span></span>
+                                    </div>
+                                    {fieldDrafts.map((f, i)=>(
+                                      <div className="sc-field-grid-row" key={i}>
+                                        <input className="form-control" maxLength={60} autoFocus={i === fieldDrafts.length - 1}
+                                          aria-label={`${t.supportFieldLabel} ${i+1}`}
+                                          placeholder={t.supportFieldLabel}
+                                          value={f.label}
+                                          onChange={e=>patchFieldDraft(i, 'label', e.target.value)}/>
+                                        <select className="form-control" value={f.type}
+                                          aria-label={`${t.supportFieldType} — ${f.label || i+1}`}
+                                          onChange={e=>patchFieldDraft(i, 'type', e.target.value)}>
+                                          {SUPPORT_FIELD_TYPES.map(type=>
+                                            <option key={type} value={type}>{fieldTypeLabel(type)}</option>)}
+                                        </select>
+                                        <label className="sc-required">
+                                          <input type="checkbox" switch checked={f.required}
+                                            onChange={e=>patchFieldDraft(i, 'required', e.target.checked)}/>
+                                          <span>{t.supportFieldRequired}</span>
+                                        </label>
+                                        <button type="button" className="icon-btn danger"
+                                          title={t.supportRemoveField}
+                                          onClick={()=>removeFieldDraft(i)}>{Ic.trash}</button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {fieldDrafts.length === 0 && <div className="field-hint">{t.supportNoFields}</div>}
+                                  <div className="sc-field-actions">
+                                    <button type="button" className="btn btn-ghost"
+                                      disabled={savingFields || fieldDrafts.length >= 8}
+                                      onClick={addFieldDraft}>{Ic.plus} {t.supportAddField}</button>
+                                    <button type="button" className="btn btn-ghost"
+                                      disabled={savingFields} onClick={cancelFieldsEdit}>{t.cancel}</button>
+                                    <button type="button" className="btn btn-primary"
+                                      disabled={savingFields} aria-busy={savingFields}
+                                      onClick={()=>saveFields(c.id)}>
+                                      {savingFields ? '…' : t.saveChanges}
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
                           )}
-                          <td>
-                            <select className="form-control" aria-label={`${t.supportCompanyColor} — ${c.name}`}
-                              value={c.color || 'gray'} onChange={e=>updateScColor(c.id, e.target.value)}>
-                              {SUPPORT_COLORS.map(col=><option key={col} value={col}>{colorLabel(col)}</option>)}
-                            </select>
-                          </td>
-                          <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
-                            {editingScId === c.id ? (
-                              <>
-                                <button className="btn btn-primary" style={{padding:'4px 12px',fontSize:12}}
-                                  onClick={()=>saveScEdit(c.id)} disabled={savingSc || !scDraft.trim()} aria-busy={savingSc}>
-                                  {savingSc ? '…' : t.saveChanges}
-                                </button>
-                                <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
-                                  onClick={cancelScEdit} disabled={savingSc}>{t.cancel}</button>
-                              </>
-                            ) : (
-                              <>
-                                <button className="icon-btn" title={t.renameSupportCompany}
-                                  onClick={()=>startScEdit(c)}>{Ic.edit}</button>
-                                <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12}}
-                                  onClick={()=>toggleScActive(c)}>
-                                  {c.active ? t.supportCompanyDeactivate : t.supportCompanyActivate}
-                                </button>
-                              </>
-                            )}
-                          </td>
-                        </tr>
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>

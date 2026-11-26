@@ -76,34 +76,40 @@ function mapIssue(i) {
     consumables: (i.consumables || []).map(c => ({
       itemId: c.item_id ?? null, item: c.item, icon: c.icon, quantity: c.quantity,
     })),
-    // Handovers to Telnet / Telefonica. The Telnet names are free text — they
-    // are whoever we spoke to on the other side, not users of this app.
     // TVs moved between rooms to fix this issue. Rooms are free text, because
     // there is no rooms table in this system.
     tvSwaps: (i.tv_swaps || []).map(s => ({
       id: s.id, fromRoom: s.from_room, toRoom: s.to_room, notes: s.notes || '',
     })),
-    supportRequests: (i.support_requests || []).map(s => ({
-      id:            s.id,
-      company:       s.company,
-      // The catalog's current name and colour, joined by the server. Copied
-      // onto the handover so a table can render it without loading the whole
-      // catalog on every page.
-      companyName:   s.company_name || s.company,
-      companyColor:  s.company_color || 'gray',
-      status:        s.status,
-      technician:    s.telnet_technician || '',
-      confirmedBy:   s.telnet_confirmed_by || '',
-      ticketId:      s.telefonica_ticket_id || '',
-      reference:     s.reference || '',
-      // The company's turnaround, kept separate from the issue's own time.
-      // Sliced to "YYYY-MM-DDTHH:MM" for the datetime-local inputs, which is
-      // the format the API takes them back in.
-      startedAt:     s.started_at  ? s.started_at.slice(0,16)  : '',
-      resolvedAt:    s.resolved_at ? s.resolved_at.slice(0,16) : '',
-      durationMinutes: s.duration_minutes,
-      notes:         s.notes || '',
-    })),
+    // Handovers carry the values of the company's configured fields, keyed by
+    // the field's stable key. A handover's name and colour are joined from the
+    // catalog by the server, so a rename updates the whole history at once.
+    supportRequests: (i.support_requests || []).map(s => {
+      const values = {};
+      for (const [key, value] of Object.entries(s.fields || {})) values[key] = value || '';
+      // The migration copied every legacy value into `fields`; these fallbacks
+      // also cover a handover read from an API that has not been migrated yet.
+      if (!values.technician   && s.telnet_technician)   values.technician   = s.telnet_technician;
+      if (!values.confirmed_by && s.telnet_confirmed_by) values.confirmed_by = s.telnet_confirmed_by;
+      if (!values.ticket_id    && s.telefonica_ticket_id) values.ticket_id    = s.telefonica_ticket_id;
+      if (!values.reference    && s.reference)            values.reference    = s.reference;
+      return {
+        id:            s.id,
+        company:       s.company,
+        companyName:   s.company_name || s.company,
+        companyColor:  s.company_color || 'gray',
+        status:        s.status,
+        fields:        Object.entries(values).map(([key, value]) => ({key, value})),
+        referenceSummary: s.reference_summary || '',
+        // The company's turnaround, kept separate from the issue's own time.
+        // Sliced to "YYYY-MM-DDTHH:MM" for the datetime-local inputs, which is
+        // the format the API takes them back in.
+        startedAt:     s.started_at  ? s.started_at.slice(0,16)  : '',
+        resolvedAt:    s.resolved_at ? s.resolved_at.slice(0,16) : '',
+        durationMinutes: s.duration_minutes,
+        notes:         s.notes || '',
+      };
+    }),
     status:        i.status,
     loggedBy:      i.logged_by,
     loggedByName:  i.logged_by_name,

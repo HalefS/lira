@@ -123,7 +123,7 @@ func newSupportView(r *data.SupportReport) supportView {
 		})
 	}
 	v.Companies = append(v.Companies, supportCompanyRow{
-		Name:    "Both companies",
+		Name:    "All companies",
 		Color:   colBlue,
 		Overall: true,
 		Total:   itoa(o.Total),

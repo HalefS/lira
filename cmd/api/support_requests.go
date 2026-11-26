@@ -19,17 +19,16 @@ var datePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 // create/update request and returns them normalized, ready to store.
 //
 // It runs in two steps, mirroring validateConsumableUses:
-//  1. shape — company, status, the fields each company actually needs, and the
-//     two timestamps (data.ValidateSupportRequests);
+//  1. shape — company, status, the fields its Settings configuration requires,
+//     and the two timestamps (data.ValidateSupportRequests);
 //  2. normalization a browser form can't be trusted to have done: whitespace
-//     trimmed, an empty text field treated as "not provided", the fields that
-//     don't belong to the chosen company cleared, and the two timestamps
-//     parsed into real times with the turnaround derived from them.
+//     trimmed and the two timestamps parsed into real times with the turnaround
+//     derived from them.
 //
-// That last part is deliberately forgiving rather than a validation error: a
-// Telefonica ticket id left over on a Telnet handover is dropped, not rejected,
-// because the database CHECK requires the field to be NULL there and the form
-// already clears it when the company is switched.
+// The old company-specific columns are no longer written: every value lives in
+// the handover's Fields bag, keyed by the definition it was entered for. Fields
+// a manager later removed are still accepted so an old row can be re-saved
+// without losing the values the history shows.
 //
 // Problems are added to v; the returned error is only for unexpected (database)
 // failures.
@@ -65,30 +64,8 @@ func (app *application) validateSupportRequests(v *validator.Validator, uses []d
 			u.Status = data.SupportStatusPending
 		}
 		u.Notes = strings.TrimSpace(u.Notes)
-		u.TelnetTechnician = trimmedOrNil(u.TelnetTechnician)
-		u.TelnetConfirmedBy = trimmedOrNil(u.TelnetConfirmedBy)
-		u.TelefonicaTicketID = trimmedOrNil(u.TelefonicaTicketID)
-		u.Reference = trimmedOrNil(u.Reference)
 
-		// Only the fields belonging to this company's kind are meaningful. The
-		// shape check above has already guaranteed the right one is present.
-		if company, ok := bySlug[u.Company]; ok {
-			switch company.FieldKind {
-			case data.SupportFieldTechnician:
-				u.TelefonicaTicketID = nil
-				u.Reference = nil
-			case data.SupportFieldTicket:
-				u.TelnetTechnician = nil
-				u.TelnetConfirmedBy = nil
-				u.Reference = nil
-			case data.SupportFieldReference:
-				u.TelnetTechnician = nil
-				u.TelnetConfirmedBy = nil
-				u.TelefonicaTicketID = nil
-			}
-		}
-
-		rec, ok := data.BuildSupportRequestRecord(u)
+		rec, ok := data.BuildSupportRequestRecord(u, bySlug[u.Company])
 		if !ok {
 			// The shape check above already rejected anything malformed, so
 			// reaching here means the value is empty, not broken.
@@ -105,20 +82,6 @@ func (app *application) validateSupportRequests(v *validator.Validator, uses []d
 	}
 
 	return out, nil
-}
-
-// trimmedOrNil normalizes an optional text field: surrounding whitespace is
-// removed, and a field that is left empty becomes nil ("not provided") rather
-// than an empty string that would fail the database's non-blank check.
-func trimmedOrNil(s *string) *string {
-	if s == nil {
-		return nil
-	}
-	v := strings.TrimSpace(*s)
-	if v == "" {
-		return nil
-	}
-	return &v
 }
 
 // setIssueSupportRequests stores an issue's third-party handovers, writing the

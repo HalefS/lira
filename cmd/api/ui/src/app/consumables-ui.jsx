@@ -195,7 +195,11 @@ function SupportRequestStrip({ requests, t }) {
     <div className="tp-strip">
       {requests.map(s=>{
         const label  = s.companyName || s.company;
-        const detail = s.reference || s.ticketId || s.technician || '';
+        // The server's summary prefers a tracking reference; the mapped fields
+        // cover a handover whose values were recorded under a field the manager
+        // has since renamed or removed.
+        const values = (s.fields || []).map(f => f.value).filter(Boolean);
+        const detail = s.referenceSummary || values.join(' · ') || '';
         const state  = s.status==='solved' ? t.supportSolved : t.supportPending;
         return (
           <span key={s.id} className={`tp-strip-item ${s.companyColor || 'gray'}`} title={`${label} · ${detail || '—'} · ${state}`}>

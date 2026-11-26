@@ -132,9 +132,9 @@ type SupportListRow struct {
 	StartedAt       *time.Time `json:"started_at"`
 	ResolvedAt      *time.Time `json:"resolved_at"`
 	DurationMinutes *int       `json:"duration_minutes"`
-	// Reference is the human-readable identifier of the handover: the generic
-	// reference for a company added in Settings, the Telefonica ticket id, or
-	// the Telnet technician's name.
+	// Reference is the human-readable identifier of the handover: the first
+	// configured field value, preferring a tracking reference. The old columns
+	// are a fallback for rows logged before field configuration existed.
 	Reference     string `json:"reference"`
 	Notes         string `json:"notes"`
 	IssueID       int64  `json:"issue_id"`
@@ -186,7 +186,10 @@ func (m SupportRequestModel) list(ctx context.Context, from, to string, limit in
 	query := `
 		SELECT s.id, s.created_at, s.company, s.status,
 		       s.started_at, s.resolved_at, s.duration_minutes, s.notes,
-		       COALESCE(s.reference, s.telefonica_ticket_id, s.telnet_technician, ''),
+		       COALESCE(NULLIF(btrim(s.reference_summary), ''),
+		                NULLIF(btrim(s.reference), ''),
+		                NULLIF(btrim(s.telefonica_ticket_id), ''),
+		                NULLIF(btrim(s.telnet_technician), ''), ''),
 		       c.name, c.color,
 		       i.id, i.problem, i.mode, i.location
 		` + fromWhere + `

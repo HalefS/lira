@@ -33,14 +33,14 @@ func supportFixture() *data.SupportReport {
 		Rows: []*data.SupportListRow{
 			{
 				ID: 1, Company: "telnet", CompanyName: "Telnet", CompanyColor: "blue",
-				Status: data.SupportStatusSolved,
+				Status:    data.SupportStatusSolved,
 				StartedAt: &reported, ResolvedAt: &solved, DurationMinutes: &duration,
 				Reference: "Ana", IssueID: 42, IssueLocation: "1301",
 				IssueProblem: "Door will not close", Notes: "Called back",
 			},
 			{
 				ID: 2, Company: "telefonica", CompanyName: "Telefónica", CompanyColor: "amber",
-				Status: data.SupportStatusPending,
+				Status:  data.SupportStatusPending,
 				IssueID: 43, IssueLocation: "1204",
 				IssueProblem: "<script>alert(1)</script>", Reference: "2026-88123",
 			},
@@ -56,7 +56,7 @@ func TestRenderSupportHTML(t *testing.T) {
 
 	for _, want := range []string{
 		"Third-party Support",
-		"By company", "Telnet", "Telefónica", "Both companies",
+		"By company", "Telnet", "Telefónica", "All companies",
 		"Summary", "Avg. turnaround", "1h 30m",
 		"Handovers <span class=\"count\">(2)</span>",
 		"1301", "Door will not close", "2026-88123",

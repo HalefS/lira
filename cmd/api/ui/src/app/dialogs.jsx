@@ -420,47 +420,63 @@ function SupportRequestModal({ requests, companies = [], onCancel, onDone }) {
     return (companies || []).find(c => c.slug === slug);
   }
 
-  // A handover carries its company's kind from the catalog. Older drafts (and
-  // rows mapped from an issue) may not have it, so it is also derived from the
-  // company they name; the field presence is the last fallback.
-  function kindOf(s) {
-    if (s.fieldKind) return s.fieldKind;
-    const c = companyFor(s.company);
-    if (c) return c.field_kind;
-    if (s.ticketId) return 'ticket';
-    if (s.reference) return 'reference';
-    return 'technician';
-  }
-
   // Companies offered in the picker: active ones, plus the one already on this
   // handover even if it was deactivated after the fact.
   const choices = (companies || []).filter(c => c.active || (draft && c.slug === draft.company));
 
+  // A company's handover form is its active field definitions. Inactive ones
+  // stay on the handover itself and are never offered for a new entry, so old
+  // history keeps its values without cluttering today's form.
+  function fieldsFor(slug) {
+    const c = companyFor(slug);
+    return c && Array.isArray(c.fields) ? c.fields.filter(f => f && f.key) : [];
+  }
+
+  function valueOf(s, key) {
+    const use = (s.fields || []).find(f => f.key === key);
+    return use ? (use.value || '') : '';
+  }
+
+  function withFieldValue(list, key, value) {
+    const exists = list.some(f => f.key === key);
+    return exists ? list.map(f => f.key === key ? {...f, value} : f) : [...list, {key, value}];
+  }
+
+  // The tracking reference a handover is known by. Used to catch the same
+  // number being entered twice on one issue, before the server has to.
+  function referenceValue(s) {
+    for (const def of fieldsFor(s.company)) {
+      if (!def.active || def.type !== 'reference') continue;
+      const value = valueOf(s, def.key).trim();
+      if (value) return value.toLowerCase();
+    }
+    return '';
+  }
+
   function blank() {
     // We know when we are reporting it — it is now — so the start is prefilled
-    // rather than left as one more empty field to discover.
-    const company = (companies || []).find(c => c.active) || (companies || [])[0];
+    // rather than left as one more empty field to discover. The company is
+    // deliberately not chosen: the handover form depends on it.
     return {key: `new-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, id: 0,
-            company: company ? company.slug : 'telnet',
-            companyName: company ? company.name : 'Telnet',
-            companyColor: company ? company.color : 'blue',
-            fieldKind: company ? company.field_kind : 'technician',
-            status: 'pending',
-            technician: '', confirmedBy: '', ticketId: '', reference: '',
+            company: '', companyName: '', companyColor: '', status: 'pending', fields: [],
             startedAt: localDateTimeValue(new Date()), resolvedAt: '', notes: ''};
   }
   function startAdd()   { setDraft(blank());            setErr(''); }
   function startEdit(s) {
     const c = companyFor(s.company);
     setDraft({...s,
+      fields: Array.isArray(s.fields) ? s.fields.map(f => ({...f, value: f.value || ''})) : [],
       companyName:  c ? c.name  : (s.companyName || s.company),
       companyColor: c ? c.color : (s.companyColor || 'gray'),
-      fieldKind:    c ? c.field_kind : kindOf(s),
     });
     setErr('');
   }
   function cancelEdit() { setDraft(null);               setErr(''); }
   function patch(k,v)   { setDraft(d=>({...d,[k]:v})); setErr(''); }
+  function patchField(key, value) {
+    setDraft(d=>({...d, fields: withFieldValue(d.fields || [], key, value)}));
+    setErr('');
+  }
 
   // Whole minutes between the two moments, or null when either is missing.
   const elapsed = useMemo(()=>{
@@ -472,28 +488,31 @@ function SupportRequestModal({ requests, companies = [], onCancel, onDone }) {
     return mins < 0 ? null : mins;
   }, [draft]);
 
-  // Mirrors ValidateSupportRequests on the server, so the user is told here
-  // rather than after a round-trip.
+  // Mirrors ValidateSupportRequests on the server: the selected company's
+  // definitions decide which values are needed and how they are checked.
   function commit() {
-    const kind        = kindOf(draft);
-    const technician  = (draft.technician ||'').trim();
-    const confirmedBy = (draft.confirmedBy||'').trim();
-    const ticket      = (draft.ticketId   ||'').trim();
-    const reference   = (draft.reference  ||'').trim();
-
-    if (kind === 'technician') {
-      if (!technician) return setErr(t.telnetNeedsTechnician);
-      if (draft.status==='solved' && !confirmedBy) return setErr(t.telnetNeedsConfirmation);
-    } else if (kind === 'ticket') {
-      if (!ticket) return setErr(t.telefonicaNeedsTicket);
-      if (items.some(s=>s.key!==draft.key && kindOf(s)==='ticket'
-            && (s.ticketId||'').trim().toLowerCase()===ticket.toLowerCase()))
-        return setErr(t.telefonicaNeedsTicket);
-    } else {
-      if (!reference) return setErr(t.supportReferenceNeeded);
-      if (items.some(s=>s.key!==draft.key && kindOf(s)==='reference'
-            && (s.reference||'').trim().toLowerCase()===reference.toLowerCase()))
-        return setErr(t.supportReferenceNeeded);
+    if (!draft.company) return setErr(t.supportChooseCompany);
+    for (const def of fieldsFor(draft.company)) {
+      if (!def.active) continue;
+      const value = valueOf(draft, def.key).trim();
+      const needed = def.required || (def.type === 'confirmation' && draft.status === 'solved');
+      if (!value) {
+        if (needed) return setErr(t.supportFieldNeeded.replace('{field}', def.label));
+        continue;
+      }
+      if (value.length > 100) return setErr(t.supportFieldTooLong.replace('{field}', def.label));
+      if (def.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return setErr(t.supportFieldInvalidDate.replace('{field}', def.label));
+      }
+      if (def.type === 'number' && !/^-?\d+(?:\.\d+)?$/.test(value)) {
+        return setErr(t.supportFieldInvalidNumber.replace('{field}', def.label));
+      }
+      if (def.type === 'reference') {
+        const key = value.toLowerCase();
+        if (items.some(s => s.key !== draft.key && referenceValue(s) === key)) {
+          return setErr(t.supportDuplicateReference);
+        }
+      }
     }
     if (!draft.startedAt) return setErr(t.supportNeedsReported);
     if (draft.status==='solved' && !draft.resolvedAt) return setErr(t.supportNeedsResolved);
@@ -502,12 +521,9 @@ function SupportRequestModal({ requests, companies = [], onCancel, onDone }) {
     }
     const saved = {
       ...draft,
-      // Fields that don't belong to the chosen company are dropped here as
-      // well as on the server, so a draft can't carry stale values around.
-      ticketId:    kind === 'ticket'     ? ticket      : '',
-      reference:   kind === 'reference'  ? reference   : '',
-      technician:  kind === 'technician' ? technician  : '',
-      confirmedBy: kind === 'technician' ? confirmedBy : '',
+      // Keep values for definitions a manager has since removed: they are part
+      // of the handover's history even though the form no longer asks for them.
+      fields: (draft.fields || []).map(f => ({...f, value: String(f.value || '').trim()})),
       notes: (draft.notes||'').trim(),
     };
     setItems(list=> list.some(s=>s.key===draft.key) ? list.map(s=>s.key===draft.key?saved:s) : [...list, saved]);
@@ -518,21 +534,18 @@ function SupportRequestModal({ requests, companies = [], onCancel, onDone }) {
     setItems(list=>list.filter(x=>x.key!==s.key));
   }
 
-  // Switching company on an existing draft can strand a half-filled field
-  // (e.g. a Telnet technician with no Telefónica ticket id), so start it clean.
+  // A handover's fields belong to one company, so changing it starts a clean
+  // form. Editing the same company never clears anything, including the values
+  // of fields that are no longer offered.
   function setCompany(slug) {
     const c = companyFor(slug);
-    const kind = c ? c.field_kind : 'reference';
-    setDraft(d=>({...d,
-      company: slug,
-      companyName:  c ? c.name  : slug,
-      companyColor: c ? c.color : 'gray',
-      fieldKind:    kind,
-      ticketId:     kind === 'ticket'     ? d.ticketId     : '',
-      reference:    kind === 'reference'  ? d.reference    : '',
-      technician:   kind === 'technician' ? d.technician   : '',
-      confirmedBy:  kind === 'technician' ? d.confirmedBy  : '',
-    }));
+    setDraft(d => {
+      if (!d || d.company === slug) return d;
+      return {...d, company: slug,
+        companyName:  c ? c.name  : slug,
+        companyColor: c ? c.color : 'gray',
+        fields: []};
+    });
     setErr('');
   }
 
@@ -543,19 +556,15 @@ function SupportRequestModal({ requests, companies = [], onCancel, onDone }) {
     patch('resolvedAt', localDateTimeValue(new Date()));
   }
 
-  // The second line of a handover row. The company line already names the
-  // technician for a technician-kind company, so this carries whatever it
-  // doesn't: the ticket id or reference, or who confirmed the fix. Returns null
-  // when there is genuinely nothing to add, so the row collapses instead of
-  // repeating the status badge.
+  // The second line of a handover row: every configured value that was filled
+  // in, including one for a field the manager has since removed. Returns null
+  // when there is genuinely nothing to add, so the row collapses.
   function detail(s) {
-    const kind = kindOf(s);
-    if (kind === 'technician') {
-      if (s.confirmedBy) return `${t.telnetConfirmedBy}: ${s.confirmedBy}`;
-      return s.notes || null;
-    }
-    if (kind === 'ticket') return `${t.telefonicaTicket}: ${s.ticketId}`;
-    return `${t.supportReference}: ${s.reference}`;
+    const parts = fieldsFor(s.company)
+      .map(f => ({label: f.label, value: valueOf(s, f.key).trim()}))
+      .filter(x => x.value)
+      .map(x => `${x.label}: ${x.value}`);
+    return parts.length ? parts.join(' · ') : (s.notes || null);
   }
 
   return (
@@ -572,48 +581,43 @@ function SupportRequestModal({ requests, companies = [], onCancel, onDone }) {
           {draft ? (
             <>
               <div className="form-group">
-                {/* A heading, not a label: this caption names a set of buttons and
-                    none of them is the control for it, so a <label for> would
-                    point at something that does not exist. The group role is
-                    what carries the relationship to assistive technology. */}
-                <div className="form-group-h" id="tp-company-h">{t.company}</div>
-                <div className="tp-company" role="group" aria-labelledby="tp-company-h">
+                <label htmlFor="tp-company">{t.company}</label>
+                <select id="tp-company" className="form-control" value={draft.company}
+                  aria-invalid={!!err && !draft.company} onChange={e=>setCompany(e.target.value)}>
+                  <option value="">{t.supportChooseCompany}</option>
                   {choices.map(c => (
-                    <button type="button" key={c.slug}
-                      className={`tp-company-opt ${draft.company===c.slug?'active':''}`}
-                      aria-pressed={draft.company===c.slug} onClick={()=>setCompany(c.slug)}>
-                      <span className={`tp-company-dot ${c.color || 'gray'}`}/>
-                      {c.name}
-                      {!c.active && <span style={{fontWeight:400,color:'var(--gray-400)'}}>· {t.supportCompanyInactive}</span>}
-                    </button>
+                    <option key={c.slug} value={c.slug}>
+                      {c.name}{!c.active ? ` · ${t.supportCompanyInactive}` : ''}
+                    </option>
                   ))}
-                </div>
+                </select>
+                {!draft.company && <div className="field-hint">{t.supportChooseCompanyHelp}</div>}
               </div>
 
-              {kindOf(draft)==='technician' ? (
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="tp-technician">{t.telnetTechnician}</label>
-                    <input id="tp-technician" className="form-control" placeholder={t.telnetTechPlaceholder} value={draft.technician}
-                      onChange={e=>patch('technician', e.target.value)}/>
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="tp-confirmed-by">{t.telnetConfirmedBy}</label>
-                    <input id="tp-confirmed-by" className="form-control" placeholder={t.telnetConfirmPlaceholder} value={draft.confirmedBy}
-                      onChange={e=>patch('confirmedBy', e.target.value)}/>
-                  </div>
-                </div>
-              ) : kindOf(draft)==='ticket' ? (
-                <div className="form-group">
-                  <label htmlFor="tp-ticket">{t.telefonicaTicket}</label>
-                  <input id="tp-ticket" className="form-control" placeholder={t.ticketIdPlaceholder} value={draft.ticketId}
-                    onChange={e=>patch('ticketId', e.target.value)}/>
-                </div>
-              ) : (
-                <div className="form-group">
-                  <label htmlFor="tp-reference">{t.supportReference}</label>
-                  <input id="tp-reference" className="form-control" placeholder={t.supportReferencePlaceholder} value={draft.reference}
-                    onChange={e=>patch('reference', e.target.value)}/>
+              {draft.company && (
+                <div className="tp-fields">
+                  <div className="tp-fields-h">{t.supportFieldsTitle}</div>
+                  {fieldsFor(draft.company).filter(f => f.active).length === 0 ? (
+                    <div className="field-hint">{t.supportNoFields}</div>
+                  ) : fieldsFor(draft.company).filter(f => f.active).map(def => {
+                    const id = `tp-field-${def.key}`;
+                    const required = def.required || (def.type === 'confirmation' && draft.status === 'solved');
+                    const inputType = def.type === 'date' ? 'date' : def.type === 'number' ? 'number' : 'text';
+                    return (
+                      <div className="form-group" key={def.key}>
+                        <label htmlFor={id}>
+                          {def.label}
+                          {required && <span className="tp-req" aria-label={t.supportFieldRequired}> *</span>}
+                        </label>
+                        <input id={id} className="form-control" type={inputType}
+                          step={inputType === 'number' ? 'any' : undefined}
+                          placeholder={inputType === 'text' ? t.supportFieldPlaceholder : undefined}
+                          aria-required={required}
+                          value={valueOf(draft, def.key)}
+                          onChange={e=>patchField(def.key, e.target.value)}/>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -655,7 +659,7 @@ function SupportRequestModal({ requests, companies = [], onCancel, onDone }) {
                   onChange={e=>patch('notes', e.target.value)}/>
               </div>
 
-              {err && <div style={{fontSize:12.5,color:'var(--red)'}}>{err}</div>}
+              {err && <div className="tp-error" role="alert">{err}</div>}
             </>
           ) : items.length === 0 ? (
             <div className="empty-state" style={{padding:'24px 12px'}}>{Ic.users}<p>{t.thirdPartyNoneLogged}</p></div>
@@ -667,9 +671,6 @@ function SupportRequestModal({ requests, companies = [], onCancel, onDone }) {
                     <div className="tp-row-company">
                       <span className={`tp-company-dot ${s.companyColor || 'gray'}`}/>
                       {s.companyName || s.company}
-                      {kindOf(s)==='technician' && s.technician && (
-                        <span style={{fontWeight:400,color:'var(--gray-500)'}}>— {s.technician}</span>
-                      )}
                     </div>
                     {detail(s) && <div className="tp-row-detail">{detail(s)}</div>}
                     {s.durationMinutes != null && (
@@ -688,7 +689,7 @@ function SupportRequestModal({ requests, companies = [], onCancel, onDone }) {
 
           {!draft && (
             <button type="button" className="consumable-add-btn" onClick={startAdd} style={{width:'100%',padding:'9px 12px',fontSize:13}}>
-              {Ic.plus} {items.length ? t.editThirdParty : t.addThirdParty}
+              {Ic.plus} {t.addThirdParty}
             </button>
           )}
         </div>

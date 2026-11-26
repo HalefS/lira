@@ -53,6 +53,30 @@ func TestValidateSupportCompany(t *testing.T) {
 		{"a name over 50 characters is rejected", func(c *SupportCompany) { c.Name = strings.Repeat("a", 51) }, false},
 		{"an unknown colour is rejected", func(c *SupportCompany) { c.Color = "purple" }, false},
 		{"an empty colour is rejected", func(c *SupportCompany) { c.Color = "" }, false},
+		{"configured fields are accepted", func(c *SupportCompany) {
+			c.Fields = []*SupportCompanyField{
+				{Key: "agent", Label: "Agent name", Type: SupportFieldName, Required: true, Active: true},
+				{Key: "ticket", Label: "Tracking number", Type: SupportFieldReference, Required: true, Active: true},
+			}
+		}, true},
+		{"a field with no label is rejected", func(c *SupportCompany) {
+			c.Fields = []*SupportCompanyField{{Key: "agent", Type: SupportFieldText, Active: true}}
+		}, false},
+		{"an unknown field type is rejected", func(c *SupportCompany) {
+			c.Fields = []*SupportCompanyField{{Key: "agent", Label: "Agent", Type: "colour", Active: true}}
+		}, false},
+		{"two reference fields are rejected", func(c *SupportCompany) {
+			c.Fields = []*SupportCompanyField{
+				{Key: "ticket", Label: "Ticket", Type: SupportFieldReference, Active: true},
+				{Key: "job", Label: "Job number", Type: SupportFieldReference, Active: true},
+			}
+		}, false},
+		{"the same field key twice is rejected", func(c *SupportCompany) {
+			c.Fields = []*SupportCompanyField{
+				{Key: "agent", Label: "Agent", Type: SupportFieldText, Active: true},
+				{Key: "agent", Label: "Another agent", Type: SupportFieldText, Active: true},
+			}
+		}, false},
 	}
 
 	for _, c := range cases {

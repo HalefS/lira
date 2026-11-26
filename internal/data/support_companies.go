@@ -10,38 +10,82 @@ import (
 	"unicode"
 
 	"github.com/HalefS/lira/internal/validator"
+	"github.com/lib/pq"
 )
 
-// The fields a handover to a company carries. The two built-ins keep the shape
-// they always had; every company added later uses the generic reference.
+// The kinds of information a manager can ask a company for on a handover.
+// These are input types, not company kinds: Telnet can have a name and a
+// confirmation, Telefónica a ticket, and a new company any mix of them.
 const (
-	SupportFieldTechnician = "technician"
-	SupportFieldTicket     = "ticket"
-	SupportFieldReference  = "reference"
+	SupportFieldText         = "text"
+	SupportFieldName         = "name"
+	SupportFieldConfirmation = "confirmation"
+	SupportFieldReference    = "reference"
+	SupportFieldDate         = "date"
+	SupportFieldNumber       = "number"
 )
 
-// supportCompanyColors are the palette tokens the UI already has classes for.
-// Kept here rather than accepting a hex value so a company's colour follows the
-// theme into dark mode instead of being frozen at whatever was picked.
+const (
+	maxSupportFieldsPerCompany = 8
+	maxSupportFieldLabelLength = 60
+)
+
+// SupportFieldReference is kept as the company's default field_kind for rows
+// created before field configuration; field definitions are now the authority.
+
 var supportCompanyColors = map[string]bool{
 	"blue": true, "teal": true, "amber": true,
 	"green": true, "red": true, "gray": true,
+}
+
+var supportFieldTypes = map[string]bool{
+	SupportFieldText:         true,
+	SupportFieldName:         true,
+	SupportFieldConfirmation: true,
+	SupportFieldReference:    true,
+	SupportFieldDate:         true,
+	SupportFieldNumber:       true,
+}
+
+// SupportCompanyField is one piece of information a handover to a company
+// asks for. The key is stable so a label can be edited without orphaning the
+// values already recorded against it.
+type SupportCompanyField struct {
+	ID       int64  `json:"id,omitempty"`
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	Type     string `json:"type"`
+	Required bool   `json:"required"`
+	Position int    `json:"position,omitempty"`
+	Active   bool   `json:"active"`
 }
 
 // SupportCompany is one external company an issue can be handed over to.
 //
 // Slug is the stable key written on every handover. Name is what people read, so
 // a rename is safe: it changes this row and nothing else, and every screen joins
-// through here.
+// through here. Fields are the company's handover form as configured in
+// Settings; inactive ones are still returned so old handovers can show them.
 type SupportCompany struct {
-	ID        int64     `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	Slug      string    `json:"slug"`
-	Name      string    `json:"name"`
-	Color     string    `json:"color"`
-	FieldKind string    `json:"field_kind"`
-	Active    bool      `json:"active"`
-	CreatedBy *int64    `json:"created_by,omitempty"`
+	ID        int64                  `json:"id"`
+	CreatedAt time.Time              `json:"created_at"`
+	Slug      string                 `json:"slug"`
+	Name      string                 `json:"name"`
+	Color     string                 `json:"color"`
+	FieldKind string                 `json:"field_kind"`
+	Active    bool                   `json:"active"`
+	CreatedBy *int64                 `json:"created_by,omitempty"`
+	Fields    []*SupportCompanyField `json:"fields"`
+}
+
+// DefaultSupportCompanyFields gives a company added in Settings the same
+// single reference it had before fields became configurable, so a manager who
+// adds a company and does not touch its setup sees the old behaviour.
+func DefaultSupportCompanyFields() []*SupportCompanyField {
+	return []*SupportCompanyField{{
+		Key: "reference", Label: "Reference", Type: SupportFieldReference,
+		Required: true, Active: true, Position: 1,
+	}}
 }
 
 func ValidateSupportCompany(v *validator.Validator, c *SupportCompany) {
@@ -49,6 +93,45 @@ func ValidateSupportCompany(v *validator.Validator, c *SupportCompany) {
 	v.Check(name != "", "name", "must be provided")
 	v.Check(len(name) <= 50, "name", "must not be more than 50 characters")
 	v.Check(supportCompanyColors[c.Color], "color", "must be one of blue, teal, amber, green, red or gray")
+	v.Check(len(c.Fields) <= maxSupportFieldsPerCompany, "fields",
+		fmt.Sprintf("must not contain more than %d fields", maxSupportFieldsPerCompany))
+
+	seen := make(map[string]bool, len(c.Fields))
+	references := 0
+	for i, f := range c.Fields {
+		f.Label = strings.TrimSpace(f.Label)
+		f.Key = strings.TrimSpace(f.Key)
+		if f.Key == "" {
+			f.Key = slugify(f.Label)
+			if f.Key == "" {
+				f.Key = fmt.Sprintf("field-%d", i+1)
+			}
+		}
+		f.Position = i + 1
+		f.Active = true
+
+		v.Check(f.Label != "", "fields", "every field needs a label")
+		v.Check(len(f.Label) <= maxSupportFieldLabelLength, "fields",
+			fmt.Sprintf("field labels must not be more than %d characters", maxSupportFieldLabelLength))
+		v.Check(supportFieldTypes[f.Type], "fields",
+			"field types must be text, name, confirmation, reference, date or number")
+		if seen[f.Key] {
+			v.AddError("fields", "the same field key cannot be used twice on one company")
+		}
+		seen[f.Key] = true
+		if f.Type == SupportFieldReference {
+			references++
+		}
+	}
+	// One tracking reference is the one the duplicate rule uses. A second would
+	// make it ambiguous which number the rule should enforce.
+	v.Check(references <= 1, "fields", "a company can have at most one reference field")
+}
+
+type supportQuerier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
 type SupportCompanyModel struct {
@@ -71,6 +154,7 @@ func (m SupportCompanyModel) GetAll() ([]*SupportCompany, error) {
 	defer rows.Close()
 
 	var companies []*SupportCompany
+	bySlug := make(map[string]*SupportCompany)
 	for rows.Next() {
 		var c SupportCompany
 		var createdBy sql.NullInt64
@@ -82,9 +166,25 @@ func (m SupportCompanyModel) GetAll() ([]*SupportCompany, error) {
 			id := createdBy.Int64
 			c.CreatedBy = &id
 		}
+		c.Fields = []*SupportCompanyField{}
 		companies = append(companies, &c)
+		bySlug[c.Slug] = &c
 	}
-	return companies, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(companies) == 0 {
+		return companies, nil
+	}
+
+	slugs := make([]string, 0, len(bySlug))
+	for slug := range bySlug {
+		slugs = append(slugs, slug)
+	}
+	if err := loadSupportCompanyFields(ctx, m.DB, slugs, bySlug); err != nil {
+		return nil, err
+	}
+	return companies, nil
 }
 
 func (m SupportCompanyModel) Get(id int64) (*SupportCompany, error) {
@@ -112,7 +212,42 @@ func (m SupportCompanyModel) Get(id int64) (*SupportCompany, error) {
 		createdByID := createdBy.Int64
 		c.CreatedBy = &createdByID
 	}
+	c.Fields = []*SupportCompanyField{}
+	if err := loadSupportCompanyFields(ctx, m.DB, []string{c.Slug},
+		map[string]*SupportCompany{c.Slug: &c}); err != nil {
+		return nil, err
+	}
 	return &c, nil
+}
+
+// loadSupportCompanyFields attaches every definition, active or not, so a
+// handover can still show the value of a field a manager later removed.
+func loadSupportCompanyFields(ctx context.Context, q supportQuerier, slugs []string, bySlug map[string]*SupportCompany) error {
+	if len(slugs) == 0 {
+		return nil
+	}
+	rows, err := q.QueryContext(ctx, `
+		SELECT id, company_slug, field_key, label, field_type, required, active, position
+		FROM support_company_fields
+		WHERE company_slug = ANY($1::text[])
+		ORDER BY position, id`, pq.Array(slugs))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var f SupportCompanyField
+		var slug string
+		if err := rows.Scan(&f.ID, &slug, &f.Key, &f.Label, &f.Type,
+			&f.Required, &f.Active, &f.Position); err != nil {
+			return err
+		}
+		if c, ok := bySlug[slug]; ok {
+			c.Fields = append(c.Fields, &f)
+		}
+	}
+	return rows.Err()
 }
 
 // Insert adds a company, deriving a unique slug from its name.
@@ -129,12 +264,21 @@ func (m SupportCompanyModel) Insert(c *SupportCompany) error {
 	if c.Color == "" {
 		c.Color = "blue"
 	}
+	if c.Fields == nil {
+		c.Fields = DefaultSupportCompanyFields()
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
+	tx, err := m.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	var exists bool
-	if err := m.DB.QueryRowContext(ctx,
+	if err := tx.QueryRowContext(ctx,
 		`SELECT EXISTS (SELECT 1 FROM support_companies WHERE name = $1)`, c.Name).
 		Scan(&exists); err != nil {
 		return err
@@ -143,7 +287,7 @@ func (m SupportCompanyModel) Insert(c *SupportCompany) error {
 		return ErrDuplicateSupportCompany
 	}
 
-	slug, err := m.uniqueSlug(ctx, c.Name)
+	slug, err := uniqueSlug(ctx, tx, c.Name)
 	if err != nil {
 		return err
 	}
@@ -154,7 +298,7 @@ func (m SupportCompanyModel) Insert(c *SupportCompany) error {
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at`
 
-	err = m.DB.QueryRowContext(ctx, query,
+	err = tx.QueryRowContext(ctx, query,
 		c.Slug, c.Name, c.Color, c.FieldKind, c.Active, c.CreatedBy,
 	).Scan(&c.ID, &c.CreatedAt)
 	if err != nil {
@@ -163,12 +307,16 @@ func (m SupportCompanyModel) Insert(c *SupportCompany) error {
 		}
 		return err
 	}
-	return nil
+
+	if err := replaceSupportCompanyFields(ctx, tx, c.Slug, c.Fields); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // uniqueSlug finds the first free slug for a name. The loop is bounded only by
 // the number of companies, which is a short list, so this is not a hot path.
-func (m SupportCompanyModel) uniqueSlug(ctx context.Context, name string) (string, error) {
+func uniqueSlug(ctx context.Context, q supportQuerier, name string) (string, error) {
 	base := slugify(name)
 	if base == "" {
 		base = "company"
@@ -179,7 +327,7 @@ func (m SupportCompanyModel) uniqueSlug(ctx context.Context, name string) (strin
 			candidate = fmt.Sprintf("%s-%d", base, i)
 		}
 		var exists bool
-		if err := m.DB.QueryRowContext(ctx,
+		if err := q.QueryRowContext(ctx,
 			`SELECT EXISTS (SELECT 1 FROM support_companies WHERE slug = $1)`, candidate).
 			Scan(&exists); err != nil {
 			return "", err
@@ -190,15 +338,56 @@ func (m SupportCompanyModel) uniqueSlug(ctx context.Context, name string) (strin
 	}
 }
 
-// Update saves the editable parts of a company: its display name, colour and
-// whether it is still offered. The slug is deliberately not editable.
+// replaceSupportCompanyFields applies the manager's field setup. Definitions
+// left out of the list are deactivated, never deleted: old handovers still join
+// to them and keep showing their recorded values.
+func replaceSupportCompanyFields(ctx context.Context, q supportQuerier, slug string, fields []*SupportCompanyField) error {
+	if _, err := q.ExecContext(ctx, `
+		UPDATE support_company_fields SET active = false WHERE company_slug = $1`, slug); err != nil {
+		return err
+	}
+	for _, f := range fields {
+		if f.Key == "" {
+			f.Key = slugify(f.Label)
+			if f.Key == "" {
+				f.Key = "field"
+			}
+		}
+		f.Active = true
+		err := q.QueryRowContext(ctx, `
+			INSERT INTO support_company_fields
+				(company_slug, field_key, label, field_type, required, active, position)
+			VALUES ($1, $2, $3, $4, $5, true, $6)
+			ON CONFLICT (company_slug, field_key) DO UPDATE
+			SET label = EXCLUDED.label, field_type = EXCLUDED.field_type,
+			    required = EXCLUDED.required, active = true,
+			    position = EXCLUDED.position
+			RETURNING id`,
+			slug, f.Key, f.Label, f.Type, f.Required, f.Position,
+		).Scan(&f.ID)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Update saves the editable parts of a company and, when Fields is non-nil,
+// its field setup. The slug is deliberately not editable, because it is what
+// existing handovers reference.
 func (m SupportCompanyModel) Update(c *SupportCompany) error {
 	c.Name = strings.TrimSpace(c.Name)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	res, err := m.DB.ExecContext(ctx, `
+	tx, err := m.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx, `
 		UPDATE support_companies
 		SET name = $1, color = $2, active = $3
 		WHERE id = $4`,
@@ -216,7 +405,12 @@ func (m SupportCompanyModel) Update(c *SupportCompany) error {
 	if affected == 0 {
 		return ErrRecordNotFound
 	}
-	return nil
+	if c.Fields != nil {
+		if err := replaceSupportCompanyFields(ctx, tx, c.Slug, c.Fields); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func isDuplicateSupportCompanyName(err error) bool {

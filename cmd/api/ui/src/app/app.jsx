@@ -512,9 +512,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     saveLS('lira_session', {...session, user: updatedUser});
   }
 
-  // The third-party handovers as the issue endpoint expects them. Fields that
-  // don't belong to a handover's company are dropped here so the server never
-  // has to reject the request.
+  // The third-party handovers as the issue endpoint expects them.
   function tvSwapBody(list) {
     return (list || []).map(s => ({
       // id is the server's row id; a swap added in the form has none yet.
@@ -527,19 +525,16 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
 
   function supportRequestBody(list) {
     return (list || []).map(s => ({
-      id:                  s.id || undefined,
-      company:             s.company,
-      status:              s.status,
-      // Every field is sent; the server keeps only the ones belonging to the
-      // company's kind. That way a company added in Settings needs no change
-      // here at all.
-      telnet_technician:   s.technician  || null,
-      telnet_confirmed_by: s.confirmedBy || null,
-      telefonica_ticket_id:s.ticketId    || null,
-      reference:           s.reference   || null,
+      id:      s.id || undefined,
+      company: s.company,
+      status:  s.status,
+      // Every definition's value travels by key, including the ones a manager
+      // has since removed: the server stores them all so old handovers keep
+      // showing what was recorded, but validates only the active definitions.
+      fields: (s.fields || []).map(f => ({key: f.key, value: f.value || ''})),
       // "YYYY-MM-DDTHH:MM" is exactly what the datetime-local inputs produce.
-      started_at:  s.startedAt  || null,
-      resolved_at: s.resolvedAt || null,
+      started_at:  s.startedAt  || '',
+      resolved_at: s.resolvedAt || '',
       notes:       s.notes || '',
     }));
   }
@@ -1024,7 +1019,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
             onLogout={()=>logout()}/>
         )}
         {editing && (
-          <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} issuePresets={issuePresets} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token}
+          <IssueModal issueMode={editing.mode} editIssue={editing.issue} currentUser={me} issueTypes={issueTypes} issuePresets={issuePresets} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} supportCompanies={supportCompanies} token={token}
             onClose={()=>setEditing(null)} onSave={form=>saveEdit(form,editing.mode,editing.issue.id)} onPhotosChanged={bumpIssues}/>
         )}
         {pending && (

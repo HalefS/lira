@@ -419,6 +419,16 @@ function PhotoViewer({ issueId, photos, viewKey, token, t, currentUser, onClose,
   );
 }
 
+// A handover chip needs one short line of detail. The server's summary prefers
+// a tracking reference; the configured fields cover a handover added in this
+// form, where that summary has not been computed yet.
+function supportChipDetail(s) {
+  if (s.referenceSummary) return s.referenceSummary;
+  const values = (s.fields || []).map(f => f.value).filter(Boolean);
+  if (values.length) return values.join(' · ');
+  return s.reference || s.ticketId || s.technician || '—';
+}
+
 function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, issuePresets, departments, connectaAgents, consumableItems, supportCompanies, token, onClose, onSave, onPhotosChanged }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
@@ -978,9 +988,7 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, is
               {form.supportRequests.map(s=>(
                 <span className={`tp-chip tp-chip-${s.companyColor || 'gray'}`} key={s.key}>
                   <span className="tp-chip-company">{s.companyName || s.company}</span>
-                  <span className="tp-chip-detail">
-                    {s.reference || s.ticketId || s.technician || '—'}
-                  </span>
+                  <span className="tp-chip-detail">{supportChipDetail(s)}</span>
                   {s.status==='solved' && <span style={{color:'var(--green)'}}>{Ic.check}</span>}
                   <button type="button" className="consumable-chip-x" aria-label={t.thirdPartyRemove}
                     onClick={()=>set('supportRequests', form.supportRequests.filter(x=>x.key!==s.key))}>{Ic.x}</button>
