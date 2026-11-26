@@ -185,21 +185,20 @@ function ConsumableStrip({ items }) {
   );
 }
 
-/* The handovers to Telnet / Telefonica, shown read-only under an issue in the
-   tables. One pill per handover, so a support call that is still outstanding
-   is visible without opening the issue. */
+/* The third-party handovers shown read-only under an issue in the tables. One
+   pill per handover, so a support call that is still outstanding is visible
+   without opening the issue. The name and colour come from the company catalog,
+   joined by the server, so a company added in Settings appears here too. */
 function SupportRequestStrip({ requests, t }) {
   if (!requests || requests.length === 0) return null;
   return (
     <div className="tp-strip">
       {requests.map(s=>{
-        const label = s.company==='telnet' ? t.companyTelnet : t.companyTelefonica;
-        const detail = s.company==='telnet'
-          ? s.technician || '—'
-          : s.ticketId;
+        const label  = s.companyName || s.company;
+        const detail = s.reference || s.ticketId || s.technician || '';
         const state  = s.status==='solved' ? t.supportSolved : t.supportPending;
         return (
-          <span key={s.id} className={`tp-strip-item ${s.company}`} title={`${label} · ${detail} · ${state}`}>
+          <span key={s.id} className={`tp-strip-item ${s.companyColor || 'gray'}`} title={`${label} · ${detail || '—'} · ${state}`}>
             {s.status==='solved' ? Ic.check : Ic.clock} {label}{detail ? ` ${detail}` : ''}
           </span>
         );

@@ -48,6 +48,7 @@ function App() {
   const [issueTypes, setIssueTypes] = useState([]);
   const [issuePresets, setIssuePresets] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [supportCompanies, setSupportCompanies] = useState([]);
   const [connectaAgents, setConnectaAgents] = useState([]);
   const [consumableItems, setConsumableItems] = useState([]);
   const [settings, setSettings] = useState(null);
@@ -397,6 +398,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
       stats:       apiFetch(`/stats?date=${todayStr}`, {token}),
       types:       apiFetch('/issue-types', {token}),
       departments: apiFetch('/departments', {token}),
+      supportCompanies: apiFetch('/support-companies', {token}),
       agents:      apiFetch('/connecta-agents', {token}),
       settings:    apiFetch('/settings', {token}),
       // limit=1: all that is wanted from this call is the two pending counts that
@@ -425,6 +427,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
       if (ok.stats)       setStats(ok.stats.stats);
       if (ok.types)       setIssueTypes(ok.types.issue_types || []);
       if (ok.departments) setDepartments(ok.departments.departments || []);
+      if (ok.supportCompanies) setSupportCompanies(ok.supportCompanies.support_companies || []);
       if (ok.agents)      setConnectaAgents(ok.agents.connecta_agents || []);
       if (ok.settings)    setSettings(ok.settings.settings);
       // The counts only. The lists belong to the Alerts page.
@@ -495,7 +498,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
     setSession(null);
     setIdleWarning(false);
     setSignedOutIdle(reason === 'idle');
-    setUsers([]); setStats(null); setIssueTypes([]); setIssuePresets([]); setDepartments([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlertsPendingCount(0); setUserIssueStats([]); setMaintenanceDueCount(0); setMaintIssue(null); setNotifUnread(0); setNotifDigest(undefined);
+    setUsers([]); setStats(null); setIssueTypes([]); setIssuePresets([]); setDepartments([]); setSupportCompanies([]); setConnectaAgents([]); setConsumableItems([]); setSettings(null); setAlertsPendingCount(0); setUserIssueStats([]); setMaintenanceDueCount(0); setMaintIssue(null); setNotifUnread(0); setNotifDigest(undefined);
   }
 
   useIdleSignOut(!!session, {
@@ -527,9 +530,13 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
       id:                  s.id || undefined,
       company:             s.company,
       status:              s.status,
-      telnet_technician:   s.company === 'telnet'    ? (s.technician  || null) : null,
-      telnet_confirmed_by: s.company === 'telnet'    ? (s.confirmedBy || null) : null,
-      telefonica_ticket_id:s.company === 'telefonica' ? (s.ticketId    || null) : null,
+      // Every field is sent; the server keeps only the ones belonging to the
+      // company's kind. That way a company added in Settings needs no change
+      // here at all.
+      telnet_technician:   s.technician  || null,
+      telnet_confirmed_by: s.confirmedBy || null,
+      telefonica_ticket_id:s.ticketId    || null,
+      reference:           s.reference   || null,
       // "YYYY-MM-DDTHH:MM" is exactly what the datetime-local inputs produce.
       started_at:  s.startedAt  || null,
       resolved_at: s.resolvedAt || null,
@@ -942,6 +949,8 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
               onIssuePresetsUpdate={setIssuePresets}
               departments={departments}
               onDepartmentsUpdate={setDepartments}
+              supportCompanies={supportCompanies}
+              onSupportCompaniesUpdate={setSupportCompanies}
               connectaAgents={connectaAgents}
               onConnectaAgentsUpdate={setConnectaAgents}
               consumableItems={consumableItems}
@@ -974,7 +983,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
         )}
 
         {modal && (
-          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} issuePresets={issuePresets} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)} onPhotosChanged={bumpIssues}/>
+          <IssueModal issueMode={modal} currentUser={me} issueTypes={issueTypes} issuePresets={issuePresets} departments={departments} connectaAgents={connectaAgents} consumableItems={consumableItems} supportCompanies={supportCompanies} token={token} onClose={()=>setModal(null)} onSave={form=>addIssue(form,modal)} onPhotosChanged={bumpIssues}/>
         )}
         {/* Opened by the Maintenance page when a check found a fault worth logging.
             onLinked runs once the issue exists, with its id, so the check that
@@ -988,6 +997,7 @@ const bumpIssues = () => setIssuesEpoch(n => n + 1);
           departments={departments}
           connectaAgents={connectaAgents}
           consumableItems={consumableItems}
+          supportCompanies={supportCompanies}
           token={token}
           onClose={()=>setMaintIssue(null)}
           onPhotosChanged={bumpIssues}

@@ -167,6 +167,12 @@ func (app *application) routes() http.Handler {
 	// endpoint, with the ".pdf" kept in the path so it cannot collide with it.
 	router.HandlerFunc(http.MethodGet, "/v1/support-requests/report.pdf", app.requireAuth(app.supportReportPDFHandler))
 
+	// The companies those handovers can be made to. Readable by everyone -- the
+	// issue form offers them -- and managed in Settings.
+	router.HandlerFunc(http.MethodGet, "/v1/support-companies", app.requireAuth(app.listSupportCompaniesHandler))
+	router.HandlerFunc(http.MethodPost, "/v1/support-companies", app.requireAuth(app.requireManager(app.createSupportCompanyHandler)))
+	router.HandlerFunc(http.MethodPatch, "/v1/support-companies/:id", app.requireAuth(app.requireManager(app.updateSupportCompanyHandler)))
+
 	// Settings — readable by any authenticated user, editable by managers only
 	router.HandlerFunc(http.MethodGet, "/v1/settings", app.requireAuth(app.getSettingsHandler))
 	router.HandlerFunc(http.MethodPatch, "/v1/settings", app.requireAuth(app.requireManager(app.updateSettingsHandler)))

@@ -26,13 +26,12 @@ function supportRangeParams(range) {
 
 function SupportStatCard({ stats, label, t, isOverall }) {
   const hasData = stats.timed > 0;
-  const name = isOverall ? t.supportOverall
-            : stats.company === 'telnet' ? t.companyTelnet : t.companyTelefonica;
+  const name = isOverall ? t.supportOverall : (stats.name || stats.company);
   return (
     <div className="support-stat-card">
       <div className="support-stat-head">
         <span className="support-stat-name">
-          {!isOverall && <span className={`tp-company-dot ${stats.company}`}/>}
+          {!isOverall && <span className={`tp-company-dot ${stats.color || 'gray'}`}/>}
           {name}
         </span>
         {isOverall && <span className="badge" style={{background:'var(--gray-100)',color:'var(--gray-500)'}}>{t.supportOverall}</span>}
@@ -205,8 +204,8 @@ function SupportPage({ token }) {
                     <div style={{fontSize:12.5,color:'var(--gray-500)',marginTop:2}}>{r.issue_problem}</div>
                   </td>
                   <td>
-                    <span className={`tp-strip-item ${r.company}`} style={{fontSize:11}}>
-                      {r.company==='telnet' ? t.companyTelnet : t.companyTelefonica}
+                    <span className={`tp-strip-item ${r.company_color || 'gray'}`} style={{fontSize:11}}>
+                      {r.company_name || r.company}
                     </span>
                   </td>
                   <td style={{fontSize:12.5,color:'var(--gray-600)'}}>{r.reference || '—'}</td>

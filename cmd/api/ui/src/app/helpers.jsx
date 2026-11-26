@@ -86,10 +86,16 @@ function mapIssue(i) {
     supportRequests: (i.support_requests || []).map(s => ({
       id:            s.id,
       company:       s.company,
+      // The catalog's current name and colour, joined by the server. Copied
+      // onto the handover so a table can render it without loading the whole
+      // catalog on every page.
+      companyName:   s.company_name || s.company,
+      companyColor:  s.company_color || 'gray',
       status:        s.status,
       technician:    s.telnet_technician || '',
       confirmedBy:   s.telnet_confirmed_by || '',
       ticketId:      s.telefonica_ticket_id || '',
+      reference:     s.reference || '',
       // The company's turnaround, kept separate from the issue's own time.
       // Sliced to "YYYY-MM-DDTHH:MM" for the datetime-local inputs, which is
       // the format the API takes them back in.

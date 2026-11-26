@@ -23,6 +23,9 @@ var (
 
 	ErrDuplicateConsumableItem = errors.New("duplicate consumable item")
 	ErrDuplicateIssuePreset    = errors.New("duplicate issue preset")
+	// ErrDuplicateSupportCompany: a company with this display name already
+	// exists in the third-party support catalog.
+	ErrDuplicateSupportCompany = errors.New("duplicate support company")
 	// ErrDuplicateSupportTicket: this Telefónica ticket id is already logged
 	// against this issue.
 	ErrDuplicateSupportTicket = errors.New("duplicate third-party support ticket")
@@ -43,6 +46,7 @@ type Models struct {
 	Consumables      ConsumableModel
 	ConsumableItems  ConsumableItemModel
 	IssuePresets     IssuePresetModel
+	SupportCompanies SupportCompanyModel
 	SupportRequests  SupportRequestModel
 	TVSwaps          TVSwapModel
 	TVSwapAlerts     TVSwapAlertModel
@@ -88,6 +92,7 @@ func NewModels(db *sql.DB) Models {
 		Consumables:      ConsumableModel{DB: db},
 		ConsumableItems:  ConsumableItemModel{DB: db},
 		IssuePresets:     IssuePresetModel{DB: db},
+		SupportCompanies: SupportCompanyModel{DB: db},
 		SupportRequests:  SupportRequestModel{DB: db},
 		TVSwaps:          TVSwapModel{DB: db},
 		TVSwapAlerts:     TVSwapAlertModel{DB: db},

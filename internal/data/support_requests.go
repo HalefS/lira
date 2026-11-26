@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	// SupportCompanyTelnet / SupportCompanyTelefonica are the two external
-	// companies that support the building. The set is deliberately fixed in
-	// the database CHECK constraint too, so adding a third company later means
-	// a migration as well as a new constant here.
+	// SupportCompanyTelnet / SupportCompanyTelefonica are the two companies
+	// that existed before the catalog did. They are seeded by migration 000043
+	// and are no longer a fixed set: the authority is now support_companies,
+	// which a manager edits in Settings. The constants remain because the
+	// database's coherence CHECK and a few fallbacks still name these slugs.
 	SupportCompanyTelnet     = "telnet"
 	SupportCompanyTelefonica = "telefonica"
 
@@ -68,6 +69,12 @@ type SupportRequest struct {
 	Company   string    `json:"company"`
 	Status    string    `json:"status"`
 
+	// The company as it reads today. Joined from support_companies on every
+	// read rather than copied onto the handover, so renaming a company or
+	// changing its colour updates the history without rewriting a row.
+	CompanyName  string `json:"company_name"`
+	CompanyColor string `json:"company_color"`
+
 	// Telnet: who we reported the issue to, and who reported back that the fix
 	// was good. Free text, because these are names of people on Telnet's side
 	// (or whoever answered the phone) rather than anyone in our own user list.
@@ -77,6 +84,10 @@ type SupportRequest struct {
 	// Telefonica: the ticket id in their own system. They assign their own
 	// technician, so there is no name to record for them.
 	TelefonicaTicketID *string `json:"telefonica_ticket_id"`
+
+	// Reference: the generic identifier used by companies added in Settings --
+	// their ticket, case or job number.
+	Reference *string `json:"reference"`
 
 	// How long the company took: the wall-clock moment we reported the problem,
 	// the moment they gave us a solution, and the derived duration. These are
@@ -101,6 +112,7 @@ type SupportRequestUse struct {
 	TelnetTechnician   *string `json:"telnet_technician"`
 	TelnetConfirmedBy  *string `json:"telnet_confirmed_by"`
 	TelefonicaTicketID *string `json:"telefonica_ticket_id"`
+	Reference          *string `json:"reference"`
 	Notes              string  `json:"notes"`
 
 	// "YYYY-MM-DDTHH:MM", the value an <input type="datetime-local"> produces.
@@ -123,47 +135,72 @@ func trimmed(s *string) (string, bool) {
 // ValidateSupportRequests checks the shape of the handovers sent with an issue
 // create/update request: the company, the status, and that each company has
 // the fields it actually needs. Length limits and the required-field rules are
-// also enforced by the database (see migration 000016); the checks here exist
-// to return a message naming the field.
-func ValidateSupportRequests(v *validator.Validator, uses []SupportRequestUse) {
+// also enforced by the database (see migrations 000016 and 000043); the checks
+// here exist to return a message naming the field.
+//
+// companies is the catalog as it stands. A handover's company must be one of
+// those slugs: the table is the authority now, not a pair of constants, and the
+// foreign key would reject anything else with a 500.
+func ValidateSupportRequests(v *validator.Validator, uses []SupportRequestUse, companies []*SupportCompany) {
 	v.Check(len(uses) <= maxSupportRequestsPerIssue, "support_requests",
 		"must not contain more than 20 handovers")
 
+	bySlug := make(map[string]*SupportCompany, len(companies))
+	for _, c := range companies {
+		bySlug[c.Slug] = c
+	}
+
 	seenTickets := make(map[string]bool, len(uses))
+	seenReferences := make(map[string]bool, len(uses))
 	for _, u := range uses {
 		field := "company"
-		switch u.Company {
-		case SupportCompanyTelnet:
-			technician, ok := trimmed(u.TelnetTechnician)
-			switch {
-			case !ok:
-				v.AddError(field, "a Telnet handover must name the technician it was reported to")
-			case len(technician) > maxSupportNameLength:
-				v.AddError(field, "the Telnet technician's name must not be more than 100 characters")
-			}
-			// The confirmation is only knowable once Telnet has called back, so
-			// it is required exactly when the handover is marked solved.
-			if confirmedBy, ok := trimmed(u.TelnetConfirmedBy); ok {
-				if len(confirmedBy) > maxSupportNameLength {
-					v.AddError(field, "the name of who reported the fix must not be more than 100 characters")
+		company, known := bySlug[u.Company]
+		if !known {
+			v.AddError(field, "must be one of the configured third-party companies")
+		} else {
+			switch company.FieldKind {
+			case SupportFieldTechnician:
+				technician, ok := trimmed(u.TelnetTechnician)
+				switch {
+				case !ok:
+					v.AddError(field, "a "+company.Name+" handover must name the technician it was reported to")
+				case len(technician) > maxSupportNameLength:
+					v.AddError(field, "the technician's name must not be more than 100 characters")
 				}
-			} else if u.Status == SupportStatusSolved {
-				v.AddError(field, "a solved Telnet handover must name who reported it was fixed")
+				// The confirmation is only knowable once the company has called
+				// back, so it is required exactly when the handover is solved.
+				if confirmedBy, ok := trimmed(u.TelnetConfirmedBy); ok {
+					if len(confirmedBy) > maxSupportNameLength {
+						v.AddError(field, "the name of who reported the fix must not be more than 100 characters")
+					}
+				} else if u.Status == SupportStatusSolved {
+					v.AddError(field, "a solved "+company.Name+" handover must name who reported it was fixed")
+				}
+			case SupportFieldTicket:
+				ticket, _ := trimmed(u.TelefonicaTicketID)
+				switch {
+				case ticket == "":
+					v.AddError(field, "a "+company.Name+" handover must include their ticket id")
+				case len(ticket) > maxSupportTicketIDLength:
+					v.AddError(field, "the "+company.Name+" ticket id must not be more than 100 characters")
+				case seenTickets[strings.ToLower(ticket)]:
+					v.AddError(field, "the same "+company.Name+" ticket id is listed more than once")
+				default:
+					seenTickets[strings.ToLower(ticket)] = true
+				}
+			case SupportFieldReference:
+				reference, _ := trimmed(u.Reference)
+				switch {
+				case reference == "":
+					v.AddError(field, "a "+company.Name+" handover must include a reference")
+				case len(reference) > maxSupportTicketIDLength:
+					v.AddError(field, "the "+company.Name+" reference must not be more than 100 characters")
+				case seenReferences[strings.ToLower(reference)]:
+					v.AddError(field, "the same "+company.Name+" reference is listed more than once")
+				default:
+					seenReferences[strings.ToLower(reference)] = true
+				}
 			}
-		case SupportCompanyTelefonica:
-			ticket, _ := trimmed(u.TelefonicaTicketID)
-			switch {
-			case ticket == "":
-				v.AddError(field, "a Telefónica handover must include their ticket id")
-			case len(ticket) > maxSupportTicketIDLength:
-				v.AddError(field, "the Telefónica ticket id must not be more than 100 characters")
-			case seenTickets[strings.ToLower(ticket)]:
-				v.AddError(field, "the same Telefónica ticket id is listed more than once")
-			default:
-				seenTickets[strings.ToLower(ticket)] = true
-			}
-		default:
-			v.AddError(field, "must be 'telnet' or 'telefonica'")
 		}
 
 		v.Check(u.Status == SupportStatusPending || u.Status == SupportStatusSolved,
@@ -203,6 +240,7 @@ type SupportRequestRecord struct {
 	TelnetTechnician   *string
 	TelnetConfirmedBy  *string
 	TelefonicaTicketID *string
+	Reference          *string
 	Notes              string
 	StartedAt          *time.Time
 	ResolvedAt         *time.Time
@@ -220,6 +258,7 @@ func BuildSupportRequestRecord(u SupportRequestUse) (SupportRequestRecord, bool)
 		TelnetTechnician:   u.TelnetTechnician,
 		TelnetConfirmedBy:  u.TelnetConfirmedBy,
 		TelefonicaTicketID: u.TelefonicaTicketID,
+		Reference:          u.Reference,
 		Notes:              u.Notes,
 	}
 
@@ -248,30 +287,37 @@ type SupportRequestModel struct {
 	DB *sql.DB
 }
 
-// isDuplicateTelefonicaTicket reports whether err is the violation of the
-// partial unique index that keeps one Telefónica ticket from being logged twice
-// on the same issue. Matched against the index name in the driver's message,
-// the same way the catalog models detect their duplicate-name errors.
-func isDuplicateTelefonicaTicket(err error) bool {
-	return err != nil &&
-		strings.Contains(err.Error(), `violates unique constraint "issue_support_requests_telefonica_ticket_key"`)
+// isDuplicateSupportReference reports whether err is the violation of a partial
+// unique index that keeps a company's reference from being logged twice on the
+// same issue. The two built-ins and the generic reference each have an index.
+func isDuplicateSupportReference(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, `violates unique constraint "issue_support_requests_telefonica_ticket_key"`) ||
+		strings.Contains(msg, `violates unique constraint "issue_support_requests_reference_key"`)
 }
 
 // supportRequestColumns is the column list shared by every read of a handover,
-// so the scan order below can never drift from the select list.
+// so the scan order below can never drift from the select list. The company's
+// name and colour are joined in rather than stored on the row: a rename or a
+// recolour then applies to the whole history at once.
 const supportRequestColumns = `
 	s.id, s.created_at, s.updated_at, s.issue_id, s.company, s.status,
-	s.telnet_technician, s.telnet_confirmed_by, s.telefonica_ticket_id,
+	s.telnet_technician, s.telnet_confirmed_by, s.telefonica_ticket_id, s.reference,
 	s.started_at, s.resolved_at, s.duration_minutes,
-	s.notes, s.created_by, s.version`
+	s.notes, s.created_by, s.version,
+	c.name, c.color`
 
 func scanSupportRequest(scan func(dest ...any) error) (*SupportRequest, error) {
 	var s SupportRequest
 	err := scan(
 		&s.ID, &s.CreatedAt, &s.UpdatedAt, &s.IssueID, &s.Company, &s.Status,
-		&s.TelnetTechnician, &s.TelnetConfirmedBy, &s.TelefonicaTicketID,
+		&s.TelnetTechnician, &s.TelnetConfirmedBy, &s.TelefonicaTicketID, &s.Reference,
 		&s.StartedAt, &s.ResolvedAt, &s.DurationMinutes,
 		&s.Notes, &s.CreatedBy, &s.Version,
+		&s.CompanyName, &s.CompanyColor,
 	)
 	if err != nil {
 		return nil, err
@@ -319,11 +365,12 @@ func (m SupportRequestModel) SetForIssue(issueID int64, uses []SupportRequestRec
 				UPDATE issue_support_requests
 				SET company=$3, status=$4, telnet_technician=$5,
 				    telnet_confirmed_by=$6, telefonica_ticket_id=$7,
-				    started_at=$8, resolved_at=$9, duration_minutes=$10,
-				    notes=$11, updated_at=NOW(), version=version+1
+				    reference=$8, started_at=$9, resolved_at=$10,
+				    duration_minutes=$11, notes=$12, updated_at=NOW(),
+				    version=version+1
 				WHERE id=$1 AND issue_id=$2`,
 				u.ID, issueID, u.Company, u.Status, u.TelnetTechnician,
-				u.TelnetConfirmedBy, u.TelefonicaTicketID,
+				u.TelnetConfirmedBy, u.TelefonicaTicketID, u.Reference,
 				u.StartedAt, u.ResolvedAt, u.DurationMinutes, u.Notes,
 			)
 			if err != nil {
@@ -344,17 +391,17 @@ func (m SupportRequestModel) SetForIssue(issueID int64, uses []SupportRequestRec
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO issue_support_requests
 				(issue_id, company, status, telnet_technician,
-				 telnet_confirmed_by, telefonica_ticket_id,
+				 telnet_confirmed_by, telefonica_ticket_id, reference,
 				 started_at, resolved_at, duration_minutes, notes, created_by)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 			issueID, u.Company, u.Status, u.TelnetTechnician,
-			u.TelnetConfirmedBy, u.TelefonicaTicketID,
+			u.TelnetConfirmedBy, u.TelefonicaTicketID, u.Reference,
 			u.StartedAt, u.ResolvedAt, u.DurationMinutes, u.Notes, loggedBy,
 		); err != nil {
-			// The Telefónica ticket is already logged on this issue — the
-			// duplicate the form's own validation cannot see, because it does
-			// not know what the other (unchanged) handovers look like.
-			if isDuplicateTelefonicaTicket(err) {
+			// The reference is already logged on this issue — the duplicate the
+			// form's own validation cannot see, because it does not know what
+			// the other (unchanged) handovers look like.
+			if isDuplicateSupportReference(err) {
 				return ErrDuplicateSupportTicket
 			}
 			return err
@@ -382,6 +429,7 @@ func loadIssueSupportRequests(ctx context.Context, db *sql.DB, issues []*Issue) 
 
 	query := `SELECT ` + supportRequestColumns + `
 		FROM issue_support_requests s
+		INNER JOIN support_companies c ON c.slug = s.company
 		WHERE s.issue_id = ANY($1::bigint[])
 		ORDER BY s.created_at, s.id`
 

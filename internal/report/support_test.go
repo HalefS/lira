@@ -22,8 +22,8 @@ func supportFixture() *data.SupportReport {
 			From: "2026-11-01",
 			To:   "2026-11-17",
 			ByCompany: []*data.SupportCompanyStats{
-				{Company: "telnet", Total: 1, Resolved: 1, Timed: 1, AvgMinutes: 90, MedianMinutes: 90, FastestMinutes: 90, SlowestMinutes: 90},
-				{Company: "telefonica", Total: 1, Pending: 1},
+				{Company: "telnet", Name: "Telnet", Color: "blue", Total: 1, Resolved: 1, Timed: 1, AvgMinutes: 90, MedianMinutes: 90, FastestMinutes: 90, SlowestMinutes: 90},
+				{Company: "telefonica", Name: "Telefónica", Color: "amber", Total: 1, Pending: 1},
 			},
 			Overall: &data.SupportCompanyStats{
 				Total: 2, Resolved: 1, Pending: 1, Timed: 1,
@@ -32,13 +32,15 @@ func supportFixture() *data.SupportReport {
 		},
 		Rows: []*data.SupportListRow{
 			{
-				ID: 1, Company: "telnet", Status: data.SupportStatusSolved,
+				ID: 1, Company: "telnet", CompanyName: "Telnet", CompanyColor: "blue",
+				Status: data.SupportStatusSolved,
 				StartedAt: &reported, ResolvedAt: &solved, DurationMinutes: &duration,
 				Reference: "Ana", IssueID: 42, IssueLocation: "1301",
 				IssueProblem: "Door will not close", Notes: "Called back",
 			},
 			{
-				ID: 2, Company: "telefonica", Status: data.SupportStatusPending,
+				ID: 2, Company: "telefonica", CompanyName: "Telefónica", CompanyColor: "amber",
+				Status: data.SupportStatusPending,
 				IssueID: 43, IssueLocation: "1204",
 				IssueProblem: "<script>alert(1)</script>", Reference: "2026-88123",
 			},
@@ -98,6 +100,31 @@ func TestSupportReportPrints(t *testing.T) {
 	}
 	if pages := pageCount(pdf); pages < 1 {
 		t.Errorf("support report rendered as %d pages, want at least 1", pages)
+	}
+}
+
+// A company added in Settings is rendered from the catalog values joined onto
+// the stats and the rows, not from the two built-in slugs. This pins both the
+// name in the table and the inline accent colour.
+func TestRenderSupportHTMLCustomCompany(t *testing.T) {
+	r := supportFixture()
+	r.Stats.ByCompany = append(r.Stats.ByCompany, &data.SupportCompanyStats{
+		Company: "acme-systems", Name: "Acme Renamed", Color: "red", Total: 1, Pending: 1,
+	})
+	r.Rows = append(r.Rows, &data.SupportListRow{
+		ID: 3, Company: "acme-systems", CompanyName: "Acme Renamed", CompanyColor: "red",
+		Status: data.SupportStatusPending, IssueID: 44, IssueLocation: "1102",
+		IssueProblem: "Lift out of service", Reference: "CASE-LIVE-1",
+	})
+
+	html, err := RenderSupportHTML(r)
+	if err != nil {
+		t.Fatalf("RenderSupportHTML: %v", err)
+	}
+	for _, want := range []string{"Acme Renamed", "CASE-LIVE-1", "1102", colRed} {
+		if !strings.Contains(html, want) {
+			t.Errorf("rendered report is missing %q", want)
+		}
 	}
 }
 

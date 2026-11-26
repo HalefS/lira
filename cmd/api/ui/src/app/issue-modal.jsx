@@ -419,7 +419,7 @@ function PhotoViewer({ issueId, photos, viewKey, token, t, currentUser, onClose,
   );
 }
 
-function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, issuePresets, departments, connectaAgents, consumableItems, token, onClose, onSave, onPhotosChanged }) {
+function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, issuePresets, departments, connectaAgents, consumableItems, supportCompanies, token, onClose, onSave, onPhotosChanged }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const isEdit = !!editIssue;
@@ -976,10 +976,10 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, is
             <div className={`tp-box ${form.supportRequests.length ? 'has-items' : ''}`}
                  role="group" aria-labelledby="issue-thirdparty-h">
               {form.supportRequests.map(s=>(
-                <span className={`tp-chip tp-chip-${s.company}`} key={s.key}>
-                  <span className="tp-chip-company">{s.company==='telnet' ? t.companyTelnet : t.companyTelefonica}</span>
+                <span className={`tp-chip tp-chip-${s.companyColor || 'gray'}`} key={s.key}>
+                  <span className="tp-chip-company">{s.companyName || s.company}</span>
                   <span className="tp-chip-detail">
-                    {s.company==='telnet' ? (s.technician || '—') : s.ticketId}
+                    {s.reference || s.ticketId || s.technician || '—'}
                   </span>
                   {s.status==='solved' && <span style={{color:'var(--green)'}}>{Ic.check}</span>}
                   <button type="button" className="consumable-chip-x" aria-label={t.thirdPartyRemove}
@@ -1025,7 +1025,7 @@ function IssueModal({ issueMode, editIssue, prefill, currentUser, issueTypes, is
         onDone={sel=>{ set('tvSwaps', sel); setSwapOpen(false); }}/>
     )}
     {supportOpen && (
-      <SupportRequestModal requests={form.supportRequests}
+      <SupportRequestModal requests={form.supportRequests} companies={supportCompanies || []}
         onCancel={()=>setSupportOpen(false)}
         onDone={sel=>{ set('supportRequests', sel); setSupportOpen(false); }}/>
     )}

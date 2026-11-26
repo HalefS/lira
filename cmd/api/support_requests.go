@@ -35,17 +35,29 @@ var datePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 // failures.
 func (app *application) validateSupportRequests(v *validator.Validator, uses []data.SupportRequestUse) ([]data.SupportRequestRecord, error) {
 	out := make([]data.SupportRequestRecord, 0, len(uses))
+	if len(uses) == 0 {
+		return out, nil
+	}
+
+	// The catalog is the authority on which companies exist and which fields
+	// each one carries. Loaded once per request rather than per handover.
+	companies, err := app.models.SupportCompanies.GetAll()
+	if err != nil {
+		return nil, err
+	}
 
 	shape := validator.New()
-	data.ValidateSupportRequests(shape, uses)
+	data.ValidateSupportRequests(shape, uses, companies)
 	if !shape.Valid() {
 		for key, msg := range shape.Errors {
 			v.AddError(key, msg)
 		}
 		return nil, nil
 	}
-	if len(uses) == 0 {
-		return out, nil
+
+	bySlug := make(map[string]*data.SupportCompany, len(companies))
+	for _, c := range companies {
+		bySlug[c.Slug] = c
 	}
 
 	for _, u := range uses {
@@ -56,14 +68,24 @@ func (app *application) validateSupportRequests(v *validator.Validator, uses []d
 		u.TelnetTechnician = trimmedOrNil(u.TelnetTechnician)
 		u.TelnetConfirmedBy = trimmedOrNil(u.TelnetConfirmedBy)
 		u.TelefonicaTicketID = trimmedOrNil(u.TelefonicaTicketID)
+		u.Reference = trimmedOrNil(u.Reference)
 
-		switch u.Company {
-		case data.SupportCompanyTelnet:
-			// Only Telnet's own fields are meaningful here.
-			u.TelefonicaTicketID = nil
-		case data.SupportCompanyTelefonica:
-			u.TelnetTechnician = nil
-			u.TelnetConfirmedBy = nil
+		// Only the fields belonging to this company's kind are meaningful. The
+		// shape check above has already guaranteed the right one is present.
+		if company, ok := bySlug[u.Company]; ok {
+			switch company.FieldKind {
+			case data.SupportFieldTechnician:
+				u.TelefonicaTicketID = nil
+				u.Reference = nil
+			case data.SupportFieldTicket:
+				u.TelnetTechnician = nil
+				u.TelnetConfirmedBy = nil
+				u.Reference = nil
+			case data.SupportFieldReference:
+				u.TelnetTechnician = nil
+				u.TelnetConfirmedBy = nil
+				u.TelefonicaTicketID = nil
+			}
 		}
 
 		rec, ok := data.BuildSupportRequestRecord(u)
@@ -111,7 +133,7 @@ func (app *application) setIssueSupportRequests(w http.ResponseWriter, r *http.R
 		return nil
 	case errors.Is(err, data.ErrDuplicateSupportTicket):
 		v := validator.New()
-		v.AddError("support_requests", "the same Telefónica ticket id is already logged on this issue")
+		v.AddError("support_requests", "the same third-party reference is already logged on this issue")
 		app.failedValidationResponse(w, r, v.Errors)
 	case errors.Is(err, data.ErrRecordNotFound):
 		v := validator.New()

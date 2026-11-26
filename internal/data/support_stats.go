@@ -25,7 +25,12 @@ type SupportStats struct {
 // time figures; a handover still waiting on the company has no answer yet, so
 // it counts towards Total and Pending but cannot drag the average.
 type SupportCompanyStats struct {
-	Company  string `json:"company"`
+	Company string `json:"company"`
+	// Name and Color are the catalog's current values for this company, joined
+	// so the page and the printed report read the same source as the settings
+	// that produced them.
+	Name     string `json:"name"`
+	Color    string `json:"color"`
 	Total    int    `json:"total"`
 	Pending  int    `json:"pending"`
 	Resolved int    `json:"resolved"`
@@ -83,13 +88,26 @@ func (m SupportRequestModel) GetStats(from, to string) (*SupportStats, error) {
 
 	stats := &SupportStats{From: from, To: to, ByCompany: []*SupportCompanyStats{}}
 
-	// Both companies are always returned, even with nothing logged, so the page
-	// can show "0 handovers" instead of silently omitting one of them.
-	for _, company := range []string{SupportCompanyTelnet, SupportCompanyTelefonica} {
-		s, err := m.summarize(ctx, from, to, company)
+	companies, err := (SupportCompanyModel{DB: m.DB}).GetAll()
+	if err != nil {
+		return nil, err
+	}
+
+	// Every active company is returned even with nothing logged, so the page
+	// can show "0 handovers" instead of silently omitting it. A deactivated
+	// company is returned only when it still has handovers in the range, which
+	// keeps its history visible without offering an empty card for a company
+	// nobody uses any more.
+	for _, c := range companies {
+		s, err := m.summarize(ctx, from, to, c.Slug)
 		if err != nil {
 			return nil, err
 		}
+		if !c.Active && s.Total == 0 {
+			continue
+		}
+		s.Name = c.Name
+		s.Color = c.Color
 		stats.ByCompany = append(stats.ByCompany, s)
 	}
 
@@ -108,12 +126,15 @@ type SupportListRow struct {
 	ID              int64      `json:"id"`
 	CreatedAt       time.Time  `json:"created_at"`
 	Company         string     `json:"company"`
+	CompanyName     string     `json:"company_name"`
+	CompanyColor    string     `json:"company_color"`
 	Status          string     `json:"status"`
 	StartedAt       *time.Time `json:"started_at"`
 	ResolvedAt      *time.Time `json:"resolved_at"`
 	DurationMinutes *int       `json:"duration_minutes"`
-	// Reference is the human-readable identifier of the handover: the
-	// Telefonica ticket id, or the Telnet technician's name.
+	// Reference is the human-readable identifier of the handover: the generic
+	// reference for a company added in Settings, the Telefonica ticket id, or
+	// the Telnet technician's name.
 	Reference     string `json:"reference"`
 	Notes         string `json:"notes"`
 	IssueID       int64  `json:"issue_id"`
@@ -147,6 +168,7 @@ func (m SupportRequestModel) list(ctx context.Context, from, to string, limit in
 	fromWhere := `
 		FROM issue_support_requests s
 		INNER JOIN issues i ON i.id = s.issue_id
+		INNER JOIN support_companies c ON c.slug = s.company
 		WHERE ($1 = '' OR s.created_at::date >= $1::date)
 		  AND ($2 = '' OR s.created_at::date <= $2::date)`
 
@@ -164,7 +186,8 @@ func (m SupportRequestModel) list(ctx context.Context, from, to string, limit in
 	query := `
 		SELECT s.id, s.created_at, s.company, s.status,
 		       s.started_at, s.resolved_at, s.duration_minutes, s.notes,
-		       COALESCE(s.telefonica_ticket_id, s.telnet_technician, ''),
+		       COALESCE(s.reference, s.telefonica_ticket_id, s.telnet_technician, ''),
+		       c.name, c.color,
 		       i.id, i.problem, i.mode, i.location
 		` + fromWhere + `
 		ORDER BY s.started_at DESC NULLS LAST, s.id DESC`
@@ -187,7 +210,7 @@ func (m SupportRequestModel) list(ctx context.Context, from, to string, limit in
 		if err := rows.Scan(
 			&r.ID, &r.CreatedAt, &r.Company, &r.Status,
 			&r.StartedAt, &r.ResolvedAt, &r.DurationMinutes, &r.Notes,
-			&r.Reference,
+			&r.Reference, &r.CompanyName, &r.CompanyColor,
 			&r.IssueID, &r.IssueProblem, &r.IssueMode, &r.IssueLocation,
 		); err != nil {
 			return nil, 0, err

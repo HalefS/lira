@@ -109,10 +109,9 @@ func newSupportView(r *data.SupportReport) supportView {
 	}
 
 	for _, s := range r.Stats.ByCompany {
-		name, color := supportCompany(s.Company)
 		v.Companies = append(v.Companies, supportCompanyRow{
-			Name:    name,
-			Color:   color,
+			Name:    supportCompanyName(s.Name, s.Company),
+			Color:   supportCompanyColor(s.Color),
 			Total:   itoa(s.Total),
 			Solved:  itoa(s.Resolved),
 			Pending: itoa(s.Pending),
@@ -138,7 +137,8 @@ func newSupportView(r *data.SupportReport) supportView {
 	})
 
 	for _, row := range r.Rows {
-		name, color := supportCompany(row.Company)
+		name := supportCompanyName(row.CompanyName, row.Company)
+		color := supportCompanyColor(row.CompanyColor)
 		status, statusClass := supportStatus(row.Status)
 		reportedDate, reportedTime := supportMoment(row.StartedAt)
 		solvedDate, solvedTime := supportMoment(row.ResolvedAt)
@@ -216,11 +216,38 @@ func supportDuration(minutes float64) string {
 	}
 }
 
-func supportCompany(company string) (label, color string) {
-	if company == data.SupportCompanyTelnet {
-		return "Telnet", colBlue
+// supportCompanyName is the catalog's display name, with the two built-in slugs
+// as a fallback for a report built from older data.
+func supportCompanyName(name, slug string) string {
+	if name != "" {
+		return name
 	}
-	return "Telefónica", colTeal
+	switch slug {
+	case data.SupportCompanyTelnet:
+		return "Telnet"
+	case data.SupportCompanyTelefonica:
+		return "Telefónica"
+	default:
+		return slug
+	}
+}
+
+// supportCompanyColor maps a catalog colour token onto the report's palette.
+func supportCompanyColor(name string) string {
+	switch name {
+	case "blue":
+		return colBlue
+	case "teal":
+		return colTeal
+	case "amber":
+		return colAmber
+	case "green":
+		return colGreen
+	case "red":
+		return colRed
+	default:
+		return colGray
+	}
 }
 
 func supportStatus(status string) (label, class string) {

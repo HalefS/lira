@@ -2684,9 +2684,15 @@ html.dark .room-picker-empty { color: var(--gray-400) !important; }
 }
 .tp-chip-company { font-weight: 700; }
 .tp-chip-detail  { color: var(--gray-500); font-weight: 400; }
-.tp-chip-telnet     { border-left: 3px solid var(--blue); }
-.tp-chip-telefonica { border-left: 3px solid var(--amber); }
-.tp-chip-swap       { border-left: 3px solid var(--green); }
+/* The left rule carries the company's colour, one class per palette token, so
+   a company added in Settings gets the same treatment as the two built-ins. */
+.tp-chip-blue   { border-left: 3px solid var(--blue); }
+.tp-chip-teal   { border-left: 3px solid var(--teal); }
+.tp-chip-amber  { border-left: 3px solid var(--amber); }
+.tp-chip-green  { border-left: 3px solid var(--green); }
+.tp-chip-red    { border-left: 3px solid var(--red); }
+.tp-chip-gray   { border-left: 3px solid var(--gray-400); }
+.tp-chip-swap   { border-left: 3px solid var(--green); }
 /* The set icon inside a swap chip needs to sit on the chip's line box rather
    than stretch to the text height. */
 .tp-chip-swap svg { width: 13px; height: 13px; }
@@ -2702,9 +2708,13 @@ html.dark .room-picker-empty { color: var(--gray-400) !important; }
   display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px;
   border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap;
 }
-.tp-strip-item.telnet     { background: var(--blue-light);   color: var(--blue); }
-.tp-strip-item.telefonica { background: var(--amber-light);  color: var(--amber); }
-.tp-strip-item.swap       { background: var(--green-light);  color: var(--green); }
+.tp-strip-item.blue   { background: var(--blue-light);   color: var(--blue); }
+.tp-strip-item.teal   { background: var(--teal-light);   color: var(--teal); }
+.tp-strip-item.amber  { background: var(--amber-light);  color: var(--amber); }
+.tp-strip-item.green  { background: var(--green-light);  color: var(--green); }
+.tp-strip-item.red    { background: var(--red-light);    color: var(--red); }
+.tp-strip-item.gray   { background: var(--gray-200);     color: var(--gray-600); }
+.tp-strip-item.swap   { background: var(--green-light);  color: var(--green); }
 .tp-strip-item svg { width: 11px; height: 11px; }
 /* The arrow is what makes the pair read as a movement rather than two rooms. */
 .tp-swap-arrow { opacity: .7; font-weight: 400; margin: 0 1px; }
@@ -2763,8 +2773,10 @@ html.dark .room-picker-empty { color: var(--gray-400) !important; }
    company nor a swap and both of those hues are already spoken for. */
 .tp-strip-item.photo { background: var(--gray-200); color: var(--gray-600); }
 
-/* The company picker inside the third-party support dialog. */
-.tp-company { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* The company picker inside the third-party support dialog. auto-fit rather than
+   a fixed pair: the catalog can hold any number of companies, and three or more
+   should wrap onto a second row instead of squeezing. */
+.tp-company { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
 .tp-company-opt {
   display: flex; align-items: center; gap: 10px; padding: 13px 14px;
   border: 1.5px solid var(--gray-200); border-radius: var(--radius-md);
@@ -2774,8 +2786,12 @@ html.dark .room-picker-empty { color: var(--gray-400) !important; }
 .tp-company-opt:hover { border-color: var(--gray-300); }
 .tp-company-opt.active { border-color: var(--blue); background: var(--blue-light); color: var(--blue); }
 .tp-company-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-.tp-company-dot.telnet     { background: var(--blue); }
-.tp-company-dot.telefonica { background: var(--amber); }
+.tp-company-dot.blue   { background: var(--blue); }
+.tp-company-dot.teal   { background: var(--teal); }
+.tp-company-dot.amber  { background: var(--amber); }
+.tp-company-dot.green  { background: var(--green); }
+.tp-company-dot.red    { background: var(--red); }
+.tp-company-dot.gray   { background: var(--gray-400); }
 .tp-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
 .tp-row {
   display: flex; align-items: center; gap: 12px; padding: 12px 14px;

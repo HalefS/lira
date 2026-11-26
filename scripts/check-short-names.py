@@ -100,9 +100,13 @@ PERSON = re.compile(
 # been failing since. `device` is the handset identity (deviceIdentity), and `e`
 # is the row of `c.equipment.map(e => ...)`; both single letters and catalog rows
 # are the same exemption the existing entries already make.
+#
+# `company` and `stats` are third-party support rows: a support company's name
+# and the per-company statistics card, neither of which is a person.
 NOT_PERSON_OBJ = {"c", "item", "draft", "shift", "s", "d", "a", "b", "e", "x", "ty",
                   "et", "device", "it", "ci", "value", "o", "t", "users", "department",
-                  "connecta_agent", "consumable_item", "issue_type", "preset"}
+                  "connecta_agent", "consumable_item", "issue_type", "preset",
+                  "company", "stats"}
 
 WRAP = "shortName("
 

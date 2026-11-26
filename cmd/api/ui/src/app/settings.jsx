@@ -23,7 +23,7 @@ function previewRoomRun(text) {
   return { from, to, count: to - from + 1 };
 }
 
-function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTypesUpdate, issuePresets, onIssuePresetsUpdate, departments, onDepartmentsUpdate, connectaAgents, onConnectaAgentsUpdate, consumableItems, onConsumableItemsUpdate, settings, onSettingsUpdate, setToast }) {
+function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTypesUpdate, issuePresets, onIssuePresetsUpdate, departments, onDepartmentsUpdate, supportCompanies, onSupportCompaniesUpdate, connectaAgents, onConnectaAgentsUpdate, consumableItems, onConsumableItemsUpdate, settings, onSettingsUpdate, setToast }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [name, setName] = useState('');
@@ -37,6 +37,7 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
   // left open cannot be collapsed out from under itself by a re-render.
   const [typesAll,  setTypesAll]  = useState(false);
   const [deptsAll,  setDeptsAll]  = useState(false);
+  const [scAll,     setScAll]     = useState(false);
   const [agentsAll, setAgentsAll] = useState(false);
   const [ciAll,     setCiAll]     = useState(false);
 
@@ -46,6 +47,15 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
   const [deptDraft, setDeptDraft]     = useState('');
   const [savingDept, setSavingDept] = useState(false);
   const [deptErr, setDeptErr] = useState('');
+
+  // The third-party support companies. Unlike the other catalogs these are
+  // deactivated rather than removed, because handovers point at them.
+  const [scName, setScName] = useState('');
+  const [scColor, setScColor] = useState('blue');
+  const [editingScId, setEditingScId] = useState(null);
+  const [scDraft, setScDraft] = useState('');
+  const [savingSc, setSavingSc] = useState(false);
+  const [scErr, setScErr] = useState('');
 
   const [agentName, setAgentName] = useState('');
   const [savingAgent, setSavingAgent] = useState(false);
@@ -262,6 +272,79 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
       setToast(t.toastDeptDeleted);
     } catch(ex) { setToast('Error: ' + ex.message); }
   }
+
+  // ── Third-party support companies ──
+  // Added and renamed like the other catalogs, but deactivated rather than
+  // deleted: handovers point at the slug, and a delete would either orphan them
+  // or take them with it.
+  async function addSupportCompany(e) {
+    e.preventDefault();
+    const trimmed = scName.trim();
+    if (!trimmed) return;
+    setSavingSc(true); setScErr('');
+    try {
+      const res = await apiFetch('/support-companies', {
+        method:'POST', body:{name: trimmed, color: scColor}, token});
+      onSupportCompaniesUpdate(prev => [...prev, res.support_company]
+        .sort((a,b)=>a.name.localeCompare(b.name)));
+      setScAll(true);
+      setScName('');
+      setScColor('blue');
+      setToast(t.toastSupportCompanyAdded);
+    } catch(ex) { setScErr(ex.message); }
+    finally { setSavingSc(false); }
+  }
+
+  function startScEdit(c) {
+    setEditingScId(c.id);
+    setScDraft(c.name);
+    setScErr('');
+  }
+
+  function cancelScEdit() {
+    setEditingScId(null);
+    setScDraft('');
+    setScErr('');
+  }
+
+  async function saveScEdit(id) {
+    const trimmed = scDraft.trim();
+    if (!trimmed) { setScErr(t.supportCompanyNameNeeded); return; }
+    setSavingSc(true); setScErr('');
+    try {
+      const res = await apiFetch(`/support-companies/${id}`, {
+        method:'PATCH', body:{name: trimmed}, token});
+      onSupportCompaniesUpdate(prev => prev.map(c => c.id === id ? res.support_company : c)
+        .sort((a,b)=>a.name.localeCompare(b.name)));
+      setToast(t.toastSupportCompanyUpdated);
+      cancelScEdit();
+    } catch(ex) { setScErr(ex.message); }
+    finally { setSavingSc(false); }
+  }
+
+  async function updateScColor(id, color) {
+    try {
+      const res = await apiFetch(`/support-companies/${id}`, {
+        method:'PATCH', body:{color}, token});
+      onSupportCompaniesUpdate(prev => prev.map(c => c.id === id ? res.support_company : c));
+      setToast(t.toastSupportCompanyUpdated);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  async function toggleScActive(c) {
+    try {
+      const res = await apiFetch(`/support-companies/${c.id}`, {
+        method:'PATCH', body:{active: !c.active}, token});
+      onSupportCompaniesUpdate(prev => prev.map(x => x.id === c.id ? res.support_company : x));
+      setToast(t.toastSupportCompanyUpdated);
+    } catch(ex) { setToast('Error: ' + ex.message); }
+  }
+
+  // The palette tokens the company dots and chips have classes for. Kept as a
+  // list rather than free-form colour input so a company follows the theme into
+  // dark mode.
+  const SUPPORT_COLORS = ['blue', 'teal', 'amber', 'green', 'red', 'gray'];
+  const colorLabel = c => t[`color${c.charAt(0).toUpperCase()}${c.slice(1)}`];
 
   async function addAgent(e) {
     e.preventDefault();
@@ -617,6 +700,104 @@ function SettingsPage({ token, focusGroup, onFocusGroupHandled, issueTypes, onTy
               }
               <AdminShowMore hidden={deptsAll ? 0 : Math.max(0, departments.length - ADMIN_PREVIEW_ROWS)}
                 label={t.adminShowMore} onClick={()=>setDeptsAll(true)}/>
+            </div>
+          </div>
+        </SetGroup>
+
+        {/* Companies are deactivated rather than deleted: every handover stores
+            the company's slug, so removing the row would either orphan history
+            or take it with it. The slug itself is generated on the server and
+            never shown, because renaming only changes what people read. */}
+        <SetGroup id="cat-support" level={1} title={t.adminSupportCompanies} sub={t.adminSupportCompaniesSub}
+          count={supportCompanies.length}>
+          <div className="set-body">
+            <div className="set-form">
+              {scErr && <div className="auth-error" style={{marginBottom:14}}>{scErr}</div>}
+              <form onSubmit={addSupportCompany} className="admin-form">
+                <div className="form-group">
+                  <label htmlFor="set-sc-name">{t.supportCompanyName}</label>
+                  <input id="set-sc-name" className="form-control" placeholder={t.supportCompanyNamePlaceholder} value={scName}
+                    onChange={e=>setScName(e.target.value)} maxLength={50}/>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="set-sc-color">{t.supportCompanyColor}</label>
+                  <select id="set-sc-color" className="form-control" value={scColor}
+                    onChange={e=>setScColor(e.target.value)}>
+                    {SUPPORT_COLORS.map(c=><option key={c} value={c}>{colorLabel(c)}</option>)}
+                  </select>
+                </div>
+                <button type="submit" className="btn btn-primary" disabled={savingSc || !scName.trim()} aria-busy={savingSc}>
+                  {Ic.plus} {savingSc ? '…' : t.addSupportCompany}
+                </button>
+              </form>
+            </div>
+
+            <div className="table-card">
+              {supportCompanies.length === 0
+                ? <div className="empty-state">{Ic.users}<p>{t.noSupportCompanies}</p></div>
+                : <table>
+                    <thead>
+                      <tr><th>{t.supportCompanyName}</th><th style={{width:150}}>{t.supportCompanyColor}</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {supportCompanies.slice(0, scAll ? supportCompanies.length : ADMIN_PREVIEW_ROWS).map(c=>(
+                        <tr key={c.id}>
+                          {editingScId === c.id ? (
+                            <td>
+                              <input className="form-control" autoFocus maxLength={50}
+                                aria-label={`${t.renameSupportCompany} — ${c.name}`}
+                                value={scDraft}
+                                onChange={e=>setScDraft(e.target.value)}
+                                onKeyDown={e=>{
+                                  if (e.key === 'Enter') saveScEdit(c.id);
+                                  if (e.key === 'Escape') cancelScEdit();
+                                }}/>
+                              {scErr && <div style={{fontSize:12,color:'var(--red)',marginTop:5}}>{scErr}</div>}
+                            </td>
+                          ) : (
+                            <td>
+                              <span className={`tp-company-dot ${c.color || 'gray'}`}
+                                style={{display:'inline-block',marginRight:8,verticalAlign:'middle'}}/>
+                              {c.name}
+                              {!c.active && (
+                                <span style={{fontSize:11,color:'var(--gray-400)',marginLeft:8}}>{t.supportCompanyInactive}</span>
+                              )}
+                            </td>
+                          )}
+                          <td>
+                            <select className="form-control" aria-label={`${t.supportCompanyColor} — ${c.name}`}
+                              value={c.color || 'gray'} onChange={e=>updateScColor(c.id, e.target.value)}>
+                              {SUPPORT_COLORS.map(col=><option key={col} value={col}>{colorLabel(col)}</option>)}
+                            </select>
+                          </td>
+                          <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                            {editingScId === c.id ? (
+                              <>
+                                <button className="btn btn-primary" style={{padding:'4px 12px',fontSize:12}}
+                                  onClick={()=>saveScEdit(c.id)} disabled={savingSc || !scDraft.trim()} aria-busy={savingSc}>
+                                  {savingSc ? '…' : t.saveChanges}
+                                </button>
+                                <button className="btn btn-ghost" style={{padding:'4px 12px',fontSize:12}}
+                                  onClick={cancelScEdit} disabled={savingSc}>{t.cancel}</button>
+                              </>
+                            ) : (
+                              <>
+                                <button className="icon-btn" title={t.renameSupportCompany}
+                                  onClick={()=>startScEdit(c)}>{Ic.edit}</button>
+                                <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12}}
+                                  onClick={()=>toggleScActive(c)}>
+                                  {c.active ? t.supportCompanyDeactivate : t.supportCompanyActivate}
+                                </button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+              }
+              <AdminShowMore hidden={scAll ? 0 : Math.max(0, supportCompanies.length - ADMIN_PREVIEW_ROWS)}
+                label={t.adminShowMore} onClick={()=>setScAll(true)}/>
             </div>
           </div>
         </SetGroup>

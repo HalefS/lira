@@ -398,7 +398,7 @@ function TVSwapModal({ swaps, currentRoom, onCancel, onDone }) {
    draft copy of the handovers; nothing changes on the issue until Done.
    `key` is client-only and identifies a handover that doesn't exist on the
    server yet, so `id` stays the server's own row id (0 for a new one). */
-function SupportRequestModal({ requests, onCancel, onDone }) {
+function SupportRequestModal({ requests, companies = [], onCancel, onDone }) {
   const lang = React.useContext(LangCtx);
   const t = T[lang];
   const [items, setItems] = useState(requests);
@@ -416,16 +416,49 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
+  function companyFor(slug) {
+    return (companies || []).find(c => c.slug === slug);
+  }
+
+  // A handover carries its company's kind from the catalog. Older drafts (and
+  // rows mapped from an issue) may not have it, so it is also derived from the
+  // company they name; the field presence is the last fallback.
+  function kindOf(s) {
+    if (s.fieldKind) return s.fieldKind;
+    const c = companyFor(s.company);
+    if (c) return c.field_kind;
+    if (s.ticketId) return 'ticket';
+    if (s.reference) return 'reference';
+    return 'technician';
+  }
+
+  // Companies offered in the picker: active ones, plus the one already on this
+  // handover even if it was deactivated after the fact.
+  const choices = (companies || []).filter(c => c.active || (draft && c.slug === draft.company));
+
   function blank() {
     // We know when we are reporting it — it is now — so the start is prefilled
     // rather than left as one more empty field to discover.
+    const company = (companies || []).find(c => c.active) || (companies || [])[0];
     return {key: `new-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, id: 0,
-            company: 'telnet', status: 'pending',
-            technician: '', confirmedBy: '', ticketId: '',
+            company: company ? company.slug : 'telnet',
+            companyName: company ? company.name : 'Telnet',
+            companyColor: company ? company.color : 'blue',
+            fieldKind: company ? company.field_kind : 'technician',
+            status: 'pending',
+            technician: '', confirmedBy: '', ticketId: '', reference: '',
             startedAt: localDateTimeValue(new Date()), resolvedAt: '', notes: ''};
   }
   function startAdd()   { setDraft(blank());            setErr(''); }
-  function startEdit(s) { setDraft({...s});             setErr(''); }
+  function startEdit(s) {
+    const c = companyFor(s.company);
+    setDraft({...s,
+      companyName:  c ? c.name  : (s.companyName || s.company),
+      companyColor: c ? c.color : (s.companyColor || 'gray'),
+      fieldKind:    c ? c.field_kind : kindOf(s),
+    });
+    setErr('');
+  }
   function cancelEdit() { setDraft(null);               setErr(''); }
   function patch(k,v)   { setDraft(d=>({...d,[k]:v})); setErr(''); }
 
@@ -442,16 +475,25 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
   // Mirrors ValidateSupportRequests on the server, so the user is told here
   // rather than after a round-trip.
   function commit() {
+    const kind        = kindOf(draft);
     const technician  = (draft.technician ||'').trim();
     const confirmedBy = (draft.confirmedBy||'').trim();
-    if (draft.company === 'telnet') {
+    const ticket      = (draft.ticketId   ||'').trim();
+    const reference   = (draft.reference  ||'').trim();
+
+    if (kind === 'technician') {
       if (!technician) return setErr(t.telnetNeedsTechnician);
       if (draft.status==='solved' && !confirmedBy) return setErr(t.telnetNeedsConfirmation);
-    } else {
-      const ticket = (draft.ticketId||'').trim();
+    } else if (kind === 'ticket') {
       if (!ticket) return setErr(t.telefonicaNeedsTicket);
-      if (items.some(s=>s.key!==draft.key && (s.ticketId||'').trim().toLowerCase()===ticket.toLowerCase()))
+      if (items.some(s=>s.key!==draft.key && kindOf(s)==='ticket'
+            && (s.ticketId||'').trim().toLowerCase()===ticket.toLowerCase()))
         return setErr(t.telefonicaNeedsTicket);
+    } else {
+      if (!reference) return setErr(t.supportReferenceNeeded);
+      if (items.some(s=>s.key!==draft.key && kindOf(s)==='reference'
+            && (s.reference||'').trim().toLowerCase()===reference.toLowerCase()))
+        return setErr(t.supportReferenceNeeded);
     }
     if (!draft.startedAt) return setErr(t.supportNeedsReported);
     if (draft.status==='solved' && !draft.resolvedAt) return setErr(t.supportNeedsResolved);
@@ -462,9 +504,10 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
       ...draft,
       // Fields that don't belong to the chosen company are dropped here as
       // well as on the server, so a draft can't carry stale values around.
-      ticketId:      draft.company==='telefonica' ? (draft.ticketId||'').trim() : '',
-      technician:    draft.company==='telnet' ? technician  : '',
-      confirmedBy:   draft.company==='telnet' ? confirmedBy : '',
+      ticketId:    kind === 'ticket'     ? ticket      : '',
+      reference:   kind === 'reference'  ? reference   : '',
+      technician:  kind === 'technician' ? technician  : '',
+      confirmedBy: kind === 'technician' ? confirmedBy : '',
       notes: (draft.notes||'').trim(),
     };
     setItems(list=> list.some(s=>s.key===draft.key) ? list.map(s=>s.key===draft.key?saved:s) : [...list, saved]);
@@ -477,11 +520,18 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
 
   // Switching company on an existing draft can strand a half-filled field
   // (e.g. a Telnet technician with no Telefónica ticket id), so start it clean.
-  function setCompany(company) {
-    setDraft(d=>({...d, company,
-      ticketId:    company==='telefonica' ? d.ticketId : '',
-      technician:  company==='telnet' ? d.technician  : '',
-      confirmedBy: company==='telnet' ? d.confirmedBy : '',
+  function setCompany(slug) {
+    const c = companyFor(slug);
+    const kind = c ? c.field_kind : 'reference';
+    setDraft(d=>({...d,
+      company: slug,
+      companyName:  c ? c.name  : slug,
+      companyColor: c ? c.color : 'gray',
+      fieldKind:    kind,
+      ticketId:     kind === 'ticket'     ? d.ticketId     : '',
+      reference:    kind === 'reference'  ? d.reference    : '',
+      technician:   kind === 'technician' ? d.technician   : '',
+      confirmedBy:  kind === 'technician' ? d.confirmedBy  : '',
     }));
     setErr('');
   }
@@ -494,15 +544,18 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
   }
 
   // The second line of a handover row. The company line already names the
-  // Telnet technician, so this carries whatever it doesn't: Telefonica's ticket
-  // id, or who confirmed the Telnet fix. Returns null when there is genuinely
-  // nothing to add, so the row collapses instead of repeating the status badge.
+  // technician for a technician-kind company, so this carries whatever it
+  // doesn't: the ticket id or reference, or who confirmed the fix. Returns null
+  // when there is genuinely nothing to add, so the row collapses instead of
+  // repeating the status badge.
   function detail(s) {
-    if (s.company === 'telnet') {
+    const kind = kindOf(s);
+    if (kind === 'technician') {
       if (s.confirmedBy) return `${t.telnetConfirmedBy}: ${s.confirmedBy}`;
       return s.notes || null;
     }
-    return `${t.telefonicaTicket}: ${s.ticketId}`;
+    if (kind === 'ticket') return `${t.telefonicaTicket}: ${s.ticketId}`;
+    return `${t.supportReference}: ${s.reference}`;
   }
 
   return (
@@ -519,24 +572,25 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
           {draft ? (
             <>
               <div className="form-group">
-                {/* A heading, not a label: this caption names a pair of buttons and neither of
-                    them is the control for it, so a <label for> would point at
-                    something that does not exist. The group role is what carries
-                    the relationship to assistive technology instead. */}
+                {/* A heading, not a label: this caption names a set of buttons and
+                    none of them is the control for it, so a <label for> would
+                    point at something that does not exist. The group role is
+                    what carries the relationship to assistive technology. */}
                 <div className="form-group-h" id="tp-company-h">{t.company}</div>
                 <div className="tp-company" role="group" aria-labelledby="tp-company-h">
-                  <button type="button" className={`tp-company-opt ${draft.company==='telnet'?'active':''}`}
-                    aria-pressed={draft.company==='telnet'} onClick={()=>setCompany('telnet')}>
-                    <span className="tp-company-dot telnet"/>{t.companyTelnet}
-                  </button>
-                  <button type="button" className={`tp-company-opt ${draft.company==='telefonica'?'active':''}`}
-                    aria-pressed={draft.company==='telefonica'} onClick={()=>setCompany('telefonica')}>
-                    <span className="tp-company-dot telefonica"/>{t.companyTelefonica}
-                  </button>
+                  {choices.map(c => (
+                    <button type="button" key={c.slug}
+                      className={`tp-company-opt ${draft.company===c.slug?'active':''}`}
+                      aria-pressed={draft.company===c.slug} onClick={()=>setCompany(c.slug)}>
+                      <span className={`tp-company-dot ${c.color || 'gray'}`}/>
+                      {c.name}
+                      {!c.active && <span style={{fontWeight:400,color:'var(--gray-400)'}}>· {t.supportCompanyInactive}</span>}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {draft.company==='telnet' ? (
+              {kindOf(draft)==='technician' ? (
                 <div className="form-row">
                   <div className="form-group">
                     <label htmlFor="tp-technician">{t.telnetTechnician}</label>
@@ -549,11 +603,17 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
                       onChange={e=>patch('confirmedBy', e.target.value)}/>
                   </div>
                 </div>
-              ) : (
+              ) : kindOf(draft)==='ticket' ? (
                 <div className="form-group">
                   <label htmlFor="tp-ticket">{t.telefonicaTicket}</label>
                   <input id="tp-ticket" className="form-control" placeholder={t.ticketIdPlaceholder} value={draft.ticketId}
                     onChange={e=>patch('ticketId', e.target.value)}/>
+                </div>
+              ) : (
+                <div className="form-group">
+                  <label htmlFor="tp-reference">{t.supportReference}</label>
+                  <input id="tp-reference" className="form-control" placeholder={t.supportReferencePlaceholder} value={draft.reference}
+                    onChange={e=>patch('reference', e.target.value)}/>
                 </div>
               )}
 
@@ -605,9 +665,9 @@ function SupportRequestModal({ requests, onCancel, onDone }) {
                 <div className="tp-row" key={s.key}>
                   <div className="tp-row-main">
                     <div className="tp-row-company">
-                      <span className={`tp-company-dot ${s.company}`}/>
-                      {s.company==='telnet' ? t.companyTelnet : t.companyTelefonica}
-                      {s.company==='telnet' && s.technician && (
+                      <span className={`tp-company-dot ${s.companyColor || 'gray'}`}/>
+                      {s.companyName || s.company}
+                      {kindOf(s)==='technician' && s.technician && (
                         <span style={{fontWeight:400,color:'var(--gray-500)'}}>— {s.technician}</span>
                       )}
                     </div>
