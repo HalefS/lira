@@ -169,3 +169,40 @@ func TestGetReportExcludesThirdPartyHandovers(t *testing.T) {
 		}
 	}
 }
+
+// The reports page says "Open / pending" while the database stores "Pending".
+// Pin the mapping so a filter change cannot silently turn a request for open
+// issues into an empty report, and so an unknown value is refused rather than
+// being interpolated into a query.
+func TestNormalizeReportStatus(t *testing.T) {
+	cases := []struct {
+		input       string
+		wantFilter  string
+		wantStored  string
+		wantInvalid bool
+	}{
+		{"", "all", "", false},
+		{"all", "all", "", false},
+		{"pending", "pending", "Pending", false},
+		{"open", "pending", "Pending", false},
+		{"Ok", "ok", "Ok", false},
+		{"resolved", "ok", "Ok", false},
+		{"closed", "", "", true},
+	}
+	for _, tc := range cases {
+		filter, stored, err := normalizeReportStatus(tc.input)
+		if tc.wantInvalid {
+			if err == nil {
+				t.Errorf("%q: expected an error, got filter=%q stored=%q", tc.input, filter, stored)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%q: unexpected error: %v", tc.input, err)
+			continue
+		}
+		if filter != tc.wantFilter || stored != tc.wantStored {
+			t.Errorf("%q: got filter=%q stored=%q, want %q/%q", tc.input, filter, stored, tc.wantFilter, tc.wantStored)
+		}
+	}
+}

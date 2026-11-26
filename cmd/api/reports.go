@@ -23,6 +23,22 @@ var dateParamPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 // it were a date.
 var monthParamPattern = regexp.MustCompile(`^\d{4}-\d{2}$`)
 
+// reportStatusParam reads the shared issue-status filter. It is checked here,
+// before any model call, so an unknown value is a client error naming the
+// parameter rather than an internal error from the data layer. "open" and
+// "resolved" are accepted because they are what the filter says on screen;
+// the data layer maps them to the stored Pending and Ok values.
+func (app *application) reportStatusParam(w http.ResponseWriter, r *http.Request) (string, bool) {
+	status := app.readString(r.URL.Query(), "status", "all")
+	switch status {
+	case "all", "pending", "ok", "open", "resolved":
+		return status, true
+	default:
+		app.errorResponse(w, r, http.StatusBadRequest, "status must be all, pending or ok")
+		return "", false
+	}
+}
+
 // maxReportRangeDays bounds a custom date range. A month is at most 31 days and a
 // quarter is 90, so 90 covers the legitimate cases (a quarter, a season, a
 // manager's "show me the last three months") while stopping a single request
@@ -36,8 +52,12 @@ func (app *application) dailyReportHandler(w http.ResponseWriter, r *http.Reques
 	date := app.readString(r.URL.Query(), "date", "")
 	limit, capped := app.readLimit(r)
 	issueType := app.readString(r.URL.Query(), "type", "")
+	status, ok := app.reportStatusParam(w, r)
+	if !ok {
+		return
+	}
 
-	rep, err := app.models.Issues.GetReport(date, date, limit, issueType)
+	rep, err := app.models.Issues.GetReport(date, date, limit, issueType, status)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -64,6 +84,10 @@ func (app *application) dailyReportPDFHandler(w http.ResponseWriter, r *http.Req
 		app.errorResponse(w, r, http.StatusBadRequest, "date must be in YYYY-MM-DD format")
 		return
 	}
+	status, ok := app.reportStatusParam(w, r)
+	if !ok {
+		return
+	}
 
 	// A missing browser is a deployment problem, not a bad request, and the
 	// rest of the application works without one — so it is reported as
@@ -84,7 +108,7 @@ func (app *application) dailyReportPDFHandler(w http.ResponseWriter, r *http.Req
 	// a document that looks complete and is not.
 	issueType := app.readString(r.URL.Query(), "type", "")
 
-	rep, err := app.models.Issues.GetReport(date, date, 0, issueType)
+	rep, err := app.models.Issues.GetReport(date, date, 0, issueType, status)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -135,8 +159,12 @@ func (app *application) monthlyReportHandler(w http.ResponseWriter, r *http.Requ
 	to := t.AddDate(0, 1, 0).AddDate(0, 0, -1).Format("2006-01-02")
 
 	issueType := app.readString(r.URL.Query(), "type", "")
+	status, ok := app.reportStatusParam(w, r)
+	if !ok {
+		return
+	}
 
-	rep, err := app.models.Issues.GetReport(from, to, -1, issueType)
+	rep, err := app.models.Issues.GetReport(from, to, -1, issueType, status)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -163,6 +191,11 @@ func (app *application) monthlyReportPDFHandler(w http.ResponseWriter, r *http.R
 	from := t.Format("2006-01-02")
 	to := t.AddDate(0, 1, 0).AddDate(0, 0, -1).Format("2006-01-02")
 
+	status, ok := app.reportStatusParam(w, r)
+	if !ok {
+		return
+	}
+
 	if app.browser == nil {
 		reason := "no chromium-based browser was found on this server"
 		if app.browserErr != nil && !errors.Is(app.browserErr, report.ErrNoBrowser) {
@@ -174,7 +207,7 @@ func (app *application) monthlyReportPDFHandler(w http.ResponseWriter, r *http.R
 
 	issueType := app.readString(r.URL.Query(), "type", "")
 
-	rep, err := app.models.Issues.GetReport(from, to, 0, issueType)
+	rep, err := app.models.Issues.GetReport(from, to, 0, issueType, status)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -245,8 +278,12 @@ func (app *application) rangeReportHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	issueType := app.readString(r.URL.Query(), "type", "")
+	status, statusOK := app.reportStatusParam(w, r)
+	if !statusOK {
+		return
+	}
 
-	rep, err := app.models.Issues.GetReport(from, to, -1, issueType)
+	rep, err := app.models.Issues.GetReport(from, to, -1, issueType, status)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -262,6 +299,11 @@ func (app *application) rangeReportPDFHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	status, statusOK := app.reportStatusParam(w, r)
+	if !statusOK {
+		return
+	}
+
 	if app.browser == nil {
 		reason := "no chromium-based browser was found on this server"
 		if app.browserErr != nil && !errors.Is(app.browserErr, report.ErrNoBrowser) {
@@ -273,7 +315,7 @@ func (app *application) rangeReportPDFHandler(w http.ResponseWriter, r *http.Req
 
 	issueType := app.readString(r.URL.Query(), "type", "")
 
-	rep, err := app.models.Issues.GetReport(from, to, 0, issueType)
+	rep, err := app.models.Issues.GetReport(from, to, 0, issueType, status)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return

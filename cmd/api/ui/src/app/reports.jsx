@@ -21,6 +21,10 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
   // that chart into one bar, which is honest rather than useful, but the rest of
   // the report (summary, by technician) is still worth having for one type.
   const [typeFilter, setTypeFilter] = useState('');
+  // Issue-status filter. "pending" is the open set: an issue stays Pending
+  // until it is solved, so the filter is labelled Open / pending rather than
+  // making the reader guess which of the two words matches the stored status.
+  const [statusFilter, setStatusFilter] = useState('all');
   // The native <select> dropdown is drawn by the OS and ignores color-scheme on
   // Windows, so it opens as a white list with light text on it in dark mode.
   // A custom dropdown is the only way to control its palette, hence this.
@@ -48,15 +52,16 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
   // rest of the page can switch on without re-deriving it. Kept in sync with the
   // inputs above rather than computed, because the inputs are the source of truth
   // and the derived form would have to be rebuilt on every render.
-  const filterKey = mode === 'daily'   ? `daily|${date}|${typeFilter}|${epoch}`
-                  : mode === 'monthly' ? `monthly|${month}|${typeFilter}|${epoch}`
-                  :                      `range|${from}|${to}|${typeFilter}|${epoch}`;
+  const filterKey = mode === 'daily'   ? `daily|${date}|${typeFilter}|${statusFilter}|${epoch}`
+                  : mode === 'monthly' ? `monthly|${month}|${typeFilter}|${statusFilter}|${epoch}`
+                  :                      `range|${from}|${to}|${typeFilter}|${statusFilter}|${epoch}`;
 
   function buildPath(limit) {
     const typeQ = typeFilter ? `&type=${encodeURIComponent(typeFilter)}` : '';
-    if (mode === 'daily')   return `/reports/daily?date=${date}&limit=${limit}${typeQ}`;
-    if (mode === 'monthly') return `/reports/monthly?month=${month}&limit=${limit}${typeQ}`;
-    return `/reports/range?from=${from}&to=${to}&limit=${limit}${typeQ}`;
+    const statusQ = `&status=${encodeURIComponent(statusFilter)}`;
+    if (mode === 'daily')   return `/reports/daily?date=${date}&limit=${limit}${typeQ}${statusQ}`;
+    if (mode === 'monthly') return `/reports/monthly?month=${month}&limit=${limit}${typeQ}${statusQ}`;
+    return `/reports/range?from=${from}&to=${to}&limit=${limit}${typeQ}${statusQ}`;
   }
 
   /* The two issue tables page; everything else on this page does not.
@@ -90,9 +95,10 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
       // The PDF endpoint matches the mode, so the downloaded file is the period
       // on screen and not a daily report wearing a different name.
       const typeQ = typeFilter ? `&type=${encodeURIComponent(typeFilter)}` : '';
-      const pdfUrl = mode === 'daily'   ? `${API}/reports/daily.pdf?date=${date}${typeQ}`
-                   : mode === 'monthly' ? `${API}/reports/monthly.pdf?month=${month}${typeQ}`
-                   :                      `${API}/reports/range.pdf?from=${from}&to=${to}${typeQ}`;
+      const statusQ = `&status=${encodeURIComponent(statusFilter)}`;
+      const pdfUrl = mode === 'daily'   ? `${API}/reports/daily.pdf?date=${date}${typeQ}${statusQ}`
+                   : mode === 'monthly' ? `${API}/reports/monthly.pdf?month=${month}${typeQ}${statusQ}`
+                   :                      `${API}/reports/range.pdf?from=${from}&to=${to}${typeQ}${statusQ}`;
       const res = await fetch(pdfUrl, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -108,9 +114,10 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const dlName = mode === 'daily'   ? `LIRA-Daily-Report-${report.date || date}.pdf`
-                   : mode === 'monthly' ? `LIRA-Monthly-Report-${month}.pdf`
-                   :                      `LIRA-Report-${from}-to-${to}.pdf`;
+      const statusSuffix = statusFilter === 'all' ? '' : `-${statusFilter}`;
+      const dlName = mode === 'daily'   ? `LIRA-Daily-Report-${report.date || date}${statusSuffix}.pdf`
+                   : mode === 'monthly' ? `LIRA-Monthly-Report-${month}${statusSuffix}.pdf`
+                   :                      `LIRA-Report-${from}-to-${to}${statusSuffix}.pdf`;
       a.download = dlName;
       document.body.appendChild(a);
       a.click();
@@ -242,6 +249,25 @@ function ReportsPage({ token, slaMinutes, issueTypes, theme }) {
               ))}
             </div>
           )}
+        </div>
+        {/* Issue-status filter. Pending is the open set, so one chip covers
+            "open and pending" without inventing a second status in the data. */}
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <span style={{fontSize:12,color:'var(--gray-500)'}}>{t.reportStatusFilter}</span>
+          <div className="filter-chips" role="group" aria-label={t.reportStatusFilter}>
+            <button type="button" className={`chip ${statusFilter==='all'?'active':''}`}
+              aria-pressed={statusFilter==='all'} onClick={()=>setStatusFilter('all')}>
+              {t.reportStatusAll}
+            </button>
+            <button type="button" className={`chip ${statusFilter==='pending'?'active':''}`}
+              aria-pressed={statusFilter==='pending'} onClick={()=>setStatusFilter('pending')}>
+              {t.reportStatusPending}
+            </button>
+            <button type="button" className={`chip ${statusFilter==='ok'?'active':''}`}
+              aria-pressed={statusFilter==='ok'} onClick={()=>setStatusFilter('ok')}>
+              {t.reportStatusResolved}
+            </button>
+          </div>
         </div>
         <button className="btn btn-ghost" onClick={reload} disabled={loading} aria-busy={loading}>
           {loading ? '…' : t.reportRefresh}

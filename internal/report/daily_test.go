@@ -8,6 +8,25 @@ import (
 	"github.com/HalefS/lira/internal/data"
 )
 
+// A printed report must say which status set it describes. Without this a
+// pending-only PDF would look identical to the unfiltered one and be easy to
+// file under the wrong name.
+func TestReportHTMLShowsStatusFilter(t *testing.T) {
+	r := &data.Report{
+		FromDate:     "2026-10-01",
+		ToDate:       "2026-10-01",
+		GeneratedAt:  time.Date(2026, time.October, 1, 9, 0, 0, 0, time.UTC),
+		StatusFilter: "pending",
+	}
+	html, err := RenderDailyHTML(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, "Status: Open / pending") {
+		t.Error("the printed report did not label the open / pending filter")
+	}
+}
+
 func TestTypeColorPrefersStoredHex(t *testing.T) {
 	colors := map[string]string{"Door": "#123456", "Internet": "#ABCDEF"}
 	tests := []struct {

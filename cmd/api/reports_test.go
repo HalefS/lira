@@ -578,6 +578,37 @@ func TestRotaAttendancePDFDoesStopAt501(t *testing.T) {
 	}
 }
 
+// An unknown status is refused before a model call or a browser check. The
+// reports page only sends the three documented values, but a hand-edited URL
+// must not turn into a 500 (or a 501 on a machine without Chromium).
+func TestReportStatusRejectsUnknownValue(t *testing.T) {
+	app := &application{}
+
+	cases := []struct {
+		endpoint string
+		handler  http.HandlerFunc
+	}{
+		{"/v1/reports/daily?status=nope", app.dailyReportHandler},
+		{"/v1/reports/daily.pdf?date=2026-10-01&status=nope", app.dailyReportPDFHandler},
+		{"/v1/reports/monthly?month=2026-10&status=nope", app.monthlyReportHandler},
+		{"/v1/reports/monthly.pdf?month=2026-10&status=nope", app.monthlyReportPDFHandler},
+		{"/v1/reports/range?from=2026-10-01&to=2026-10-31&status=nope", app.rangeReportHandler},
+		{"/v1/reports/range.pdf?from=2026-10-01&to=2026-10-31&status=nope", app.rangeReportPDFHandler},
+	}
+	for _, tc := range cases {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, tc.endpoint, nil)
+		tc.handler(w, r)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want %d", tc.endpoint, w.Code, http.StatusBadRequest)
+		}
+		if !strings.Contains(w.Body.String(), "status") {
+			t.Errorf("%s: body = %q, want it to name the status parameter", tc.endpoint, w.Body.String())
+		}
+	}
+}
+
 // httprouter PANICS at construction time when a static segment sits beside a
 // wildcard in the same method tree -- which is why /v1/rota/members exists instead
 // of /v1/schedule/roster, per the comment in routes.go. The failure mode is a crash

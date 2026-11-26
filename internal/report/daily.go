@@ -166,6 +166,7 @@ type reportView struct {
 	Title       string
 	Date        string
 	DateLong    string
+	FilterLabel string
 	GeneratedAt string
 	Summary     []statCard
 	Types       []typeBar
@@ -208,6 +209,20 @@ func RenderReportHTML(r *data.Report, title string) (string, error) {
 		return buf.String(), fmt.Errorf("report: rendering report template: %w", err)
 	}
 	return buf.String(), nil
+}
+
+// reportStatusLabel is the printable form of the filter echoed on data.Report.
+// The PDF is a standalone document: without this it could show a filtered set
+// of figures while looking exactly like the unfiltered report.
+func reportStatusLabel(status string) string {
+	switch status {
+	case "pending":
+		return "Open / pending"
+	case "ok":
+		return "Resolved"
+	default:
+		return "All statuses"
+	}
 }
 
 func newReportView(r *data.Report, title string) reportView {
@@ -253,6 +268,7 @@ func newReportView(r *data.Report, title string) reportView {
 		Title:       title,
 		Date:        fromDate,
 		DateLong:    dateLong,
+		FilterLabel: reportStatusLabel(r.StatusFilter),
 		GeneratedAt: r.GeneratedAt.Format("2 Jan 2006, 15:04"),
 		TotalIssues: s.TotalIssues,
 		Empty:       s.TotalIssues == 0,

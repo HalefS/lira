@@ -763,6 +763,10 @@ type DailyReport struct {
 	ByMode       map[string]int `json:"by_mode"`
 	ByStatus     map[string]int `json:"by_status"`
 	ByTechnician []TechStat     `json:"by_technician"`
+	// StatusFilter is the status selection the report was generated with:
+	// "all", "pending" or "ok". It is echoed so the screen and the printed
+	// report can label exactly which set of issues the figures describe.
+	StatusFilter string `json:"status_filter,omitempty"`
 	// TypeColors maps an issue type's name to the hex color a manager picked
 	// for it, so anything drawing a type (the report page, the printed PDF)
 	// can colour it the same way instead of falling back to a hardcoded
@@ -796,7 +800,24 @@ func (m IssueModel) GetDailyReport(date string, limit int) (*Report, error) {
 	if date == "" {
 		date = time.Now().Format("2006-01-02")
 	}
-	return m.GetReport(date, date, limit, "")
+	return m.GetReport(date, date, limit, "", "all")
+}
+
+// normalizeReportStatus turns the API's filter vocabulary into both the value
+// echoed on the report and the exact status stored on an issue. "open" and
+// "resolved" are accepted as friendlier aliases for the two stored values,
+// because the reports page calls the pending set "Open / pending".
+func normalizeReportStatus(value string) (filter string, stored string, err error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "all":
+		return "all", "", nil
+	case "pending", "open":
+		return "pending", "Pending", nil
+	case "ok", "resolved":
+		return "ok", "Ok", nil
+	default:
+		return "", "", fmt.Errorf("invalid status filter %q", value)
+	}
 }
 
 // noHandoutClause is the one exclusion every report query shares. An issue that
@@ -829,7 +850,11 @@ func noHandoutClause(alias string) string {
 // list below. They are reported from the Third-party support page instead, so
 // counting them here would both show them in the wrong place and let a vendor's
 // turnaround pull down the team's average resolution time.
-func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Report, error) {
+func (m IssueModel) GetReport(from, to string, limit int, issueType, status string) (*Report, error) {
+	statusFilter, storedStatus, err := normalizeReportStatus(status)
+	if err != nil {
+		return nil, err
+	}
 	if from == "" {
 		from = time.Now().Format("2006-01-02")
 	}
@@ -862,13 +887,14 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 	defer cancel()
 
 	report := &Report{
-		GeneratedAt: time.Now(),
-		ByType:      make(map[string]int),
-		ByMode:      make(map[string]int),
-		ByStatus:    make(map[string]int),
-		TypeColors:  make(map[string]string),
-		AptIssues:   []*Issue{},
-		DeptIssues:  []*Issue{},
+		GeneratedAt:  time.Now(),
+		StatusFilter: statusFilter,
+		ByType:       make(map[string]int),
+		ByMode:       make(map[string]int),
+		ByStatus:     make(map[string]int),
+		TypeColors:   make(map[string]string),
+		AptIssues:    []*Issue{},
+		DeptIssues:   []*Issue{},
 	}
 	report.FromDate = fromStr
 	report.ToDate = toStr
@@ -918,10 +944,11 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 		FROM issues
 		WHERE COALESCE(started_at, created_at) >= $1 AND COALESCE(started_at, created_at) < $2
 		  AND ($3 = '' OR type = $3)
+		  AND ($4 = '' OR status = $4)
 		  AND ` + noHandoutClause("issues")
 
 	var s ReportSummary
-	err = m.DB.QueryRowContext(ctx, summaryQ, fromStr, nextDay, issueType).Scan(
+	err = m.DB.QueryRowContext(ctx, summaryQ, fromStr, nextDay, issueType, storedStatus).Scan(
 		&s.TotalIssues, &s.AptIssues, &s.DeptIssues,
 		&s.Resolved, &s.Pending,
 		&s.AvgMinutes, &s.TotalMinutes, &s.FastestMinutes, &s.SlowestMinutes, &s.FalsePositives,
@@ -947,10 +974,11 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 		FROM issues
 		WHERE COALESCE(started_at, created_at) >= $1 AND COALESCE(started_at, created_at) < $2
 		  AND ($3 = '' OR type = $3)
+		  AND ($4 = '' OR status = $4)
 		  AND ` + noHandoutClause("issues") + `
 		GROUP BY mode, type, status`
 
-	breakdownRows, err := m.DB.QueryContext(ctx, breakdownQ, fromStr, nextDay, issueType)
+	breakdownRows, err := m.DB.QueryContext(ctx, breakdownQ, fromStr, nextDay, issueType, storedStatus)
 	if err != nil {
 		return nil, err
 	}
@@ -990,11 +1018,12 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 		INNER JOIN users u ON i.logged_by = u.id
 		WHERE COALESCE(i.started_at, i.created_at) >= $1 AND COALESCE(i.started_at, i.created_at) < $2 AND i.mode = $3
 		  AND ($4 = '' OR i.type = $4)
+		  AND ($5 = '' OR i.status = $5)
 		  AND ` + noHandoutClause("i") + `
 		ORDER BY COALESCE(i.started_at, i.created_at) DESC, i.id DESC`
 
 		if limit > 0 {
-			issueQ += "\n\t\tLIMIT $5"
+			issueQ += "\n\t\tLIMIT $6"
 		}
 
 		reportIssues := []*Issue{}
@@ -1002,9 +1031,9 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 			var rows *sql.Rows
 			var err error
 			if limit > 0 {
-				rows, err = m.DB.QueryContext(ctx, issueQ, fromStr, nextDay, mode, issueType, limit)
+				rows, err = m.DB.QueryContext(ctx, issueQ, fromStr, nextDay, mode, issueType, storedStatus, limit)
 			} else {
-				rows, err = m.DB.QueryContext(ctx, issueQ, fromStr, nextDay, mode, issueType)
+				rows, err = m.DB.QueryContext(ctx, issueQ, fromStr, nextDay, mode, issueType, storedStatus)
 			}
 			if err != nil {
 				return nil, err
@@ -1052,12 +1081,13 @@ func (m IssueModel) GetReport(from, to string, limit int, issueType string) (*Re
 		FROM users u
 		LEFT JOIN issues i ON i.logged_by = u.id AND COALESCE(i.started_at, i.created_at) >= $1 AND COALESCE(i.started_at, i.created_at) < $2
 		                   AND ($3 = '' OR i.type = $3)
+		                   AND ($4 = '' OR i.status = $4)
 		                   AND ` + noHandoutClause("i") + `
 		GROUP BY u.id, u.name, u.avatar_idx, u.role
 		HAVING u.role = 'technician' OR COUNT(i.id) > 0
 		ORDER BY total DESC`
 
-	techRows, err := m.DB.QueryContext(ctx, techQ, fromStr, nextDay, issueType)
+	techRows, err := m.DB.QueryContext(ctx, techQ, fromStr, nextDay, issueType, storedStatus)
 	if err != nil {
 		return nil, err
 	}
